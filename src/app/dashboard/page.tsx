@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { signOutAction } from '@/lib/auth/actions';
+import { AppNavigation } from '@/components/layout/AppNavigation';
 import type { Database, WorkspaceRole } from '@/types/database';
 import {
   Calendar,
@@ -126,6 +127,8 @@ export default async function DashboardPage() {
           )}
         </div>
       </header>
+
+      <AppNavigation />
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-6 md:p-8 space-y-8">

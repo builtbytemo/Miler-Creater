@@ -157,6 +157,8 @@ CREATE TABLE IF NOT EXISTS public.tasks (
     scheduled_end TIMESTAMPTZ,
     due_date TIMESTAMPTZ,
     estimated_duration_minutes INTEGER,
+    is_all_day BOOLEAN NOT NULL DEFAULT false,
+    completed_at TIMESTAMPTZ,
     tags TEXT[] NOT NULL DEFAULT '{}',
     recurrence_rule_id UUID REFERENCES public.recurrence_rules(id) ON DELETE SET NULL,
     created_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,

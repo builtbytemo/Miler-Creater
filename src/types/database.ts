@@ -334,6 +334,8 @@ export interface Database {
           scheduled_end: string | null;
           due_date: string | null;
           estimated_duration_minutes: number | null;
+          is_all_day: boolean;
+          completed_at: string | null;
           tags: string[];
           recurrence_rule_id: string | null;
           created_by: string | null;
@@ -355,6 +357,8 @@ export interface Database {
           scheduled_end?: string | null;
           due_date?: string | null;
           estimated_duration_minutes?: number | null;
+          is_all_day?: boolean;
+          completed_at?: string | null;
           tags?: string[];
           recurrence_rule_id?: string | null;
           created_by?: string | null;
@@ -376,6 +380,8 @@ export interface Database {
           scheduled_end?: string | null;
           due_date?: string | null;
           estimated_duration_minutes?: number | null;
+          is_all_day?: boolean;
+          completed_at?: string | null;
           tags?: string[];
           recurrence_rule_id?: string | null;
           created_by?: string | null;
