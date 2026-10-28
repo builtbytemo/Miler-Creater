@@ -4,6 +4,7 @@
 -- Description: Sets up multi-tenant workspace tables, content management,
 --              tasks, calendar scheduling, notifications, AI boundaries,
 --              audit events, triggers, and comprehensive RLS policies.
+-- Audit Status: Audited & Hardened in Phase 1.1
 -- ==============================================================================
 
 -- 1. EXTENSIONS & UTILITIES
@@ -30,7 +31,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
     email TEXT NOT NULL,
     full_name TEXT,
     avatar_url TEXT,
-    timezone TEXT NOT NULL DEFAULT 'UTC',
+    timezone TEXT NOT NULL DEFAULT 'Asia/Cairo',
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -109,7 +110,7 @@ CREATE TABLE IF NOT EXISTS public.recurrence_rules (
     by_monthday INTEGER[],
     until_date TIMESTAMPTZ,
     count INTEGER CHECK (count IS NULL OR count > 0),
-    timezone TEXT NOT NULL DEFAULT 'UTC',
+    timezone TEXT NOT NULL DEFAULT 'Asia/Cairo',
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -256,7 +257,7 @@ CREATE INDEX IF NOT EXISTS idx_ai_tokens_lookup ON public.ai_api_tokens(token_ha
 CREATE INDEX IF NOT EXISTS idx_audit_time ON public.audit_events(workspace_id, created_at DESC);
 
 -- ------------------------------------------------------------------------------
--- 8. TRIGGERS: AUTOMATIC UPDATED_AT & IMMUTABLE OWNERSHIP
+-- 8. TRIGGERS: AUTOMATIC UPDATED_AT, IMMUTABILITY & INTEGRITY
 -- ------------------------------------------------------------------------------
 
 CREATE TRIGGER trg_profiles_updated_at BEFORE UPDATE ON public.profiles FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
@@ -268,7 +269,7 @@ CREATE TRIGGER trg_recurrence_rules_updated_at BEFORE UPDATE ON public.recurrenc
 CREATE TRIGGER trg_content_items_updated_at BEFORE UPDATE ON public.content_items FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
 CREATE TRIGGER trg_tasks_updated_at BEFORE UPDATE ON public.tasks FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
 
--- Trigger to prevent workspace_id hijacking
+-- Trigger: Prevent workspace_id tampering across all domain entities
 CREATE OR REPLACE FUNCTION public.prevent_workspace_change()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -284,7 +285,203 @@ $$;
 CREATE TRIGGER trg_content_immutable_ws BEFORE UPDATE ON public.content_items FOR EACH ROW EXECUTE FUNCTION public.prevent_workspace_change();
 CREATE TRIGGER trg_tasks_immutable_ws BEFORE UPDATE ON public.tasks FOR EACH ROW EXECUTE FUNCTION public.prevent_workspace_change();
 CREATE TRIGGER trg_projects_immutable_ws BEFORE UPDATE ON public.projects FOR EACH ROW EXECUTE FUNCTION public.prevent_workspace_change();
+CREATE TRIGGER trg_milestones_immutable_ws BEFORE UPDATE ON public.milestones FOR EACH ROW EXECUTE FUNCTION public.prevent_workspace_change();
 CREATE TRIGGER trg_social_accounts_immutable_ws BEFORE UPDATE ON public.social_accounts FOR EACH ROW EXECUTE FUNCTION public.prevent_workspace_change();
+CREATE TRIGGER trg_recurrence_rules_immutable_ws BEFORE UPDATE ON public.recurrence_rules FOR EACH ROW EXECUTE FUNCTION public.prevent_workspace_change();
+CREATE TRIGGER trg_task_deps_immutable_ws BEFORE UPDATE ON public.task_dependencies FOR EACH ROW EXECUTE FUNCTION public.prevent_workspace_change();
+CREATE TRIGGER trg_ai_tokens_immutable_ws BEFORE UPDATE ON public.ai_api_tokens FOR EACH ROW EXECUTE FUNCTION public.prevent_workspace_change();
+CREATE TRIGGER trg_ai_confirm_immutable_ws BEFORE UPDATE ON public.ai_confirmation_requests FOR EACH ROW EXECUTE FUNCTION public.prevent_workspace_change();
+CREATE TRIGGER trg_notifications_immutable_ws BEFORE UPDATE ON public.notifications FOR EACH ROW EXECUTE FUNCTION public.prevent_workspace_change();
+
+-- Trigger: Protect workspace owner from unauthorized reassignment
+CREATE OR REPLACE FUNCTION public.protect_workspace_owner()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF NEW.owner_id <> OLD.owner_id THEN
+        IF auth.uid() IS NULL OR auth.uid() <> OLD.owner_id THEN
+            RAISE EXCEPTION 'Only the current workspace owner can transfer workspace ownership.';
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trg_workspaces_owner_protection BEFORE UPDATE ON public.workspaces FOR EACH ROW EXECUTE FUNCTION public.protect_workspace_owner();
+
+-- Trigger: Protect workspace members (prevent deleting owner, prevent non-owner assigning owner)
+CREATE OR REPLACE FUNCTION public.protect_workspace_members()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    ws_owner UUID;
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        SELECT owner_id INTO ws_owner FROM public.workspaces WHERE id = OLD.workspace_id;
+        IF OLD.user_id = ws_owner THEN
+            RAISE EXCEPTION 'The workspace owner cannot be removed from workspace members.';
+        END IF;
+        RETURN OLD;
+    ELSIF TG_OP IN ('INSERT', 'UPDATE') THEN
+        IF NEW.role = 'owner' THEN
+            SELECT owner_id INTO ws_owner FROM public.workspaces WHERE id = NEW.workspace_id;
+            IF auth.uid() IS NULL OR auth.uid() <> ws_owner THEN
+                RAISE EXCEPTION 'Only the workspace owner can assign or hold the owner role.';
+            END IF;
+        END IF;
+        RETURN NEW;
+    END IF;
+    RETURN NULL;
+END;
+$$;
+
+CREATE TRIGGER trg_members_owner_guard
+    BEFORE INSERT OR UPDATE OR DELETE ON public.workspace_members
+    FOR EACH ROW EXECUTE FUNCTION public.protect_workspace_members();
+
+-- Trigger: Validate task foreign key workspace isolation
+CREATE OR REPLACE FUNCTION public.validate_task_workspace_relations()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF NEW.project_id IS NOT NULL THEN
+        IF NOT EXISTS (SELECT 1 FROM public.projects WHERE id = NEW.project_id AND workspace_id = NEW.workspace_id) THEN
+            RAISE EXCEPTION 'Associated project does not belong to the same workspace.';
+        END IF;
+    END IF;
+
+    IF NEW.milestone_id IS NOT NULL THEN
+        IF NOT EXISTS (SELECT 1 FROM public.milestones WHERE id = NEW.milestone_id AND workspace_id = NEW.workspace_id) THEN
+            RAISE EXCEPTION 'Associated milestone does not belong to the same workspace.';
+        END IF;
+    END IF;
+
+    IF NEW.recurrence_rule_id IS NOT NULL THEN
+        IF NOT EXISTS (SELECT 1 FROM public.recurrence_rules WHERE id = NEW.recurrence_rule_id AND workspace_id = NEW.workspace_id) THEN
+            RAISE EXCEPTION 'Associated recurrence rule does not belong to the same workspace.';
+        END IF;
+    END IF;
+
+    IF NEW.parent_task_id IS NOT NULL THEN
+        IF NOT EXISTS (SELECT 1 FROM public.tasks WHERE id = NEW.parent_task_id AND workspace_id = NEW.workspace_id) THEN
+            RAISE EXCEPTION 'Parent task does not belong to the same workspace.';
+        END IF;
+        IF NEW.parent_task_id = NEW.id THEN
+            RAISE EXCEPTION 'A task cannot be its own parent.';
+        END IF;
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trg_tasks_workspace_relations
+    BEFORE INSERT OR UPDATE ON public.tasks
+    FOR EACH ROW EXECUTE FUNCTION public.validate_task_workspace_relations();
+
+-- Trigger: Validate content items foreign key workspace isolation
+CREATE OR REPLACE FUNCTION public.validate_content_workspace_relations()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF NEW.project_id IS NOT NULL THEN
+        IF NOT EXISTS (SELECT 1 FROM public.projects WHERE id = NEW.project_id AND workspace_id = NEW.workspace_id) THEN
+            RAISE EXCEPTION 'Associated project does not belong to the same workspace.';
+        END IF;
+    END IF;
+
+    IF NEW.milestone_id IS NOT NULL THEN
+        IF NOT EXISTS (SELECT 1 FROM public.milestones WHERE id = NEW.milestone_id AND workspace_id = NEW.workspace_id) THEN
+            RAISE EXCEPTION 'Associated milestone does not belong to the same workspace.';
+        END IF;
+    END IF;
+
+    IF NEW.social_account_id IS NOT NULL THEN
+        IF NOT EXISTS (SELECT 1 FROM public.social_accounts WHERE id = NEW.social_account_id AND workspace_id = NEW.workspace_id) THEN
+            RAISE EXCEPTION 'Associated social account does not belong to the same workspace.';
+        END IF;
+    END IF;
+
+    IF NEW.recurrence_rule_id IS NOT NULL THEN
+        IF NOT EXISTS (SELECT 1 FROM public.recurrence_rules WHERE id = NEW.recurrence_rule_id AND workspace_id = NEW.workspace_id) THEN
+            RAISE EXCEPTION 'Associated recurrence rule does not belong to the same workspace.';
+        END IF;
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trg_content_workspace_relations
+    BEFORE INSERT OR UPDATE ON public.content_items
+    FOR EACH ROW EXECUTE FUNCTION public.validate_content_workspace_relations();
+
+-- Trigger: Task Dependency Integrity and Multi-Step Cycle Detection
+CREATE OR REPLACE FUNCTION public.check_task_dependency_cycle()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    has_cycle BOOLEAN;
+BEGIN
+    IF NEW.task_id = NEW.depends_on_task_id THEN
+        RAISE EXCEPTION 'A task cannot depend on itself.';
+    END IF;
+
+    -- Workspace isolation check: both tasks must belong to NEW.workspace_id
+    IF NOT EXISTS (SELECT 1 FROM public.tasks WHERE id = NEW.task_id AND workspace_id = NEW.workspace_id) THEN
+        RAISE EXCEPTION 'Source task does not exist or does not belong to the specified workspace.';
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM public.tasks WHERE id = NEW.depends_on_task_id AND workspace_id = NEW.workspace_id) THEN
+        RAISE EXCEPTION 'Target dependency task does not exist or does not belong to the specified workspace.';
+    END IF;
+
+    -- Recursive cycle check
+    WITH RECURSIVE dependency_chain AS (
+        SELECT depends_on_task_id AS current_task
+        FROM public.task_dependencies
+        WHERE task_id = NEW.depends_on_task_id
+
+        UNION ALL
+
+        SELECT td.depends_on_task_id
+        FROM public.task_dependencies td
+        JOIN dependency_chain dc ON td.task_id = dc.current_task
+    )
+    SELECT EXISTS (
+        SELECT 1 FROM dependency_chain WHERE current_task = NEW.task_id
+    ) INTO has_cycle;
+
+    IF has_cycle THEN
+        RAISE EXCEPTION 'Circular task dependency detected: adding this dependency would create a cycle.';
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trg_task_dependencies_cycle_check
+    BEFORE INSERT OR UPDATE ON public.task_dependencies
+    FOR EACH ROW EXECUTE FUNCTION public.check_task_dependency_cycle();
+
+-- Trigger: Prevent modification or deletion of audit events (strictly append-only)
+CREATE OR REPLACE FUNCTION public.prevent_audit_mutation()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RAISE EXCEPTION 'Audit events are immutable and cannot be updated or deleted.';
+END;
+$$;
+
+CREATE TRIGGER trg_audit_events_immutable
+    BEFORE UPDATE OR DELETE ON public.audit_events
+    FOR EACH ROW EXECUTE FUNCTION public.prevent_audit_mutation();
 
 -- ------------------------------------------------------------------------------
 -- 9. USER SIGNUP PROVISIONING TRIGGER (AUTOMATIC PERSONAL WORKSPACE)
@@ -304,14 +501,14 @@ BEGIN
     user_name := COALESCE(NEW.raw_user_meta_data->>'full_name', split_part(NEW.email, '@', 1));
     user_slug := lower(regexp_replace(user_name, '[^a-zA-Z0-9]', '-', 'g')) || '-' || substr(NEW.id::text, 1, 8);
 
-    -- 1. Create profile
+    -- 1. Create profile with approved Asia/Cairo default
     INSERT INTO public.profiles (id, email, full_name, avatar_url, timezone)
     VALUES (
         NEW.id,
         NEW.email,
         user_name,
         NEW.raw_user_meta_data->>'avatar_url',
-        COALESCE(NEW.raw_user_meta_data->>'timezone', 'UTC')
+        COALESCE(NEW.raw_user_meta_data->>'timezone', 'Asia/Cairo')
     );
 
     -- 2. Create default personal workspace
@@ -435,6 +632,10 @@ CREATE POLICY "workspaces_select_member" ON public.workspaces
     FOR SELECT TO authenticated
     USING (public.is_workspace_member(id, 'viewer'));
 
+CREATE POLICY "workspaces_insert_owner" ON public.workspaces
+    FOR INSERT TO authenticated
+    WITH CHECK (owner_id = auth.uid());
+
 CREATE POLICY "workspaces_update_admin" ON public.workspaces
     FOR UPDATE TO authenticated
     USING (public.is_workspace_member(id, 'admin'))
@@ -451,6 +652,11 @@ CREATE POLICY "members_select" ON public.workspace_members
 
 CREATE POLICY "members_insert_admin" ON public.workspace_members
     FOR INSERT TO authenticated
+    WITH CHECK (public.is_workspace_member(workspace_id, 'admin'));
+
+CREATE POLICY "members_update_admin" ON public.workspace_members
+    FOR UPDATE TO authenticated
+    USING (public.is_workspace_member(workspace_id, 'admin'))
     WITH CHECK (public.is_workspace_member(workspace_id, 'admin'));
 
 CREATE POLICY "members_delete_admin" ON public.workspace_members

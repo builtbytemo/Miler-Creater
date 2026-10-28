@@ -20,9 +20,14 @@ export function createAdminClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-  if (!supabaseUrl || !serviceRoleKey) {
+  if (
+    !supabaseUrl ||
+    !serviceRoleKey ||
+    supabaseUrl.includes('your-project-ref') ||
+    serviceRoleKey.includes('your-service-role-secret-key')
+  ) {
     throw new Error(
-      'Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY environment variables. ' +
+      'Missing or placeholder NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY environment variables. ' +
       'Admin operations cannot be initialized.'
     );
   }

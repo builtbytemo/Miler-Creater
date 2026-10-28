@@ -215,7 +215,7 @@ export default async function DashboardPage() {
               </p>
             </div>
             <div className="pt-2 border-t border-neutral-800/80 text-[11px] text-neutral-400 font-mono">
-              Timezone: {profile?.timezone || 'UTC (Configurable)'}
+              Timezone: {profile?.timezone || 'Asia/Cairo (Default)'}
             </div>
           </div>
         </div>

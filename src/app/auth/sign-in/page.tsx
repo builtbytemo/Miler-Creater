@@ -6,11 +6,13 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { signInWithEmail, type AuthActionResult } from '@/lib/auth/actions';
 import { GoogleOAuthButton } from '@/components/auth/GoogleOAuthButton';
+import { getSafeRedirectPath } from '@/lib/auth/redirects';
 
 function SignInContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const redirectTo = searchParams.get('redirectTo') || '/dashboard';
+  const rawRedirect = searchParams.get('redirectTo');
+  const redirectTo = getSafeRedirectPath(rawRedirect, '/dashboard');
   const callbackError = searchParams.get('error');
 
   const [state, formAction, isPending] = useActionState<AuthActionResult | null, FormData>(
@@ -20,7 +22,8 @@ function SignInContent() {
 
   useEffect(() => {
     if (state?.success && state.redirectTo) {
-      router.push(state.redirectTo);
+      const target = getSafeRedirectPath(state.redirectTo, '/dashboard');
+      router.push(target);
       router.refresh();
     }
   }, [state, router]);

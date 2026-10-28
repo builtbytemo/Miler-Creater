@@ -34,7 +34,7 @@ describe('Security Boundaries & Isolation Tests', () => {
       delete process.env.SUPABASE_SERVICE_ROLE_KEY;
 
       expect(() => createAdminClient()).toThrow(
-        /Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY/
+        /Missing or placeholder NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY/
       );
 
       if (origKey) process.env.SUPABASE_SERVICE_ROLE_KEY = origKey;

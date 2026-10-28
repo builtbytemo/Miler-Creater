@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { getSafeRedirectPath } from '@/lib/auth/redirects';
 
 /**
  * Handles OAuth code exchange and email verification redirects.
@@ -8,7 +9,8 @@ import { createClient } from '@/lib/supabase/server';
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get('code');
-  const next = searchParams.get('next') || '/dashboard';
+  const rawNext = searchParams.get('next');
+  const next = getSafeRedirectPath(rawNext, '/dashboard');
 
   if (code) {
     try {

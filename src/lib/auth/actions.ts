@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
+import { getSafeRedirectPath } from '@/lib/auth/redirects';
 import {
   signInSchema,
   signUpSchema,
@@ -32,7 +33,8 @@ export async function signInWithEmail(
   }
 
   const { email, password } = validation.data;
-  const redirectTo = (formData.get('redirectTo') as string) || '/dashboard';
+  const rawRedirect = formData.get('redirectTo') as string;
+  const redirectTo = getSafeRedirectPath(rawRedirect, '/dashboard');
 
   try {
     const supabase = await createClient();
