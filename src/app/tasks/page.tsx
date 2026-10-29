@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { connection } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getTasks } from '@/lib/services/task-service';
 import { AppNavigation } from '@/components/layout/AppNavigation';
@@ -17,6 +18,7 @@ interface TasksPageProps {
 }
 
 export default async function TasksPage({ searchParams }: TasksPageProps) {
+  await connection();
   const resolvedParams = await searchParams;
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const isEnvConfigured = supabaseUrl && !supabaseUrl.includes('your-project-ref');

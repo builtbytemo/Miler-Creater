@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useState } from 'react';
 import { X, Calendar, Clock, AlertCircle } from 'lucide-react';
 import { createTaskAction, type TaskActionResult } from '@/lib/actions/task-actions';
+import type { TaskWithMeta } from '@/lib/services/task-service';
 
 interface ProjectOption {
   id: string;
@@ -16,6 +17,7 @@ interface CreateTaskModalProps {
   parentTaskId?: string | null;
   isOpen: boolean;
   onClose: () => void;
+  onTaskCreated?: (task: TaskWithMeta) => void;
 }
 
 export function CreateTaskModal({
@@ -24,6 +26,7 @@ export function CreateTaskModal({
   parentTaskId,
   isOpen,
   onClose,
+  onTaskCreated,
 }: CreateTaskModalProps) {
   const [isAllDay, setIsAllDay] = useState(false);
   const [recurrenceFreq, setRecurrenceFreq] = useState('none');
@@ -35,9 +38,12 @@ export function CreateTaskModal({
 
   useEffect(() => {
     if (state?.success) {
+      if (state.data) {
+        onTaskCreated?.(state.data as TaskWithMeta);
+      }
       onClose();
     }
-  }, [state, onClose]);
+  }, [state, onClose, onTaskCreated]);
 
   if (!isOpen) return null;
 

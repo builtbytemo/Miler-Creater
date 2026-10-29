@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Search,
   Plus,
@@ -10,9 +11,10 @@ import {
   Clock,
   Calendar,
   Filter,
+  X,
 } from 'lucide-react';
 import type { TaskWithMeta, TaskDetail } from '@/lib/services/task-service';
-import { completeTaskAction } from '@/lib/actions/task-actions';
+import { completeTaskAction, getTaskDetailAction } from '@/lib/actions/task-actions';
 import { CreateTaskModal } from './CreateTaskModal';
 import { TaskDetailModal } from './TaskDetailModal';
 
@@ -35,6 +37,7 @@ export function TaskWorkspace({
   projects,
   userTimeZone,
 }: TaskWorkspaceProps) {
+  const router = useRouter();
   const [tasks, setTasks] = useState<TaskWithMeta[]>(initialTasks);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -43,7 +46,76 @@ export function TaskWorkspace({
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [selectedTaskDetail, setSelectedTaskDetail] = useState<TaskDetail | null>(null);
+  const [subtasksByParent, setSubtasksByParent] = useState<Record<string, TaskWithMeta[]>>({});
   const [pendingTaskId, setPendingTaskId] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  // Synchronize client state when server revalidates or initialTasks prop updates
+  useEffect(() => {
+    setTasks(initialTasks);
+  }, [initialTasks]);
+
+  // Auto-dismiss success message after 5 seconds
+  useEffect(() => {
+    if (!successMessage) return;
+    const timer = setTimeout(() => {
+      setSuccessMessage(null);
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [successMessage]);
+
+  const handleSubtaskCreated = (parentId: string, newSubtask: TaskWithMeta) => {
+    setSubtasksByParent((prev) => {
+      const existing = prev[parentId] || [];
+      if (existing.some((s) => s.id === newSubtask.id)) return prev;
+      return { ...prev, [parentId]: [...existing, newSubtask] };
+    });
+
+    setTasks((prev) =>
+      prev.map((t) => {
+        if (t.id === parentId) {
+          return {
+            ...t,
+            subtask_count: t.subtask_count + 1,
+            completed_subtask_count:
+              newSubtask.status === 'done' ? t.completed_subtask_count + 1 : t.completed_subtask_count,
+          };
+        }
+        return t;
+      })
+    );
+
+    setSelectedTaskDetail((prev) => {
+      if (prev && prev.id === parentId) {
+        if (prev.subtasks.some((s) => s.id === newSubtask.id)) return prev;
+        const nextSubtasks = [...prev.subtasks, newSubtask];
+        return {
+          ...prev,
+          subtasks: nextSubtasks,
+          subtask_count: nextSubtasks.length,
+          completed_subtask_count: nextSubtasks.filter((s) => s.status === 'done').length,
+        };
+      }
+      return prev;
+    });
+
+    setSuccessMessage(`Subtask "${newSubtask.title}" created successfully.`);
+    router.refresh();
+  };
+
+  const handleTaskCreated = (newTask: TaskWithMeta) => {
+    if (!newTask.parent_task_id) {
+      setTasks((prev) => {
+        if (prev.some((t) => t.id === newTask.id)) return prev;
+        return [newTask, ...prev];
+      });
+      setSuccessMessage(`Task "${newTask.title}" created successfully.`);
+    } else {
+      handleSubtaskCreated(newTask.parent_task_id, newTask);
+      return;
+    }
+    router.refresh();
+  };
 
   // Filter tasks client-side for immediate responsive interactions
   const filteredTasks = useMemo(() => {
@@ -93,23 +165,57 @@ export function TaskWorkspace({
           }
           return next;
         });
+        router.refresh();
       }
     } finally {
       setPendingTaskId(null);
     }
   };
 
-  const handleOpenDetail = (task: TaskWithMeta) => {
-    const detail: TaskDetail = {
+  const handleOpenDetail = async (task: TaskWithMeta) => {
+    const cachedSubtasks = subtasksByParent[task.id] || [];
+    const initialDetail: TaskDetail = {
       ...task,
-      subtasks: tasks.filter((t) => t.parent_task_id === task.id),
-      dependencies: [], // Will load detail or mock
+      subtasks: cachedSubtasks,
+      dependencies: [],
     };
-    setSelectedTaskDetail(detail);
+    setSelectedTaskDetail(initialDetail);
+
+    try {
+      const res = await getTaskDetailAction(workspaceId, task.id);
+      if (res.success && res.data) {
+        const fullDetail = res.data as TaskDetail;
+        setSelectedTaskDetail(fullDetail);
+        setSubtasksByParent((prev) => ({
+          ...prev,
+          [task.id]: fullDetail.subtasks,
+        }));
+      }
+    } catch (err) {
+      console.error('Failed to load task details:', err);
+    }
   };
 
   return (
     <div className="space-y-6">
+      {/* Success Notification Banner */}
+      {successMessage && (
+        <div className="flex items-center justify-between p-3.5 rounded-xl bg-emerald-950/40 border border-emerald-800 text-emerald-200 text-xs shadow-sm animate-in fade-in duration-200">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>{successMessage}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSuccessMessage(null)}
+            className="p-1 rounded-md text-emerald-400 hover:text-emerald-200 hover:bg-emerald-900/50 transition-colors"
+            title="Dismiss notification"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* Action & Filter Toolbar */}
       <div className="p-4 rounded-xl bg-neutral-950 border border-neutral-800 space-y-4 shadow-sm">
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
@@ -350,6 +456,7 @@ export function TaskWorkspace({
           projects={projects}
           isOpen={isCreateOpen}
           onClose={() => setIsCreateOpen(false)}
+          onTaskCreated={handleTaskCreated}
         />
       )}
 
@@ -361,9 +468,35 @@ export function TaskWorkspace({
           workspaceId={workspaceId}
           isOpen={Boolean(selectedTaskDetail)}
           onClose={() => setSelectedTaskDetail(null)}
-          onTaskUpdated={() => {
-            // Re-render handled by Server Actions revalidatePath
+          onTaskUpdated={(updatedStatus) => {
+            if (updatedStatus && selectedTaskDetail) {
+              setSelectedTaskDetail((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      status: updatedStatus,
+                      completed_at: updatedStatus === 'done' ? new Date().toISOString() : null,
+                      is_blocked: updatedStatus === 'blocked' ? true : prev.blocking_tasks.length > 0,
+                    }
+                  : null
+              );
+              setTasks((prev) =>
+                prev.map((t) =>
+                  t.id === selectedTaskDetail.id
+                    ? {
+                        ...t,
+                        status: updatedStatus,
+                        completed_at: updatedStatus === 'done' ? new Date().toISOString() : null,
+                        is_blocked: updatedStatus === 'blocked' ? true : t.blocking_tasks.length > 0,
+                      }
+                    : t
+                )
+              );
+            }
+            router.refresh();
           }}
+          onSubtaskCreated={handleSubtaskCreated}
+          onOpenTask={(task) => handleOpenDetail(task)}
         />
       )}
     </div>

@@ -221,14 +221,36 @@ export async function getTaskById(
     .eq('parent_task_id', taskId)
     .order('created_at', { ascending: true });
 
-  const subtasks: TaskWithMeta[] = (rawSubtasks || []).map((st) => ({
-    ...st,
-    subtask_count: 0,
-    completed_subtask_count: 0,
-    is_blocked: st.status === 'blocked',
-    blocking_tasks: [],
-    project: null,
-  }));
+  const subtaskIds = (rawSubtasks || []).map((st) => st.id);
+  const nestedCountMap = new Map<string, { total: number; completed: number }>();
+  if (subtaskIds.length > 0) {
+    const { data: nestedSubtasks } = await supabase
+      .from('tasks')
+      .select('id, parent_task_id, status')
+      .in('parent_task_id', subtaskIds);
+
+    if (nestedSubtasks) {
+      for (const nest of nestedSubtasks) {
+        if (!nest.parent_task_id) continue;
+        const curr = nestedCountMap.get(nest.parent_task_id) || { total: 0, completed: 0 };
+        curr.total += 1;
+        if (nest.status === 'done') curr.completed += 1;
+        nestedCountMap.set(nest.parent_task_id, curr);
+      }
+    }
+  }
+
+  const subtasks: TaskWithMeta[] = (rawSubtasks || []).map((st) => {
+    const counts = nestedCountMap.get(st.id) || { total: 0, completed: 0 };
+    return {
+      ...st,
+      subtask_count: counts.total,
+      completed_subtask_count: counts.completed,
+      is_blocked: st.status === 'blocked',
+      blocking_tasks: [],
+      project: null,
+    };
+  });
 
   // Fetch dependencies
   const { data: rawDeps } = await supabase
@@ -385,6 +407,29 @@ export async function updateTask(
 ): Promise<TaskWithMeta> {
   const validated = updateTaskSchema.parse(input);
 
+  // If status is transitioning to done, verify prerequisite dependencies
+  if (validated.status === 'done') {
+    const { data: deps } = await supabase
+      .from('task_dependencies')
+      .select('depends_on_task_id')
+      .eq('workspace_id', workspaceId)
+      .eq('task_id', taskId);
+
+    if (deps && deps.length > 0) {
+      const prereqIds = deps.map((d) => d.depends_on_task_id);
+      const { data: incompletePrereqs } = await supabase
+        .from('tasks')
+        .select('id, title, status')
+        .in('id', prereqIds)
+        .neq('status', 'done');
+
+      if (incompletePrereqs && incompletePrereqs.length > 0) {
+        const titles = incompletePrereqs.map((p) => p.title).join(', ');
+        throw new Error(`Cannot complete task while prerequisite dependencies are incomplete: ${titles}`);
+      }
+    }
+  }
+
   const updates: Database['public']['Tables']['tasks']['Update'] = {
     ...validated,
   };
@@ -439,6 +484,27 @@ export async function completeTask(
 
   if (fetchErr || !current) {
     throw new Error(`Task not found: ${fetchErr?.message}`);
+  }
+
+  // 1b. Check if task has unresolved prerequisite dependencies
+  const { data: deps } = await supabase
+    .from('task_dependencies')
+    .select('depends_on_task_id')
+    .eq('workspace_id', workspaceId)
+    .eq('task_id', taskId);
+
+  if (deps && deps.length > 0) {
+    const prereqIds = deps.map((d) => d.depends_on_task_id);
+    const { data: incompletePrereqs } = await supabase
+      .from('tasks')
+      .select('id, title, status')
+      .in('id', prereqIds)
+      .neq('status', 'done');
+
+    if (incompletePrereqs && incompletePrereqs.length > 0) {
+      const titles = incompletePrereqs.map((p) => p.title).join(', ');
+      throw new Error(`Cannot complete task while prerequisite dependencies are incomplete: ${titles}`);
+    }
   }
 
   // 2. Mark current task done

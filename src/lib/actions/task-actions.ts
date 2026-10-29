@@ -8,10 +8,12 @@ import {
   completeTask,
   cancelTask,
   deleteTask,
+  getTaskById,
   addTaskDependency,
   removeTaskDependency,
 } from '@/lib/services/task-service';
 import type { TaskPriority, TaskStatus, DependencyType } from '@/types/database';
+import type { UpdateTaskInput } from '@/lib/validation/task';
 
 export interface TaskActionResult {
   success?: boolean;
@@ -107,30 +109,50 @@ export async function updateTaskAction(
       return { error: 'Workspace ID and Task ID are required' };
     }
 
-    const title = formData.get('title') as string | undefined;
-    const description = formData.get('description') as string | undefined;
-    const priority = formData.get('priority') as TaskPriority | undefined;
-    const status = formData.get('status') as TaskStatus | undefined;
-    const scheduledStart = formData.get('scheduled_start') as string | undefined;
-    const scheduledEnd = formData.get('scheduled_end') as string | undefined;
-    const dueDate = formData.get('due_date') as string | undefined;
-    const isAllDayRaw = formData.get('is_all_day');
-    const isAllDay = isAllDayRaw !== null ? isAllDayRaw === 'true' || isAllDayRaw === 'on' : undefined;
-    const projectId = formData.get('project_id') as string | undefined;
-    const durationStr = formData.get('estimated_duration_minutes') as string | undefined;
+    const input: UpdateTaskInput = {};
 
-    const task = await updateTask(supabase, workspaceId, taskId, {
-      title,
-      description,
-      priority,
-      status,
-      scheduled_start: scheduledStart ? new Date(scheduledStart).toISOString() : undefined,
-      scheduled_end: scheduledEnd ? new Date(scheduledEnd).toISOString() : undefined,
-      due_date: dueDate ? new Date(dueDate).toISOString() : undefined,
-      is_all_day: isAllDay,
-      estimated_duration_minutes: durationStr ? parseInt(durationStr, 10) : undefined,
-      project_id: projectId || undefined,
-    });
+    if (formData.has('title')) {
+      const val = formData.get('title');
+      if (typeof val === 'string') input.title = val;
+    }
+    if (formData.has('description')) {
+      const val = formData.get('description');
+      input.description = typeof val === 'string' && val.length > 0 ? val : null;
+    }
+    if (formData.has('priority')) {
+      const val = formData.get('priority');
+      if (typeof val === 'string' && val) input.priority = val as TaskPriority;
+    }
+    if (formData.has('status')) {
+      const val = formData.get('status');
+      if (typeof val === 'string' && val) input.status = val as TaskStatus;
+    }
+    if (formData.has('scheduled_start')) {
+      const val = formData.get('scheduled_start');
+      input.scheduled_start = typeof val === 'string' && val ? new Date(val).toISOString() : null;
+    }
+    if (formData.has('scheduled_end')) {
+      const val = formData.get('scheduled_end');
+      input.scheduled_end = typeof val === 'string' && val ? new Date(val).toISOString() : null;
+    }
+    if (formData.has('due_date')) {
+      const val = formData.get('due_date');
+      input.due_date = typeof val === 'string' && val ? new Date(val).toISOString() : null;
+    }
+    if (formData.has('is_all_day')) {
+      const isAllDayRaw = formData.get('is_all_day');
+      input.is_all_day = isAllDayRaw === 'true' || isAllDayRaw === 'on';
+    }
+    if (formData.has('estimated_duration_minutes')) {
+      const durationStr = formData.get('estimated_duration_minutes');
+      input.estimated_duration_minutes = typeof durationStr === 'string' && durationStr ? parseInt(durationStr, 10) : null;
+    }
+    if (formData.has('project_id')) {
+      const val = formData.get('project_id');
+      input.project_id = typeof val === 'string' && val ? val : null;
+    }
+
+    const task = await updateTask(supabase, workspaceId, taskId, input);
 
     revalidatePath('/tasks');
     revalidatePath('/dashboard');
@@ -212,5 +234,31 @@ export async function removeTaskDependencyAction(
     return { success: true };
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Failed to remove dependency' };
+  }
+}
+
+export async function getTaskDetailAction(
+  workspaceId: string,
+  taskId: string
+): Promise<TaskActionResult> {
+  try {
+    const supabase = await createClient();
+    const { data: authData } = await supabase.auth.getUser();
+    if (!authData.user) {
+      return { error: 'Authentication required' };
+    }
+
+    if (!workspaceId || !taskId) {
+      return { error: 'Workspace ID and Task ID are required' };
+    }
+
+    const detail = await getTaskById(supabase, workspaceId, taskId);
+    if (!detail) {
+      return { error: 'Task not found' };
+    }
+
+    return { success: true, data: detail };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Failed to fetch task details' };
   }
 }
