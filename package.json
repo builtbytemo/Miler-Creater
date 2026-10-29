@@ -9,7 +9,7 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:db": "tsx scripts/test-database-rls.ts"
+    "test:db": "tsx --env-file=.env.local scripts/test-database-rls.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

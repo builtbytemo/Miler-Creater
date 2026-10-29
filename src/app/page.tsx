@@ -3,6 +3,8 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { ArrowRight, ShieldCheck, Database, Calendar } from 'lucide-react';
 
+export const instant = false;
+
 export default async function HomePage() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const isEnvConfigured = supabaseUrl && !supabaseUrl.includes('your-project-ref');

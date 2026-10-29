@@ -16,6 +16,8 @@ import {
   Clock,
 } from 'lucide-react';
 
+export const instant = false;
+
 type ProfileRow = Database['public']['Tables']['profiles']['Row'];
 
 interface WorkspaceInfo {
