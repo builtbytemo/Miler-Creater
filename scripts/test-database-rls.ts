@@ -1,51 +1,91 @@
 /**
  * ==============================================================================
- * Live Database Integration Test Script (Two-Tenant RLS & Audit Lifecycle)
+ * Safe Live Database Integration Test Script (Two-Tenant RLS & Audit Lifecycle)
  * ==============================================================================
  * 
- * Usage:
- *   npm run test:db
+ * Safety & Isolation Guarantees:
+ *   1. Dedicated Target Isolation:
+ *      Refuses to run unless STAGING_SUPABASE_URL, STAGING_SERVICE_ROLE_KEY,
+ *      EXPECTED_STAGING_PROJECT_REF, and CONFIRM_DISPOSABLE_DATABASE="true" are
+ *      explicitly supplied.
+ *   2. Hostname Validation:
+ *      Validates that STAGING_SUPABASE_URL matches a recognizable remote Supabase
+ *      domain (*.supabase.co) and matches EXPECTED_STAGING_PROJECT_REF exactly.
+ *      Rejects localhost, 127.0.0.1, or placeholder strings before creating clients.
+ *   3. No Production Fallback:
+ *      Never falls back to NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, or
+ *      .env.local credentials.
+ *   4. Scoped Cleanup by Captured IDs:
+ *      Tracks every created Auth user, workspace, and task by exact ID. Never uses
+ *      broad pattern deletions. Exits with failure if any cleanup step fails.
+ *   5. Partial Setup Resilience:
+ *      If setup or any intermediate test assertion fails partway through, the
+ *      teardown handler still attempts cleanup of all tracked resources in
+ *      dependency-safe order.
  * 
- * Prerequisites:
- *   - A live, disposable Supabase project with migrations 1, 2, 3, and 4 applied.
- *   - Real SUPABASE_URL, ANON_KEY, and SERVICE_ROLE_KEY in .env.local
+ * Usage:
+ *   STAGING_SUPABASE_URL="https://<ref>.supabase.co" \
+ *   STAGING_SERVICE_ROLE_KEY="<key>" \
+ *   EXPECTED_STAGING_PROJECT_REF="<ref>" \
+ *   CONFIRM_DISPOSABLE_DATABASE="true" \
+ *   npm run test:db
  */
 
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from '../src/types/database';
+import { validateStagingEnvironment } from './test-reminder-integration';
 
-async function runLiveDatabaseAudit() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
+export async function runLiveDatabaseAudit(env: Record<string, string | undefined> = process.env) {
   console.log('\n=== Real Database Multi-Tenant RLS & Audit Lifecycle Integration Test ===\n');
 
-  if (
-    !supabaseUrl ||
-    !serviceRoleKey ||
-    supabaseUrl.includes('your-project-ref') ||
-    serviceRoleKey.includes('your-service-role')
-  ) {
-    console.error(
-      '❌ CONFIGURATION ERROR: Live integration testing could not be executed against a remote database.\n' +
-      '   Reason: NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is missing or contains placeholder values.\n' +
-      '   Please configure real Supabase credentials in .env.local to run live database RLS tests.\n'
+  // FAIL-CLOSED GUARD: Validates all requirements before initializing Supabase clients
+  const config = validateStagingEnvironment(env);
+
+  const anonKey = env.STAGING_ANON_KEY?.trim();
+  if (!anonKey) {
+    throw new Error(
+      'Target selection rejected: STAGING_ANON_KEY is missing or empty. ' +
+      'Low-privilege user clients (clientA, clientB) require a dedicated anon key for RLS testing.'
     );
-    process.exit(1);
   }
 
-  const adminClient = createClient<Database>(supabaseUrl, serviceRoleKey, {
+  if (
+    anonKey.includes('your-anon') ||
+    anonKey.includes('your-staging-anon') ||
+    anonKey.includes('placeholder')
+  ) {
+    throw new Error(
+      'Target selection rejected: STAGING_ANON_KEY contains template placeholder values.'
+    );
+  }
+
+  if (anonKey === config.serviceRoleKey) {
+    throw new Error(
+      'Target selection rejected: STAGING_ANON_KEY must not be identical to STAGING_SERVICE_ROLE_KEY. ' +
+      'RLS verification requires an actual low-privilege anon key.'
+    );
+  }
+
+  const adminClient = createClient<Database>(config.stagingUrl, config.serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
-  const clientA = createClient<Database>(supabaseUrl, anonKey!);
-  const clientB = createClient<Database>(supabaseUrl, anonKey!);
+  const clientA = createClient<Database>(config.stagingUrl, anonKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const clientB = createClient<Database>(config.stagingUrl, anonKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
 
   const testSuffix = Math.random().toString(36).substring(2, 7);
   const emailA = `test-user-a-${testSuffix}@example.com`;
   const emailB = `test-user-b-${testSuffix}@example.com`;
   const password = `StrongP@ssw0rd_${testSuffix}!`;
+
+  // Track exact resource IDs created during this test run for safe, targeted cleanup
+  const createdUserIds: string[] = [];
+  const createdWorkspaceIds: string[] = [];
+  const createdTaskIds: string[] = [];
 
   let userAId: string | null = null;
   let userBId: string | null = null;
@@ -62,6 +102,7 @@ async function runLiveDatabaseAudit() {
     });
     if (errA || !userAData?.user) throw new Error(`Failed to create User A: ${errA?.message || 'No user data'}`);
     userAId = userAData.user.id;
+    createdUserIds.push(userAId);
 
     // Provision User B
     const { data: userBData, error: errB } = await adminClient.auth.admin.createUser({
@@ -72,6 +113,7 @@ async function runLiveDatabaseAudit() {
     });
     if (errB || !userBData?.user) throw new Error(`Failed to create User B: ${errB?.message || 'No user data'}`);
     userBId = userBData.user.id;
+    createdUserIds.push(userBId);
 
     console.log('2. Verifying trigger auto-provisioning of profiles, workspaces, memberships & redacted audit events...');
 
@@ -97,6 +139,8 @@ async function runLiveDatabaseAudit() {
       .single();
 
     if (!wsA || !wsB) throw new Error('Workspaces were not auto-provisioned by on_auth_user_created trigger!');
+    createdWorkspaceIds.push(wsA.id, wsB.id);
+
     console.log(`   User A Workspace: ${wsA.name} (${wsA.id})`);
     console.log(`   User B Workspace: ${wsB.name} (${wsB.id})`);
 
@@ -156,6 +200,7 @@ async function runLiveDatabaseAudit() {
       .select()
       .single();
     if (createErrA || !taskA) throw new Error(`User A task creation failed: ${createErrA?.message}`);
+    createdTaskIds.push(taskA.id);
 
     // Positive read verification
     const { data: ownTaskA, error: readOwnErrA } = await clientA
@@ -255,6 +300,7 @@ async function runLiveDatabaseAudit() {
       .select()
       .single();
     if (createErrB || !taskB) throw new Error(`User B task creation failed: ${createErrB?.message}`);
+    createdTaskIds.push(taskB.id);
 
     const { data: ownTaskB, error: readOwnErrB } = await clientB
       .from('tasks')
@@ -349,6 +395,7 @@ async function runLiveDatabaseAudit() {
     if (wsDispErr || !wsDisp) {
       throw new Error(`Failed to create disposable test workspace: ${wsDispErr?.message}`);
     }
+    createdWorkspaceIds.push(wsDisp.id);
 
     // Insert a test audit event associated with the disposable workspace
     const { data: dispAudit, error: dispAuditErr } = await adminClient
@@ -425,57 +472,62 @@ async function runLiveDatabaseAudit() {
 
     console.log('\n🎉 ALL LIVE DATABASE MULTI-TENANT & AUDIT LIFECYCLE CHECKS PASSED!\n');
   } finally {
-    console.log('\nCleaning up test users and workspaces...');
+    console.log('\nCleaning up tracked test resources...');
     const cleanupErrors: string[] = [];
 
-    // Stage 1: Delete workspaces owned by test users first (cascading tasks, memberships, and disassociating audit events)
-    if (userAId) {
+    // Stage 1: Delete tracked tasks by exact ID
+    for (const taskId of createdTaskIds) {
       try {
-        const { error: wsDelErrA } = await adminClient.from('workspaces').delete().eq('owner_id', userAId);
-        if (wsDelErrA) cleanupErrors.push(`User A workspace cleanup failed: ${wsDelErrA.message}`);
+        const { error: taskDelErr } = await adminClient.from('tasks').delete().eq('id', taskId);
+        if (taskDelErr) {
+          cleanupErrors.push(`Task cleanup failed for ID ${taskId}: ${taskDelErr.message}`);
+        }
       } catch (err) {
-        cleanupErrors.push(`User A workspace cleanup exception: ${err instanceof Error ? err.message : String(err)}`);
+        cleanupErrors.push(`Task cleanup exception for ID ${taskId}: ${err instanceof Error ? err.message : String(err)}`);
       }
     }
 
-    if (userBId) {
+    // Stage 2: Delete tracked workspaces by exact ID (disassociating audit events and cascading memberships)
+    for (const wsId of createdWorkspaceIds) {
       try {
-        const { error: wsDelErrB } = await adminClient.from('workspaces').delete().eq('owner_id', userBId);
-        if (wsDelErrB) cleanupErrors.push(`User B workspace cleanup failed: ${wsDelErrB.message}`);
+        const { error: wsDelErr } = await adminClient.from('workspaces').delete().eq('id', wsId);
+        if (wsDelErr) {
+          cleanupErrors.push(`Workspace cleanup failed for ID ${wsId}: ${wsDelErr.message}`);
+        }
       } catch (err) {
-        cleanupErrors.push(`User B workspace cleanup exception: ${err instanceof Error ? err.message : String(err)}`);
+        cleanupErrors.push(`Workspace cleanup exception for ID ${wsId}: ${err instanceof Error ? err.message : String(err)}`);
       }
     }
 
-    // Stage 2: Delete auth users (cascades to profiles, now unblocked by prior workspace deletion)
-    if (userAId) {
+    // Stage 3: Delete tracked auth users by exact ID (cascades to profiles)
+    for (const userId of createdUserIds) {
       try {
-        const { error: delErrA } = await adminClient.auth.admin.deleteUser(userAId);
-        if (delErrA) cleanupErrors.push(`User A auth user cleanup failed: ${delErrA.message}`);
+        const { error: userDelErr } = await adminClient.auth.admin.deleteUser(userId);
+        if (userDelErr) {
+          cleanupErrors.push(`Auth user cleanup failed for ID ${userId}: ${userDelErr.message}`);
+        }
       } catch (err) {
-        cleanupErrors.push(`User A auth user cleanup exception: ${err instanceof Error ? err.message : String(err)}`);
-      }
-    }
-
-    if (userBId) {
-      try {
-        const { error: delErrB } = await adminClient.auth.admin.deleteUser(userBId);
-        if (delErrB) cleanupErrors.push(`User B auth user cleanup failed: ${delErrB.message}`);
-      } catch (err) {
-        cleanupErrors.push(`User B auth user cleanup exception: ${err instanceof Error ? err.message : String(err)}`);
+        cleanupErrors.push(`Auth user cleanup exception for ID ${userId}: ${err instanceof Error ? err.message : String(err)}`);
       }
     }
 
     if (cleanupErrors.length > 0) {
-      console.error('\n❌ Cleanup encountered errors:\n' + cleanupErrors.join('\n'));
-      throw new Error(`Test cleanup failed:\n${cleanupErrors.join('\n')}`);
+      console.error('\n❌ Cleanup encountered errors:');
+      cleanupErrors.forEach((e) => console.error('   - ' + e));
+      throw new Error(`Test cleanup failed (${cleanupErrors.length} failure(s)):\n${cleanupErrors.join('\n')}`);
     } else {
-      console.log('Cleanup complete. All test workspaces and Auth users removed cleanly.');
+      console.log('✓ Cleanup complete. All tracked test resources removed cleanly.');
     }
   }
 }
 
-runLiveDatabaseAudit().catch((err) => {
-  console.error('\n❌ LIVE DATABASE AUDIT FAILED:', err);
-  process.exit(1);
-});
+// Execute only when run directly from CLI
+if (
+  process.argv[1] &&
+  (process.argv[1].endsWith('test-database-rls.ts') || process.argv[1].endsWith('test-database-rls.js'))
+) {
+  runLiveDatabaseAudit().catch((err) => {
+    console.error('\n❌ LIVE DATABASE AUDIT FAILED:', err instanceof Error ? err.message : err);
+    process.exit(1);
+  });
+}

@@ -429,6 +429,8 @@ export interface Database {
           scheduled_for: string;
           status: NotificationStatus;
           delivered_at: string | null;
+          read_at: string | null;
+          idempotency_key: string | null;
           created_at: string;
         };
         Insert: {
@@ -443,6 +445,8 @@ export interface Database {
           scheduled_for?: string;
           status?: NotificationStatus;
           delivered_at?: string | null;
+          read_at?: string | null;
+          idempotency_key?: string | null;
           created_at?: string;
         };
         Update: {
@@ -457,18 +461,68 @@ export interface Database {
           scheduled_for?: string;
           status?: NotificationStatus;
           delivered_at?: string | null;
+          read_at?: string | null;
+          idempotency_key?: string | null;
           created_at?: string;
-        };        Relationships: [];
+        };
+        Relationships: [];
+      };
+      notification_preferences: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          user_id: string;
+          notify_upcoming_tasks: boolean;
+          notify_overdue_tasks: boolean;
+          notify_upcoming_content: boolean;
+          notify_status_changes: boolean;
+          reminder_lead_minutes: number;
+          email_notifications_enabled: boolean;
+          in_app_notifications_enabled: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          user_id: string;
+          notify_upcoming_tasks?: boolean;
+          notify_overdue_tasks?: boolean;
+          notify_upcoming_content?: boolean;
+          notify_status_changes?: boolean;
+          reminder_lead_minutes?: number;
+          email_notifications_enabled?: boolean;
+          in_app_notifications_enabled?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          workspace_id?: string;
+          user_id?: string;
+          notify_upcoming_tasks?: boolean;
+          notify_overdue_tasks?: boolean;
+          notify_upcoming_content?: boolean;
+          notify_status_changes?: boolean;
+          reminder_lead_minutes?: number;
+          email_notifications_enabled?: boolean;
+          in_app_notifications_enabled?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
       };
       ai_api_tokens: {
         Row: {
           id: string;
           workspace_id: string;
           client_name: string;
+          name: string | null;
           token_hash: string;
           token_prefix: string;
           scopes: string[];
           is_revoked: boolean;
+          revoked_at: string | null;
           created_by: string;
           last_used_at: string | null;
           expires_at: string | null;
@@ -478,10 +532,12 @@ export interface Database {
           id?: string;
           workspace_id: string;
           client_name: string;
+          name?: string | null;
           token_hash: string;
           token_prefix: string;
           scopes: string[];
           is_revoked?: boolean;
+          revoked_at?: string | null;
           created_by: string;
           last_used_at?: string | null;
           expires_at?: string | null;
@@ -491,15 +547,39 @@ export interface Database {
           id?: string;
           workspace_id?: string;
           client_name?: string;
+          name?: string | null;
           token_hash?: string;
           token_prefix?: string;
           scopes?: string[];
           is_revoked?: boolean;
+          revoked_at?: string | null;
           created_by?: string;
           last_used_at?: string | null;
           expires_at?: string | null;
           created_at?: string;
-        };        Relationships: [];
+        };
+        Relationships: [];
+      };
+      ai_token_rate_limits: {
+        Row: {
+          token_id: string;
+          window_start: string;
+          request_count: number;
+          updated_at: string;
+        };
+        Insert: {
+          token_id: string;
+          window_start?: string;
+          request_count?: number;
+          updated_at?: string;
+        };
+        Update: {
+          token_id?: string;
+          window_start?: string;
+          request_count?: number;
+          updated_at?: string;
+        };
+        Relationships: [];
       };
       ai_confirmation_requests: {
         Row: {
@@ -542,7 +622,7 @@ export interface Database {
       audit_events: {
         Row: {
           id: string;
-          workspace_id: string;
+          workspace_id: string | null;
           actor_type: AuditActorType;
           actor_id: string;
           event_type: string;
@@ -555,7 +635,7 @@ export interface Database {
         };
         Insert: {
           id?: string;
-          workspace_id: string;
+          workspace_id?: string | null;
           actor_type: AuditActorType;
           actor_id: string;
           event_type: string;
@@ -568,7 +648,7 @@ export interface Database {
         };
         Update: {
           id?: string;
-          workspace_id?: string;
+          workspace_id?: string | null;
           actor_type?: AuditActorType;
           actor_id?: string;
           event_type?: string;
@@ -591,6 +671,20 @@ export interface Database {
           required_role?: string;
         };
         Returns: boolean;
+      };
+      check_and_increment_ai_token_rate_limit: {
+        Args: {
+          p_token_id: string;
+          p_window_seconds?: number;
+          p_max_requests?: number;
+          p_now?: string;
+        };
+        Returns: {
+          allowed: boolean;
+          remaining_requests: number;
+          retry_after_seconds: number;
+          current_count: number;
+        }[];
       };
     };
     Enums: {

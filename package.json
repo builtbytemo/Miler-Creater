@@ -9,9 +9,13 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:db": "tsx --env-file=.env.local scripts/test-database-rls.ts"
+    "test:db": "tsx scripts/test-database-rls.ts",
+    "test:reminders:db": "tsx scripts/test-reminder-integration.ts",
+    "test:mcp:db": "tsx --env-file=.env.staging.local scripts/test-mcp-integration.ts"
   },
   "dependencies": {
+    "@modelcontextprotocol/client": "^2.4.0",
+    "@modelcontextprotocol/server": "^2.4.0",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.118.0",
     "clsx": "^2.1.1",

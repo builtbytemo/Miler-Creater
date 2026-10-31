@@ -79,6 +79,9 @@ export const taskFilterSchema = z.object({
   project_id: z.string().uuid().optional(),
   due_date_from: z.string().datetime().optional(),
   due_date_to: z.string().datetime().optional(),
+  scheduled_from: z.string().datetime().optional(),
+  scheduled_to: z.string().datetime().optional(),
+  is_scheduled: z.boolean().optional(),
   search: z.string().optional(),
   parent_task_id: z.string().uuid().optional().nullable(),
 });

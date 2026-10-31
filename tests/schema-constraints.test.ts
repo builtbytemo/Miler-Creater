@@ -140,4 +140,96 @@ describe('Database Schema Invariants & Constraints', () => {
       expect(isHighRiskOperation('search_content')).toBe(false);
     });
   });
+
+  describe('Notification System Invariants & Preferences Constraints', () => {
+    const notificationChannelEnum = z.enum(['in_app', 'email']);
+    const notificationStatusEnum = z.enum(['pending', 'delivered', 'failed', 'dismissed']);
+    const notificationEntityTypeEnum = z.enum(['task', 'content_item', 'system', 'ai_request']);
+
+    const notificationPreferencesSchema = z.object({
+      notify_upcoming_tasks: z.boolean().default(true),
+      notify_overdue_tasks: z.boolean().default(true),
+      notify_upcoming_content: z.boolean().default(true),
+      notify_status_changes: z.boolean().default(true),
+      reminder_lead_minutes: z.number().int().min(0).max(10080).default(60),
+      email_notifications_enabled: z.boolean().default(false),
+      in_app_notifications_enabled: z.boolean().default(true),
+    });
+
+    it('validates supported notification channels and statuses', () => {
+      expect(notificationChannelEnum.safeParse('in_app').success).toBe(true);
+      expect(notificationChannelEnum.safeParse('email').success).toBe(true);
+      expect(notificationChannelEnum.safeParse('sms').success).toBe(false);
+
+      expect(notificationStatusEnum.safeParse('pending').success).toBe(true);
+      expect(notificationStatusEnum.safeParse('delivered').success).toBe(true);
+      expect(notificationStatusEnum.safeParse('failed').success).toBe(true);
+      expect(notificationStatusEnum.safeParse('dismissed').success).toBe(true);
+      expect(notificationStatusEnum.safeParse('read').success).toBe(false);
+    });
+
+    it('validates notification entity types', () => {
+      expect(notificationEntityTypeEnum.safeParse('task').success).toBe(true);
+      expect(notificationEntityTypeEnum.safeParse('content_item').success).toBe(true);
+      expect(notificationEntityTypeEnum.safeParse('system').success).toBe(true);
+      expect(notificationEntityTypeEnum.safeParse('ai_request').success).toBe(true);
+      expect(notificationEntityTypeEnum.safeParse('user_profile').success).toBe(false);
+    });
+
+    it('enforces preference bounds on reminder lead minutes', () => {
+      expect(notificationPreferencesSchema.safeParse({ reminder_lead_minutes: 60 }).success).toBe(true);
+      expect(notificationPreferencesSchema.safeParse({ reminder_lead_minutes: 0 }).success).toBe(true);
+      expect(notificationPreferencesSchema.safeParse({ reminder_lead_minutes: 10080 }).success).toBe(true);
+      expect(notificationPreferencesSchema.safeParse({ reminder_lead_minutes: -1 }).success).toBe(false);
+      expect(notificationPreferencesSchema.safeParse({ reminder_lead_minutes: 10081 }).success).toBe(false);
+    });
+
+    it('simulates protect_notification_fields immutability trigger behavior', () => {
+      const original = {
+        id: 'n-1',
+        workspace_id: 'ws-1',
+        recipient_id: 'usr-1',
+        channel: 'in_app' as const,
+        title: 'Task Overdue',
+        message: 'Your task is overdue',
+        entity_type: 'task' as const,
+        entity_id: 't-1',
+        scheduled_for: '2026-10-29T10:00:00Z',
+        idempotency_key: 'task_overdue:t-1:2026-10-29',
+        created_at: '2026-10-29T10:00:00Z',
+        status: 'delivered' as string,
+        read_at: null as string | null,
+      };
+
+      function canUpdateNotification(oldRow: typeof original, newRow: typeof original): boolean {
+        if (
+          newRow.id !== oldRow.id ||
+          newRow.workspace_id !== oldRow.workspace_id ||
+          newRow.recipient_id !== oldRow.recipient_id ||
+          newRow.channel !== oldRow.channel ||
+          newRow.title !== oldRow.title ||
+          newRow.message !== oldRow.message ||
+          newRow.entity_type !== oldRow.entity_type ||
+          newRow.entity_id !== oldRow.entity_id ||
+          newRow.scheduled_for !== oldRow.scheduled_for ||
+          newRow.idempotency_key !== oldRow.idempotency_key ||
+          newRow.created_at !== oldRow.created_at
+        ) {
+          return false;
+        }
+        return true;
+      }
+
+      // Permitted lifecycle updates:
+      expect(canUpdateNotification(original, { ...original, read_at: '2026-10-29T11:00:00Z' })).toBe(true);
+      expect(canUpdateNotification(original, { ...original, status: 'dismissed' })).toBe(true);
+
+      // Forbidden tampering attempts:
+      expect(canUpdateNotification(original, { ...original, recipient_id: 'usr-2' })).toBe(false);
+      expect(canUpdateNotification(original, { ...original, title: 'Forged Title' })).toBe(false);
+      expect(canUpdateNotification(original, { ...original, message: 'Forged Content' })).toBe(false);
+      expect(canUpdateNotification(original, { ...original, workspace_id: 'ws-2' })).toBe(false);
+      expect(canUpdateNotification(original, { ...original, idempotency_key: 'new-key' })).toBe(false);
+    });
+  });
 });

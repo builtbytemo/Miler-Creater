@@ -77,4 +77,49 @@ describe('Security Boundaries & Isolation Tests', () => {
       expect(simulateIsWorkspaceMember(null, 'owner')).toBe(false);
     });
   });
+
+  describe('Notification & Preferences RLS Boundaries', () => {
+    function simulateNotificationSelectPolicy(authUid: string | null, recipientId: string): boolean {
+      if (!authUid) return false;
+      return authUid === recipientId;
+    }
+
+    function simulateNotificationPreferencePolicy(
+      authUid: string | null,
+      prefUserId: string,
+      userRoleInWorkspace: 'owner' | 'admin' | 'member' | 'viewer' | null
+    ): boolean {
+      if (!authUid) return false;
+      const isOwner = authUid === prefUserId;
+      const isMember = simulateIsWorkspaceMember(userRoleInWorkspace, 'viewer');
+      return isOwner && isMember;
+    }
+
+    it('strictly restricts notification viewing to the recipient only', () => {
+      const userA = 'user-aaa';
+      const userB = 'user-bbb';
+
+      expect(simulateNotificationSelectPolicy(userA, userA)).toBe(true);
+      expect(simulateNotificationSelectPolicy(userA, userB)).toBe(false);
+      expect(simulateNotificationSelectPolicy(null, userA)).toBe(false);
+    });
+
+    it('strictly restricts notification preferences to the owning user within authorized workspace', () => {
+      const userA = 'user-aaa';
+      const userB = 'user-bbb';
+
+      // User A accessing User A's preferences in workspace where A is a member -> Allowed
+      expect(simulateNotificationPreferencePolicy(userA, userA, 'member')).toBe(true);
+      expect(simulateNotificationPreferencePolicy(userA, userA, 'viewer')).toBe(true);
+
+      // User A accessing User B's preferences in workspace -> Denied
+      expect(simulateNotificationPreferencePolicy(userA, userB, 'member')).toBe(false);
+
+      // User A accessing User A's preferences in workspace where A is NOT a member -> Denied
+      expect(simulateNotificationPreferencePolicy(userA, userA, null)).toBe(false);
+
+      // Unauthenticated access -> Denied
+      expect(simulateNotificationPreferencePolicy(null, userA, 'member')).toBe(false);
+    });
+  });
 });

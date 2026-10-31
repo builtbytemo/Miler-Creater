@@ -2,6 +2,8 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { notifyDomainEvent } from '@/lib/services/notification-service';
 import {
   createTask,
   updateTask,
@@ -9,16 +11,18 @@ import {
   cancelTask,
   deleteTask,
   getTaskById,
+  getTasks,
   addTaskDependency,
   removeTaskDependency,
+  type TaskWithMeta,
 } from '@/lib/services/task-service';
 import type { TaskPriority, TaskStatus, DependencyType } from '@/types/database';
 import type { UpdateTaskInput } from '@/lib/validation/task';
 
-export interface TaskActionResult {
+export interface TaskActionResult<T = unknown> {
   success?: boolean;
   error?: string;
-  data?: unknown;
+  data?: T;
 }
 
 export async function createTaskAction(
@@ -85,6 +89,7 @@ export async function createTaskAction(
 
     revalidatePath('/tasks');
     revalidatePath('/dashboard');
+    revalidatePath('/calendar');
     return { success: true, data: task };
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Failed to create task' };
@@ -154,8 +159,57 @@ export async function updateTaskAction(
 
     const task = await updateTask(supabase, workspaceId, taskId, input);
 
+    // If task was marked blocked, done, or cancelled, notify creator if different from actor
+    if (task.created_by && task.created_by !== authData.user.id) {
+      try {
+        if (input.status === 'blocked') {
+          const adminSupabase = createAdminClient();
+          await notifyDomainEvent(adminSupabase, {
+            workspaceId,
+            recipientId: task.created_by,
+            actorId: authData.user.id,
+            title: `Task Blocked: ${task.title}`,
+            message: `Task "${task.title}" is marked as blocked.`,
+            entityType: 'task',
+            entityId: task.id,
+            idempotencyKey: `task_blocked:${task.id}:${task.updated_at || 'blocked'}`,
+            preferenceCategory: 'notify_status_changes',
+          });
+        } else if (input.status === 'done') {
+          const adminSupabase = createAdminClient();
+          await notifyDomainEvent(adminSupabase, {
+            workspaceId,
+            recipientId: task.created_by,
+            actorId: authData.user.id,
+            title: `Task Completed: ${task.title}`,
+            message: `Task "${task.title}" has been marked as completed.`,
+            entityType: 'task',
+            entityId: task.id,
+            idempotencyKey: `task_completed:${task.id}:${task.completed_at || task.updated_at || 'done'}`,
+            preferenceCategory: 'notify_status_changes',
+          });
+        } else if (input.status === 'cancelled') {
+          const adminSupabase = createAdminClient();
+          await notifyDomainEvent(adminSupabase, {
+            workspaceId,
+            recipientId: task.created_by,
+            actorId: authData.user.id,
+            title: `Task Cancelled: ${task.title}`,
+            message: `Task "${task.title}" has been cancelled.`,
+            entityType: 'task',
+            entityId: task.id,
+            idempotencyKey: `task_cancelled:${task.id}:${task.updated_at || 'cancelled'}`,
+            preferenceCategory: 'notify_status_changes',
+          });
+        }
+      } catch (notifyErr) {
+        console.warn('Failed to dispatch notification for updateTaskAction:', notifyErr);
+      }
+    }
+
     revalidatePath('/tasks');
     revalidatePath('/dashboard');
+    revalidatePath('/calendar');
     return { success: true, data: task };
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Failed to update task' };
@@ -169,8 +223,32 @@ export async function completeTaskAction(
   try {
     const supabase = await createClient();
     const res = await completeTask(supabase, workspaceId, taskId);
+
+    // Attempt to notify task creator if distinct from actor
+    try {
+      const authRes = await supabase?.auth?.getUser?.();
+      const authData = authRes?.data;
+      if (authData?.user && res.completedTask.created_by && res.completedTask.created_by !== authData.user.id) {
+        const adminSupabase = createAdminClient();
+        await notifyDomainEvent(adminSupabase, {
+          workspaceId,
+          recipientId: res.completedTask.created_by,
+          actorId: authData.user.id,
+          title: `Task Completed: ${res.completedTask.title}`,
+          message: `Task "${res.completedTask.title}" has been marked as completed.`,
+          entityType: 'task',
+          entityId: res.completedTask.id,
+          idempotencyKey: `task_completed:${res.completedTask.id}:${res.completedTask.completed_at || res.completedTask.updated_at || 'done'}`,
+          preferenceCategory: 'notify_status_changes',
+        });
+      }
+    } catch (notifyErr) {
+      console.warn('Failed to dispatch notification for completeTaskAction:', notifyErr);
+    }
+
     revalidatePath('/tasks');
     revalidatePath('/dashboard');
+    revalidatePath('/calendar');
     return { success: true, data: res };
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Failed to complete task' };
@@ -184,8 +262,32 @@ export async function cancelTaskAction(
   try {
     const supabase = await createClient();
     const res = await cancelTask(supabase, workspaceId, taskId);
+
+    // Attempt to notify task creator if distinct from actor
+    try {
+      const authRes = await supabase?.auth?.getUser?.();
+      const authData = authRes?.data;
+      if (authData?.user && res.created_by && res.created_by !== authData.user.id) {
+        const adminSupabase = createAdminClient();
+        await notifyDomainEvent(adminSupabase, {
+          workspaceId,
+          recipientId: res.created_by,
+          actorId: authData.user.id,
+          title: `Task Cancelled: ${res.title}`,
+          message: `Task "${res.title}" has been cancelled.`,
+          entityType: 'task',
+          entityId: res.id,
+          idempotencyKey: `task_cancelled:${res.id}:${res.updated_at || 'cancelled'}`,
+          preferenceCategory: 'notify_status_changes',
+        });
+      }
+    } catch (notifyErr) {
+      console.warn('Failed to dispatch notification for cancelTaskAction:', notifyErr);
+    }
+
     revalidatePath('/tasks');
     revalidatePath('/dashboard');
+    revalidatePath('/calendar');
     return { success: true, data: res };
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Failed to cancel task' };
@@ -201,6 +303,7 @@ export async function deleteTaskAction(
     await deleteTask(supabase, workspaceId, taskId);
     revalidatePath('/tasks');
     revalidatePath('/dashboard');
+    revalidatePath('/calendar');
     return { success: true };
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Failed to delete task' };
@@ -260,5 +363,32 @@ export async function getTaskDetailAction(
     return { success: true, data: detail };
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Failed to fetch task details' };
+  }
+}
+
+export async function getScheduledTasksAction(
+  workspaceId: string,
+  filter: { scheduled_from: string; scheduled_to: string }
+): Promise<TaskActionResult<TaskWithMeta[]>> {
+  try {
+    const supabase = await createClient();
+    const { data: authData } = await supabase.auth.getUser();
+    if (!authData.user) {
+      return { error: 'Authentication required' };
+    }
+
+    if (!workspaceId) {
+      return { error: 'Workspace ID is required' };
+    }
+
+    const tasks = await getTasks(supabase, workspaceId, {
+      scheduled_from: filter.scheduled_from,
+      scheduled_to: filter.scheduled_to,
+      parent_task_id: null,
+    });
+
+    return { success: true, data: tasks };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Failed to fetch scheduled tasks' };
   }
 }

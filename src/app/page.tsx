@@ -1,23 +1,31 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { connection } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { ArrowRight, ShieldCheck, Database, Calendar } from 'lucide-react';
 
 export const instant = false;
 
 export default async function HomePage() {
+  await connection();
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const isEnvConfigured = supabaseUrl && !supabaseUrl.includes('your-project-ref');
 
   if (isEnvConfigured) {
+    let hasUser = false;
     try {
       const supabase = await createClient();
       const { data } = await supabase.auth.getUser();
-      if (data.user) {
-        redirect('/dashboard');
+      if (data?.user) {
+        hasUser = true;
       }
     } catch {
       // Allow page to render if DB is not connected yet
+    }
+
+    if (hasUser) {
+      redirect('/dashboard');
     }
   }
 

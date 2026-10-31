@@ -2,17 +2,25 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { CheckSquare, LayoutDashboard, Calendar, Share2, Layers } from 'lucide-react';
+import { CheckSquare, LayoutDashboard, Calendar, Share2, Layers, KeyRound } from 'lucide-react';
 import { clsx } from 'clsx';
+import { NotificationBell } from '@/components/notifications/NotificationBell';
 
 export function AppNavigation() {
   const pathname = usePathname();
 
-  const links = [
+  const links: Array<{
+    href: string;
+    label: string;
+    icon: typeof LayoutDashboard;
+    disabled?: boolean;
+    badge?: string;
+  }> = [
     { href: '/dashboard', label: 'Overview', icon: LayoutDashboard },
     { href: '/tasks', label: 'Tasks', icon: CheckSquare },
-    { href: '/calendar', label: 'Calendar', icon: Calendar, disabled: true, badge: 'Phase 4' },
-    { href: '/content', label: 'Content', icon: Share2, disabled: true, badge: 'Phase 3' },
+    { href: '/calendar', label: 'Calendar', icon: Calendar },
+    { href: '/content', label: 'Content', icon: Share2 },
+    { href: '/settings/tokens', label: 'API Tokens', icon: KeyRound },
   ];
 
   return (
@@ -59,6 +67,10 @@ export function AppNavigation() {
             </Link>
           );
         })}
+      </div>
+
+      <div className="ml-auto flex items-center gap-2">
+        <NotificationBell />
       </div>
     </nav>
   );

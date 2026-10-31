@@ -107,6 +107,19 @@ export async function getTasks(
     query = query.lte('due_date', filters.due_date_to);
   }
 
+  // Filter: Scheduled range
+  if (filters.scheduled_from) {
+    query = query.gte('scheduled_start', filters.scheduled_from);
+  }
+  if (filters.scheduled_to) {
+    query = query.lte('scheduled_start', filters.scheduled_to);
+  }
+  if (filters.is_scheduled === true) {
+    query = query.not('scheduled_start', 'is', null);
+  } else if (filters.is_scheduled === false) {
+    query = query.is('scheduled_start', null);
+  }
+
   // Filter: Search term
   if (filters.search && filters.search.trim() !== '') {
     const term = `%${filters.search.trim()}%`;
@@ -320,6 +333,75 @@ export async function getTaskById(
 }
 
 /**
+ * Validates that all foreign key references belong strictly to the target workspace.
+ * Prevents cross-workspace data contamination, particularly when running under
+ * privileged server-side clients that bypass database Row Level Security.
+ */
+async function validateTaskForeignKeys(
+  supabase: SupabaseClient<Database>,
+  workspaceId: string,
+  keys: {
+    projectId?: string | null;
+    milestoneId?: string | null;
+    parentTaskId?: string | null;
+  },
+  currentTaskId?: string
+): Promise<void> {
+  if (keys.projectId) {
+    const { data: proj, error: projErr } = await supabase
+      .from('projects')
+      .select('id')
+      .eq('id', keys.projectId)
+      .eq('workspace_id', workspaceId)
+      .maybeSingle();
+
+    if (projErr || !proj) {
+      throw new Error(
+        `Cross-workspace reference rejected: project ${keys.projectId} does not belong to workspace ${workspaceId}`
+      );
+    }
+  }
+
+  if (keys.milestoneId) {
+    const { data: mile, error: mileErr } = await supabase
+      .from('milestones')
+      .select('id, project_id')
+      .eq('id', keys.milestoneId)
+      .eq('workspace_id', workspaceId)
+      .maybeSingle();
+
+    if (mileErr || !mile) {
+      throw new Error(
+        `Cross-workspace reference rejected: milestone ${keys.milestoneId} does not belong to workspace ${workspaceId}`
+      );
+    }
+    if (keys.projectId && mile.project_id && mile.project_id !== keys.projectId) {
+      throw new Error(
+        `Invalid milestone reference: milestone ${keys.milestoneId} does not belong to project ${keys.projectId}`
+      );
+    }
+  }
+
+  if (keys.parentTaskId) {
+    if (currentTaskId && keys.parentTaskId === currentTaskId) {
+      throw new Error('A task cannot be its own parent');
+    }
+    const { data: parent, error: parentErr } = await supabase
+      .from('tasks')
+      .select('id')
+      .eq('id', keys.parentTaskId)
+      .eq('workspace_id', workspaceId)
+      .maybeSingle();
+
+    if (parentErr || !parent) {
+      throw new Error(
+        `Cross-workspace reference rejected: parent task ${keys.parentTaskId} does not belong to workspace ${workspaceId}`
+      );
+    }
+  }
+}
+
+/**
  * Creates a new task with server-side validation and optional recurrence rule creation.
  */
 export async function createTask(
@@ -329,6 +411,13 @@ export async function createTask(
   userId?: string
 ): Promise<TaskWithMeta> {
   const validated = createTaskSchema.parse(input);
+
+  // Authorize foreign keys against workspace
+  await validateTaskForeignKeys(supabase, workspaceId, {
+    projectId: validated.project_id,
+    milestoneId: validated.milestone_id,
+    parentTaskId: validated.parent_task_id,
+  });
 
   let recurrenceRuleId: string | null = null;
 
@@ -406,6 +495,18 @@ export async function updateTask(
   input: UpdateTaskInput
 ): Promise<TaskWithMeta> {
   const validated = updateTaskSchema.parse(input);
+
+  // Authorize foreign keys against workspace
+  await validateTaskForeignKeys(
+    supabase,
+    workspaceId,
+    {
+      projectId: validated.project_id,
+      milestoneId: validated.milestone_id,
+      parentTaskId: validated.parent_task_id,
+    },
+    taskId
+  );
 
   // If status is transitioning to done, verify prerequisite dependencies
   if (validated.status === 'done') {
