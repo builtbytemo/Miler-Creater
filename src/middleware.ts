@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { updateSession } from '@/lib/supabase/middleware';
+import { getSafeRedirectPath } from '@/lib/auth/redirects';
 
 const PROTECTED_PREFIXES = ['/dashboard', '/settings', '/content', '/tasks', '/calendar'];
 const AUTH_PREFIXES = ['/auth/sign-in', '/auth/sign-up', '/auth/forgot-password'];
@@ -21,11 +22,13 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // If already logged in and navigating to auth sign-in / sign-up, redirect to dashboard
+  // If already logged in and navigating to auth sign-in / sign-up, redirect to safe target or dashboard
   if (isAuthPath && user) {
-    const url = request.nextUrl.clone();
-    url.pathname = '/dashboard';
-    return NextResponse.redirect(url);
+    const safeTarget = getSafeRedirectPath(
+      request.nextUrl.searchParams.get('redirectTo'),
+      '/dashboard'
+    );
+    return NextResponse.redirect(new URL(safeTarget, request.url));
   }
 
   return supabaseResponse;

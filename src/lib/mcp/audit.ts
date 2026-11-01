@@ -5,7 +5,13 @@ export type AiAuditEventType =
   | 'token.created'
   | 'token.revoked'
   | 'token.auth_failed'
-  | 'tool.executed';
+  | 'tool.executed'
+  | 'oauth.client_registered'
+  | 'oauth.code_issued'
+  | 'oauth.token_exchanged'
+  | 'oauth.token_refreshed'
+  | 'oauth.token_revoked'
+  | 'oauth.auth_failed';
 
 export interface LogAiAuditEventOptions {
   /** Workspace ID if known and verified, or null for unbound gateway auth failures */
@@ -13,15 +19,15 @@ export interface LogAiAuditEventOptions {
   actorType: AuditActorType;
   actorId: string;
   eventType: AiAuditEventType;
-  entityType: 'ai_api_token' | 'tool_execution' | 'workspace';
+  entityType: 'ai_api_token' | 'tool_execution' | 'workspace' | 'oauth_client' | 'oauth_grant';
   entityId?: string | null;
   details?: Record<string, unknown>;
   ipAddress?: string | null;
   userAgent?: string | null;
 }
 
-const SENSITIVE_KEY_PATTERN = /(?:token|raw_?token|token_?hash|hash|secret|password|auth(?:orization)?|key|bearer|credential|api_?key)/i;
-const TOKEN_VALUE_PATTERN = /ctc_live_[0-9a-fA-F]+/g;
+const SENSITIVE_KEY_PATTERN = /(?:token|raw_?token|token_?hash|hash|secret|password|auth(?:orization)?|key|bearer|credential|api_?key|code_?verifier)/i;
+const TOKEN_VALUE_PATTERN = /ctc_(?:live|code|rt)_[0-9a-fA-F]+/g;
 const BEARER_HEADER_PATTERN = /Bearer\s+[A-Za-z0-9_\-\.]+/gi;
 
 /**

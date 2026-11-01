@@ -23,13 +23,15 @@ export function getSafeRedirectPath(
     return fallback;
   }
 
-  // Must not contain backslashes
-  if (trimmed.includes('\\')) {
+  // Must not contain backslashes or control characters
+  if (trimmed.includes('\\') || /[\x00-\x1F\x7F]/.test(trimmed)) {
     return fallback;
   }
 
-  // Must not contain explicit protocols (e.g. '/http://attacker.com')
-  if (/[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed)) {
+  // Must not contain explicit protocols in the pathname segment (e.g. '/http://attacker.com')
+  // while permitting query parameters containing URLs or scope colons (e.g. '?redirect_uri=https://...&scope=task:read')
+  const pathOnly = trimmed.split(/[?#]/)[0];
+  if (/[a-zA-Z][a-zA-Z0-9+.-]*:/.test(pathOnly)) {
     return fallback;
   }
 
@@ -38,7 +40,11 @@ export function getSafeRedirectPath(
     const dummyBase = 'http://localhost';
     const parsed = new URL(trimmed, dummyBase);
     // Verified that origin remains dummyBase and pathname is internal
-    if (parsed.origin !== dummyBase) {
+    if (
+      parsed.origin !== dummyBase ||
+      !parsed.pathname.startsWith('/') ||
+      parsed.pathname.startsWith('//')
+    ) {
       return fallback;
     }
     return `${parsed.pathname}${parsed.search}${parsed.hash}`;

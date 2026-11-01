@@ -116,7 +116,7 @@ function SignInContent() {
         </div>
       </div>
 
-      <GoogleOAuthButton text="Sign in with Google" />
+      <GoogleOAuthButton text="Sign in with Google" redirectTo={redirectTo} />
 
       <div className="pt-2 text-center text-xs text-neutral-500 dark:text-neutral-400">
         Don&apos;t have an account?{' '}

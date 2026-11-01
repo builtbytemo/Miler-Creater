@@ -39,6 +39,7 @@ import {
   localhostAllowedHostnames,
 } from '@modelcontextprotocol/server';
 import { authenticateAiToken, type AuthenticateTokenOptions } from '@/lib/mcp/auth';
+import { buildMcpWwwAuthenticateHeader } from '@/lib/mcp/oauth';
 import { createMcpServer } from '@/lib/mcp/server';
 
 export interface HostSyntaxValidationResult {
@@ -366,6 +367,7 @@ export function applySecurityHeaders(
 
   if (origin) {
     headers.set('Access-Control-Allow-Origin', origin);
+    headers.set('Access-Control-Expose-Headers', 'WWW-Authenticate, Retry-After');
     headers.set('Vary', 'Origin');
   }
 
@@ -433,7 +435,13 @@ export async function handleMcpRequest(
       }),
       {
         status: 401,
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'WWW-Authenticate': buildMcpWwwAuthenticateHeader({
+            error: 'invalid_token',
+            errorDescription: 'Missing or malformed Authorization header. Bearer token required.',
+          }),
+        },
       }
     );
     return applySecurityHeaders(unauthorizedRes, originCheck.origin);
@@ -457,7 +465,12 @@ export async function handleMcpRequest(
     const errorHeaders: Record<string, string> = {
       'Content-Type': 'application/json',
     };
-    if (authResult.status === 429) {
+    if (authResult.status === 401) {
+      errorHeaders['WWW-Authenticate'] = buildMcpWwwAuthenticateHeader({
+        error: 'invalid_token',
+        errorDescription: authResult.error.message,
+      });
+    } else if (authResult.status === 429) {
       errorHeaders['Retry-After'] = '60';
     }
 
@@ -499,7 +512,7 @@ export async function handleMcpRequest(
   try {
     const response = await handler.fetch(req);
     return applySecurityHeaders(response, originCheck.origin);
-  } catch (err) {
+  } catch {
     const errorRes = new Response(
       JSON.stringify({
         jsonrpc: '2.0',

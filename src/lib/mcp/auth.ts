@@ -6,6 +6,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { logAiAuditEvent } from '@/lib/mcp/audit';
 import { checkTokenRateLimit, type RateLimitOptions } from '@/lib/mcp/rate-limiter';
 import { updateTokenLastUsed } from '@/lib/mcp/token-service';
+import { getCanonicalMcpResource, isCanonicalMcpResource } from '@/lib/mcp/oauth';
 
 export interface AuthenticateTokenOptions extends RateLimitOptions {
   /** Optional override for privileged admin client (e.g. for offline mock tests) */
@@ -14,6 +15,8 @@ export interface AuthenticateTokenOptions extends RateLimitOptions {
   ipAddress?: string | null;
   /** Client user agent for audit ledger attribution */
   userAgent?: string | null;
+  /** Expected RFC 8707 canonical MCP resource for OAuth-bound tokens */
+  expectedResource?: string;
 }
 
 export type AuthenticationResult =
@@ -154,7 +157,39 @@ export async function authenticateAiToken(
     }
   }
 
-  // 7 & 8. Re-verify active workspace membership of token creator
+  // 6b. Enforce RFC 8707 resource binding for OAuth-issued tokens
+  // Existing manually generated ctc_live_ tokens have resource = null and oauth_client_id = null
+  const isOAuthBoundToken = Boolean(tokenRecord.oauth_client_id || tokenRecord.resource);
+  if (isOAuthBoundToken) {
+    const expectedResource = options.expectedResource ?? getCanonicalMcpResource();
+    if (!tokenRecord.resource || !isCanonicalMcpResource(tokenRecord.resource, expectedResource)) {
+      await logAiAuditEvent(adminClient, {
+        workspaceId: tokenRecord.workspace_id,
+        actorType: 'ai_client',
+        actorId: tokenRecord.id,
+        eventType: 'token.auth_failed',
+        entityType: 'ai_api_token',
+        entityId: tokenRecord.id,
+        details: {
+          reason: 'resource_mismatch',
+          expectedResource,
+        },
+        ipAddress: options.ipAddress,
+        userAgent: options.userAgent,
+      });
+
+      return {
+        success: false,
+        status: 401,
+        error: {
+          code: 'UNAUTHORIZED',
+          message: 'Token was not issued for this MCP resource',
+        },
+      };
+    }
+  }
+
+  // 7 & 8. Re-verify active workspace membership and role of token creator
   const { data: memberRecord, error: memberErr } = await adminClient
     .from('workspace_members')
     .select('role')
@@ -184,6 +219,33 @@ export async function authenticateAiToken(
       error: {
         code: 'FORBIDDEN',
         message: 'Workspace access denied: token creator is no longer an active workspace member',
+      },
+    };
+  }
+
+  if (memberRecord.role === 'viewer') {
+    await logAiAuditEvent(adminClient, {
+      workspaceId: tokenRecord.workspace_id,
+      actorType: 'ai_client',
+      actorId: tokenRecord.id,
+      eventType: 'token.auth_failed',
+      entityType: 'ai_api_token',
+      entityId: tokenRecord.id,
+      details: {
+        reason: 'workspace_role_insufficient',
+        creatorId: tokenRecord.created_by,
+        role: memberRecord.role,
+      },
+      ipAddress: options.ipAddress,
+      userAgent: options.userAgent,
+    });
+
+    return {
+      success: false,
+      status: 403,
+      error: {
+        code: 'FORBIDDEN',
+        message: 'Workspace access denied: viewer role is not permitted to use AI API tokens',
       },
     };
   }

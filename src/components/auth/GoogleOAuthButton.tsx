@@ -2,8 +2,15 @@
 
 import { useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { getSafeRedirectPath } from '@/lib/auth/redirects';
 
-export function GoogleOAuthButton({ text = 'Continue with Google' }: { text?: string }) {
+export function GoogleOAuthButton({
+  text = 'Continue with Google',
+  redirectTo = '/dashboard',
+}: {
+  text?: string;
+  redirectTo?: string;
+}) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -23,11 +30,12 @@ export function GoogleOAuthButton({ text = 'Continue with Google' }: { text?: st
 
       const supabase = createClient();
       const origin = window.location.origin;
+      const safeNext = getSafeRedirectPath(redirectTo, '/dashboard');
 
       const { error: authError } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${origin}/auth/callback?next=/dashboard`,
+          redirectTo: `${origin}/auth/callback?next=${encodeURIComponent(safeNext)}`,
           queryParams: {
             access_type: 'offline',
             prompt: 'consent',

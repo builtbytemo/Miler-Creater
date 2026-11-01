@@ -526,6 +526,8 @@ export interface Database {
           created_by: string;
           last_used_at: string | null;
           expires_at: string | null;
+          resource?: string | null;
+          oauth_client_id?: string | null;
           created_at: string;
         };
         Insert: {
@@ -541,6 +543,8 @@ export interface Database {
           created_by: string;
           last_used_at?: string | null;
           expires_at?: string | null;
+          resource?: string | null;
+          oauth_client_id?: string | null;
           created_at?: string;
         };
         Update: {
@@ -556,6 +560,149 @@ export interface Database {
           created_by?: string;
           last_used_at?: string | null;
           expires_at?: string | null;
+          resource?: string | null;
+          oauth_client_id?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      oauth_clients: {
+        Row: {
+          id: string;
+          client_id: string;
+          client_name: string;
+          redirect_uris: string[];
+          grant_types: string[];
+          response_types: string[];
+          token_endpoint_auth_method: string;
+          created_by_ip: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          client_id: string;
+          client_name: string;
+          redirect_uris: string[];
+          grant_types?: string[];
+          response_types?: string[];
+          token_endpoint_auth_method?: string;
+          created_by_ip?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          client_id?: string;
+          client_name?: string;
+          redirect_uris?: string[];
+          grant_types?: string[];
+          response_types?: string[];
+          token_endpoint_auth_method?: string;
+          created_by_ip?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      oauth_authorization_codes: {
+        Row: {
+          id: string;
+          code_hash: string;
+          client_id: string;
+          user_id: string;
+          workspace_id: string;
+          redirect_uri: string;
+          scopes: string[];
+          code_challenge: string;
+          code_challenge_method: string;
+          resource: string;
+          consumed_at: string | null;
+          grant_id: string | null;
+          expires_at: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          code_hash: string;
+          client_id: string;
+          user_id: string;
+          workspace_id: string;
+          redirect_uri: string;
+          scopes: string[];
+          code_challenge: string;
+          code_challenge_method?: string;
+          resource: string;
+          consumed_at?: string | null;
+          grant_id?: string | null;
+          expires_at: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          code_hash?: string;
+          client_id?: string;
+          user_id?: string;
+          workspace_id?: string;
+          redirect_uri?: string;
+          scopes?: string[];
+          code_challenge?: string;
+          code_challenge_method?: string;
+          resource?: string;
+          consumed_at?: string | null;
+          grant_id?: string | null;
+          expires_at?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      oauth_refresh_tokens: {
+        Row: {
+          id: string;
+          token_hash: string;
+          grant_id: string;
+          access_token_id: string;
+          client_id: string;
+          user_id: string;
+          workspace_id: string;
+          scopes: string[];
+          resource: string;
+          consumed_at: string | null;
+          replaced_by_hash: string | null;
+          is_revoked: boolean;
+          revoked_at: string | null;
+          expires_at: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          token_hash: string;
+          grant_id?: string;
+          access_token_id: string;
+          client_id: string;
+          user_id: string;
+          workspace_id: string;
+          scopes: string[];
+          resource: string;
+          consumed_at?: string | null;
+          replaced_by_hash?: string | null;
+          is_revoked?: boolean;
+          revoked_at?: string | null;
+          expires_at: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          token_hash?: string;
+          grant_id?: string;
+          access_token_id?: string;
+          client_id?: string;
+          user_id?: string;
+          workspace_id?: string;
+          scopes?: string[];
+          resource?: string;
+          consumed_at?: string | null;
+          replaced_by_hash?: string | null;
+          is_revoked?: boolean;
+          revoked_at?: string | null;
+          expires_at?: string;
           created_at?: string;
         };
         Relationships: [];
@@ -684,6 +831,59 @@ export interface Database {
           remaining_requests: number;
           retry_after_seconds: number;
           current_count: number;
+        }[];
+      };
+      exchange_oauth_authorization_code: {
+        Args: {
+          p_code_hash: string;
+          p_client_id: string;
+          p_redirect_uri: string;
+          p_computed_code_challenge: string;
+          p_expected_resource: string;
+          p_requested_scopes?: string[] | null;
+          p_new_access_token_hash: string;
+          p_new_access_token_prefix: string;
+          p_new_refresh_token_hash: string;
+          p_token_name: string;
+          p_access_expires_at: string;
+          p_refresh_expires_at: string;
+          p_now?: string;
+        };
+        Returns: {
+          allowed: boolean;
+          error_code: string | null;
+          error_reason: string | null;
+          access_token_id: string | null;
+          workspace_id: string | null;
+          user_id: string | null;
+          granted_scopes: string[] | null;
+          resource: string | null;
+        }[];
+      };
+      rotate_oauth_refresh_token: {
+        Args: {
+          p_old_refresh_token_hash: string;
+          p_client_id: string;
+          p_expected_resource: string;
+          p_requested_scopes?: string[] | null;
+          p_new_access_token_hash: string;
+          p_new_access_token_prefix: string;
+          p_new_refresh_token_hash: string;
+          p_token_name: string;
+          p_access_expires_at: string;
+          p_refresh_expires_at: string;
+          p_now?: string;
+        };
+        Returns: {
+          allowed: boolean;
+          error_code: string | null;
+          error_reason: string | null;
+          new_access_token_id: string | null;
+          old_access_token_id: string | null;
+          workspace_id: string | null;
+          user_id: string | null;
+          granted_scopes: string[] | null;
+          resource: string | null;
         }[];
       };
     };
