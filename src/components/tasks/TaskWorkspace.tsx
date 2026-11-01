@@ -31,6 +31,45 @@ interface TaskWorkspaceProps {
   userTimeZone: string;
 }
 
+function formatTaskDueDate(dueDate: string, timeZone?: string): string {
+  const date = new Date(dueDate);
+  if (Number.isNaN(date.getTime())) return '';
+
+  if (timeZone) {
+    try {
+      return date.toLocaleDateString('en-US', {
+        timeZone,
+        month: 'short',
+        day: 'numeric',
+      });
+    } catch {
+      // Invalid or unsupported timezone, proceed to fallback
+    }
+  }
+
+  try {
+    const browserTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (browserTimeZone) {
+      return date.toLocaleDateString('en-US', {
+        timeZone: browserTimeZone,
+        month: 'short',
+        day: 'numeric',
+      });
+    }
+  } catch {
+    // Browser timezone resolution failed, proceed to final fallback
+  }
+
+  try {
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+    });
+  } catch {
+    return '';
+  }
+}
+
 export function TaskWorkspace({
   initialTasks,
   workspaceId,
@@ -419,12 +458,7 @@ export function TaskWorkspace({
                         <span className="flex items-center gap-1 text-neutral-400">
                           <Calendar className="w-3 h-3" />
                           <span>
-                            Due{' '}
-                            {new Date(task.due_date).toLocaleDateString('en-US', {
-                              timeZone: userTimeZone,
-                              month: 'short',
-                              day: 'numeric',
-                            })}
+                            Due {formatTaskDueDate(task.due_date, userTimeZone)}
                           </span>
                         </span>
                       )}

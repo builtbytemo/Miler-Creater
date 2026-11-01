@@ -137,7 +137,7 @@ export default async function TasksPage({ searchParams }: TasksPageProps) {
           initialTasks={tasks}
           workspaceId={workspace.id}
           projects={projects}
-          userTimeZone="Asia/Cairo"
+          userTimeZone="Africa/Cairo"
         />
       </main>
     </div>
