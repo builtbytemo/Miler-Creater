@@ -1,25 +1,12 @@
 'use client';
 
-import { useState } from 'react';
-import {
-  Clock,
-  Plus,
-  CheckSquare,
-  Share2,
-  AlertCircle,
-  Tag,
-  Folder,
-} from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { CheckCircle2, Circle, Clock, Plus, Share2 } from 'lucide-react';
 import type { ContentItemWithMeta } from '@/lib/services/content-service';
 import type { TaskWithMeta } from '@/lib/services/task-service';
 import type { DayRange } from '@/lib/temporal/calendar';
-import {
-  getCalendarDateKey,
-  getItemHourInTimeZone,
-  getLocalParts,
-} from '@/lib/temporal/calendar';
+import { getCalendarDateKey, getItemHourInTimeZone, getLocalParts } from '@/lib/temporal/calendar';
 import { formatInTimeZone, DEFAULT_TIMEZONE } from '@/lib/temporal/timezone';
-import { PLATFORM_CONFIG } from '@/components/content/ContentCard';
 import clsx from 'clsx';
 
 interface CalendarDayViewProps {
@@ -33,399 +20,141 @@ interface CalendarDayViewProps {
   isLoading?: boolean;
 }
 
-const HOURS_OF_DAY = Array.from({ length: 24 }, (_, i) => i);
-
-function formatHourLabel(hour: number): string {
-  if (hour === 0) return '12 AM';
-  if (hour < 12) return `${hour} AM`;
-  if (hour === 12) return '12 PM';
-  return `${hour - 12} PM`;
+const HOURS = Array.from({ length: 24 }, (_, i) => i);
+const HOUR_HEIGHT = 72;
+function hourLabel(hour: number) {
+  return `${hour % 12 || 12} ${hour < 12 ? 'AM' : 'PM'}`;
 }
 
-const TASK_PRIORITY_STYLES: Record<string, string> = {
-  urgent: 'bg-red-500/20 text-red-300 border-red-500/40',
-  high: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
-  medium: 'bg-blue-500/20 text-blue-300 border-blue-500/40',
-  low: 'bg-neutral-800 text-neutral-400 border-neutral-700',
-};
-
-const TASK_STATUS_STYLES: Record<string, string> = {
-  todo: 'text-neutral-400 bg-neutral-800/80 border-neutral-700',
-  in_progress: 'text-blue-300 bg-blue-500/10 border-blue-500/30',
-  blocked: 'text-red-300 bg-red-500/10 border-red-500/30',
-  done: 'text-emerald-300 bg-emerald-500/10 border-emerald-500/30 line-through opacity-70',
-  cancelled: 'text-neutral-500 bg-neutral-900 border-neutral-800 line-through opacity-50',
-};
-
 export function CalendarDayView({
-  dayRange,
-  contentItems,
-  taskItems,
-  userTimeZone = DEFAULT_TIMEZONE,
-  onSelectContent,
-  onSelectTask,
-  onNewAtHour,
-  isLoading = false,
+  dayRange, contentItems, taskItems, userTimeZone = DEFAULT_TIMEZONE,
+  onSelectContent, onSelectTask, onNewAtHour, isLoading = false,
 }: CalendarDayViewProps) {
-  const todayKey = getCalendarDateKey(new Date(), userTimeZone);
-  const isToday = dayRange.dateKey === todayKey;
+  const [now, setNow] = useState(() => new Date());
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = 7 * HOUR_HEIGHT;
+  }, [dayRange.dateKey]);
 
-  // Calculate current wall-clock hour & minute for "Now" line
-  const nowParts = isToday ? getLocalParts(new Date(), userTimeZone) : null;
-
-  // Filter content items that fall on this day
-  const dayContent = contentItems.filter((item) => {
-    if (!item.scheduled_at) return false;
-    const key = getCalendarDateKey(item.scheduled_at, userTimeZone);
-    return key === dayRange.dateKey;
+  const isToday = getCalendarDateKey(now, userTimeZone) === dayRange.dateKey;
+  const nowParts = getLocalParts(now, userTimeZone);
+  const dayTasks = taskItems.filter((task) => task.scheduled_start &&
+    getCalendarDateKey(task.scheduled_start, userTimeZone) === dayRange.dateKey)
+    .sort((a, b) => Number(b.is_all_day) - Number(a.is_all_day) ||
+      Date.parse(a.scheduled_start!) - Date.parse(b.scheduled_start!));
+  const dayContent = contentItems.filter((item) => item.scheduled_at &&
+    getCalendarDateKey(item.scheduled_at, userTimeZone) === dayRange.dateKey);
+  const assignedTasks = dayTasks.filter((task) => task.created_from !== 'calendar');
+  const assignedContent = dayContent.filter((item) => item.created_from !== 'calendar');
+  const calendarAllDay = dayTasks.filter((task) => task.created_from === 'calendar' && task.is_all_day);
+  const completed = assignedTasks.filter((task) => task.status === 'done').length;
+  const timeLabel = (date: string) => formatInTimeZone(date, userTimeZone, {
+    hour: 'numeric', minute: '2-digit', hour12: true,
   });
+  const minuteOfDay = (date: string) => {
+    const { hour, minute } = getItemHourInTimeZone(date, userTimeZone);
+    return hour * 60 + minute;
+  };
+  const events = [
+    ...dayContent.filter((item) => item.created_from === 'calendar').map((item) => {
+      const start = minuteOfDay(item.scheduled_at!);
+      return { id: `content-${item.id}`, title: item.title || item.body || 'Untitled content',
+        start, end: Math.min(1440, start + Math.max(15, item.duration_minutes || 30)),
+        time: timeLabel(item.scheduled_at!), select: () => onSelectContent(item) };
+    }),
+    ...dayTasks.filter((task) => task.created_from === 'calendar' && !task.is_all_day).map((task) => {
+      const start = minuteOfDay(task.scheduled_start!);
+      const end = task.scheduled_end
+        ? getCalendarDateKey(task.scheduled_end, userTimeZone) > dayRange.dateKey
+          ? 1440 : minuteOfDay(task.scheduled_end)
+        : start + (task.estimated_duration_minutes || 30);
+      return { id: `task-${task.id}`, title: task.title, start,
+        end: Math.min(1440, Math.max(start + 15, end)),
+        time: timeLabel(task.scheduled_start!), select: () => onSelectTask(task) };
+    }),
+  ].sort((a, b) => a.start - b.start || b.end - a.end);
 
-  // Filter tasks that fall on this day (either scheduled_start on this day, or all-day)
-  const dayTasks = taskItems.filter((task) => {
-    if (!task.scheduled_start) return false;
-    const key = getCalendarDateKey(task.scheduled_start, userTimeZone);
-    return key === dayRange.dateKey;
-  });
-
-  // Bucket items by local hour (0 - 23)
-  const contentByHour: Record<number, ContentItemWithMeta[]> = {};
-  const tasksByHour: Record<number, TaskWithMeta[]> = {};
-  const allDayTasks: TaskWithMeta[] = [];
-
-  for (let h = 0; h < 24; h++) {
-    contentByHour[h] = [];
-    tasksByHour[h] = [];
+  // Share the width only among events in the same overlapping group.
+  const positioned: (typeof events[number] & { lane: number; lanes: number })[] = [];
+  let group: typeof positioned = [];
+  let groupEnd = 0;
+  let laneEnds: number[] = [];
+  const finishGroup = () => {
+    for (const event of group) event.lanes = laneEnds.length;
+    positioned.push(...group);
+    group = [];
+    laneEnds = [];
+  };
+  for (const event of events) {
+    if (group.length && event.start >= groupEnd) finishGroup();
+    let lane = laneEnds.findIndex((end) => end <= event.start);
+    if (lane === -1) lane = laneEnds.length;
+    laneEnds[lane] = event.end;
+    group.push({ ...event, lane, lanes: 1 });
+    groupEnd = group.length === 1 ? event.end : Math.max(groupEnd, event.end);
   }
-
-  for (const item of dayContent) {
-    if (!item.scheduled_at) continue;
-    const { hour } = getItemHourInTimeZone(item.scheduled_at, userTimeZone);
-    if (contentByHour[hour]) {
-      contentByHour[hour].push(item);
-    }
-  }
-
-  for (const task of dayTasks) {
-    if (task.is_all_day) {
-      allDayTasks.push(task);
-      continue;
-    }
-    if (!task.scheduled_start) continue;
-    const { hour } = getItemHourInTimeZone(task.scheduled_start, userTimeZone);
-    if (tasksByHour[hour]) {
-      tasksByHour[hour].push(task);
-    }
-  }
-
-  // Sort chronologically within each hour
-  for (let h = 0; h < 24; h++) {
-    contentByHour[h].sort((a, b) => {
-      const tA = a.scheduled_at ? new Date(a.scheduled_at).getTime() : 0;
-      const tB = b.scheduled_at ? new Date(b.scheduled_at).getTime() : 0;
-      return tA - tB;
-    });
-
-    tasksByHour[h].sort((a, b) => {
-      const tA = a.scheduled_start ? new Date(a.scheduled_start).getTime() : 0;
-      const tB = b.scheduled_start ? new Date(b.scheduled_start).getTime() : 0;
-      return tA - tB;
-    });
-  }
-
-  const totalItemsCount = dayContent.length + dayTasks.length;
+  finishGroup();
 
   return (
-    <div className="space-y-4">
-      {/* Day Overview Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl bg-neutral-950 border border-neutral-800">
+    <div className="overflow-hidden rounded-2xl border border-neutral-800 bg-neutral-950" aria-busy={isLoading}>
+      <header className="flex flex-wrap items-center justify-between gap-4 border-b border-neutral-800 p-5">
         <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-base sm:text-lg font-bold text-white tracking-tight">
-              {dayRange.label}
-            </h2>
-            {isToday && (
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-500/20 text-blue-300 border border-blue-500/30 font-mono">
-                TODAY
-              </span>
-            )}
-          </div>
-          <p className="text-xs text-neutral-400 mt-0.5">
-            Hourly timeline in <span className="font-mono text-neutral-300">{userTimeZone}</span>
-          </p>
+          <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-emerald-400">Day visualizer {isToday && '· Today'}</p>
+          <h2 className="text-xl font-semibold tracking-tight text-white">{dayRange.label}</h2>
+          <p className="mt-1 text-xs text-neutral-500">{userTimeZone} · {dayTasks.length} tasks · {dayContent.length} content</p>
         </div>
-
-        {/* Item Count Badges */}
-        <div className="flex items-center gap-2">
-          <div className="px-2.5 py-1 rounded-lg bg-neutral-900 border border-neutral-800 text-xs flex items-center gap-1.5 text-neutral-300">
-            <Share2 className="w-3.5 h-3.5 text-blue-400" />
-            <span>Content:</span>
-            <span className="font-mono font-bold text-white">{dayContent.length}</span>
+        {onNewAtHour && <button type="button" onClick={() => onNewAtHour(dayRange.dateKey, 9)} className="flex items-center gap-2 rounded-lg bg-emerald-400 px-3 py-2 text-xs font-semibold text-neutral-950 hover:bg-emerald-300"><Plus className="h-4 w-4" />Schedule</button>}
+      </header>
+      {isLoading && <p role="status" className="flex items-center gap-2 border-b border-neutral-800 p-3 text-xs text-emerald-300"><Clock className="h-3 w-3 animate-spin" />Loading schedule…</p>}
+      <div className="grid lg:grid-cols-[300px_minmax(0,1fr)]">
+        <aside aria-label="Tasks and content assigned to this day" className="border-b border-neutral-800 lg:border-r lg:border-b-0">
+          <div className="border-b border-neutral-800/70 p-5">
+            <div className="flex justify-between text-sm"><h3 className="font-medium text-white">Assigned to this day</h3><span className="font-mono text-xs text-neutral-500">{completed}/{assignedTasks.length} tasks</span></div>
+            <div className="mt-3 h-1 overflow-hidden rounded-full bg-neutral-800"><div className="h-full rounded-full bg-emerald-400 transition-all" style={{ width: `${assignedTasks.length ? completed / assignedTasks.length * 100 : 0}%` }} /></div>
           </div>
-
-          <div className="px-2.5 py-1 rounded-lg bg-neutral-900 border border-neutral-800 text-xs flex items-center gap-1.5 text-neutral-300">
-            <CheckSquare className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Tasks:</span>
-            <span className="font-mono font-bold text-white">{dayTasks.length}</span>
-          </div>
-
-          {onNewAtHour && (
-            <button
-              type="button"
-              onClick={() => onNewAtHour(dayRange.dateKey, 9)}
-              className="px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium flex items-center gap-1 transition-colors shadow-xs"
-              title="Schedule an item on this day"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Schedule</span>
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Loading Overlay */}
-      {isLoading && (
-        <div className="flex items-center justify-center p-3 rounded-lg bg-blue-500/10 border border-blue-500/20 text-xs text-blue-400">
-          <Clock className="w-4 h-4 mr-2 animate-spin" />
-          <span>Loading schedule for {dayRange.label}...</span>
-        </div>
-      )}
-
-      {/* All-Day Tasks Row (if any exist) */}
-      {allDayTasks.length > 0 && (
-        <div className="p-3 rounded-xl bg-neutral-950 border border-neutral-800 space-y-2">
-          <span className="text-[11px] font-mono font-semibold uppercase tracking-wider text-neutral-400">
-            All-Day Tasks ({allDayTasks.length})
-          </span>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-            {allDayTasks.map((task) => (
-              <div
-                key={task.id}
-                role="button"
-                tabIndex={0}
-                onClick={() => onSelectTask(task)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    onSelectTask(task);
-                  }
-                }}
-                className={clsx(
-                  'p-2.5 rounded-lg border text-left cursor-pointer transition-all',
-                  'bg-neutral-900/90 border-neutral-800 hover:border-neutral-700 hover:shadow-xs'
-                )}
-              >
-                <div className="flex items-center justify-between gap-1 text-[10px] font-mono mb-1">
-                  <span className="px-1.5 py-0.2 rounded border bg-emerald-500/10 text-emerald-400 border-emerald-500/30">
-                    ALL DAY
-                  </span>
-                  <span
-                    className={clsx(
-                      'px-1.5 py-0.2 rounded border capitalize',
-                      TASK_PRIORITY_STYLES[task.priority] || 'bg-neutral-800 text-neutral-400'
-                    )}
-                  >
-                    {task.priority}
-                  </span>
-                </div>
-                <div className="text-xs font-semibold text-neutral-200 truncate">{task.title}</div>
+          <div className="max-h-[360px] overflow-y-auto p-3 lg:max-h-[660px]">
+            {assignedTasks.length === 0 && assignedContent.length === 0 && <p className="p-3 text-sm leading-relaxed text-neutral-500">No tasks or content assigned to this day.</p>}
+            {assignedTasks.map((task) => <button key={task.id} type="button" onClick={() => onSelectTask(task)} data-testid={`day-task-list-${task.id}`} className="mb-1 flex w-full gap-3 rounded-xl p-3 text-left transition-colors hover:bg-neutral-900 focus-visible:outline-emerald-400">
+              {task.status === 'done' ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" /> : <Circle className="mt-0.5 h-4 w-4 shrink-0 text-neutral-600" />}
+              <div className="min-w-0 flex-1">
+                <p className={clsx('break-words text-sm font-medium', task.status === 'done' || task.status === 'cancelled' ? 'text-neutral-500 line-through' : 'text-neutral-200')}>{task.title}</p>
+                <p className="mt-1 text-xs text-neutral-500">{task.is_all_day ? 'All day' : timeLabel(task.scheduled_start!)}{task.project && ` · ${task.project.name}`}</p>
+                <div className="mt-2 flex flex-wrap gap-2 text-[10px] capitalize"><span className={clsx('rounded px-1.5 py-0.5', task.priority === 'urgent' ? 'bg-red-500/10 text-red-400' : task.priority === 'high' ? 'bg-amber-500/10 text-amber-400' : 'bg-neutral-800 text-neutral-400')}>{task.priority}</span><span className="py-0.5 text-neutral-500">{task.status.replaceAll('_', ' ')}</span></div>
               </div>
-            ))}
+            </button>)}
+            {assignedContent.map((item) => <button key={item.id} type="button" onClick={() => onSelectContent(item)} data-testid={`day-content-list-${item.id}`} className="mb-1 flex w-full gap-3 rounded-xl p-3 text-left transition-colors hover:bg-neutral-900 focus-visible:outline-blue-400">
+              <Share2 className="mt-0.5 h-4 w-4 shrink-0 text-blue-400" />
+              <div className="min-w-0"><p className="break-words text-sm font-medium text-neutral-200">{item.title || item.body || 'Untitled content'}</p><p className="mt-1 text-xs text-neutral-500">{timeLabel(item.scheduled_at!)} · {item.platform}</p><p className="mt-2 text-[10px] capitalize text-neutral-500">{item.status}</p></div>
+            </button>)}
           </div>
-        </div>
-      )}
-
-      {/* 24-Hour Timeline */}
-      <div className="rounded-xl border border-neutral-800 bg-neutral-950 overflow-hidden shadow-xs">
-        <div className="divide-y divide-neutral-850">
-          {HOURS_OF_DAY.map((hour) => {
-            const hourLabel = formatHourLabel(hour);
-            const hourContent = contentByHour[hour] || [];
-            const hourTasks = tasksByHour[hour] || [];
-            const hasItems = hourContent.length > 0 || hourTasks.length > 0;
-
-            const isCurrentHour = isToday && nowParts && nowParts.hour === hour;
-            const currentMinutePct = nowParts ? (nowParts.minute / 60) * 100 : 0;
-
-            return (
-              <div
-                key={hour}
-                data-testid={`day-hour-${hour}`}
-                className={clsx(
-                  'group relative flex min-h-[64px] transition-colors',
-                  isCurrentHour ? 'bg-blue-950/15' : 'hover:bg-neutral-900/40'
-                )}
-              >
-                {/* Current Time Indicator ("Now" Line) */}
-                {isCurrentHour && (
-                  <div
-                    style={{ top: `${currentMinutePct}%` }}
-                    className="absolute left-0 right-0 z-20 pointer-events-none flex items-center"
-                  >
-                    <span className="px-1.5 py-0.2 rounded text-[9px] font-mono font-bold bg-red-600 text-white shadow-xs ml-14 shrink-0">
-                      NOW
-                    </span>
-                    <div className="h-0.5 flex-1 bg-red-500/90 shadow-sm shadow-red-500/50" />
-                  </div>
-                )}
-
-                {/* Left: Hour Label */}
-                <div className="w-16 sm:w-20 shrink-0 p-2 sm:p-2.5 text-right font-mono text-xs text-neutral-400 border-r border-neutral-800/80 select-none">
-                  <span>{hourLabel}</span>
-                </div>
-
-                {/* Right: Hourly Content Slot */}
-                <div className="flex-1 p-2 flex flex-col justify-center gap-1.5">
-                  {hasItems ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-                      {/* Content Items */}
-                      {hourContent.map((item) => {
-                        const platformInfo = PLATFORM_CONFIG[item.platform];
-                        const displayTime = item.scheduled_at
-                          ? formatInTimeZone(item.scheduled_at, userTimeZone, {
-                              hour: 'numeric',
-                              minute: '2-digit',
-                              hour12: true,
-                            })
-                          : '';
-
-                        return (
-                          <div
-                            key={item.id}
-                            role="button"
-                            tabIndex={0}
-                            onClick={() => onSelectContent(item)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter' || e.key === ' ') {
-                                e.preventDefault();
-                                onSelectContent(item);
-                              }
-                            }}
-                            data-testid={`day-content-${item.id}`}
-                            className={clsx(
-                              'p-2 rounded-lg border text-left cursor-pointer transition-all',
-                              'hover:border-neutral-500 hover:shadow-xs focus:outline-none focus:ring-1 focus:ring-blue-500',
-                              platformInfo?.badgeClass ||
-                                'bg-neutral-900 text-neutral-300 border-neutral-800'
-                            )}
-                          >
-                            <div className="flex items-center justify-between gap-1 mb-1 text-[10px] font-mono">
-                              <span className="font-semibold uppercase tracking-wider flex items-center gap-1">
-                                <Share2 className="w-3 h-3" />
-                                {item.platform}
-                              </span>
-                              <span className="opacity-90">{displayTime}</span>
-                            </div>
-
-                            <div className="text-xs font-semibold truncate text-white">
-                              {item.title || item.body || 'Untitled Content'}
-                            </div>
-
-                            <div className="flex items-center gap-2 mt-1 text-[10px] text-neutral-400 font-mono">
-                              <span className="capitalize">{item.action_type}</span>
-                              {item.project && (
-                                <span className="flex items-center gap-1 text-neutral-300">
-                                  <Folder className="w-2.5 h-2.5" />
-                                  {item.project.name}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-
-                      {/* Task Items */}
-                      {hourTasks.map((task) => {
-                        const displayTime = task.scheduled_start
-                          ? formatInTimeZone(task.scheduled_start, userTimeZone, {
-                              hour: 'numeric',
-                              minute: '2-digit',
-                              hour12: true,
-                            })
-                          : '';
-
-                        return (
-                          <div
-                            key={task.id}
-                            role="button"
-                            tabIndex={0}
-                            onClick={() => onSelectTask(task)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter' || e.key === ' ') {
-                                e.preventDefault();
-                                onSelectTask(task);
-                              }
-                            }}
-                            data-testid={`day-task-${task.id}`}
-                            className={clsx(
-                              'p-2 rounded-lg border text-left cursor-pointer transition-all',
-                              'bg-neutral-900/90 border-neutral-800 hover:border-emerald-500/60 hover:shadow-xs focus:outline-none focus:ring-1 focus:ring-emerald-500'
-                            )}
-                          >
-                            <div className="flex items-center justify-between gap-1 mb-1 text-[10px] font-mono">
-                              <span className="font-semibold uppercase tracking-wider text-emerald-400 flex items-center gap-1">
-                                <CheckSquare className="w-3 h-3" />
-                                TASK
-                              </span>
-                              <div className="flex items-center gap-1">
-                                <span
-                                  className={clsx(
-                                    'px-1 py-0.2 rounded border capitalize',
-                                    TASK_PRIORITY_STYLES[task.priority] ||
-                                      'bg-neutral-800 text-neutral-400'
-                                  )}
-                                >
-                                  {task.priority}
-                                </span>
-                                <span className="text-neutral-400">{displayTime}</span>
-                              </div>
-                            </div>
-
-                            <div className="text-xs font-semibold truncate text-white">
-                              {task.title}
-                            </div>
-
-                            <div className="flex items-center gap-2 mt-1 text-[10px] font-mono">
-                              <span
-                                className={clsx(
-                                  'px-1 py-0.2 rounded border uppercase text-[9px]',
-                                  TASK_STATUS_STYLES[task.status] || 'text-neutral-400'
-                                )}
-                              >
-                                {task.status.replace('_', ' ')}
-                              </span>
-
-                              {task.project && (
-                                <span className="flex items-center gap-1 text-neutral-300">
-                                  <Folder className="w-2.5 h-2.5" />
-                                  {task.project.name}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    /* Empty Hour Slot Placeholder */
-                    <div className="h-full flex items-center">
-                      {onNewAtHour && (
-                        <button
-                          type="button"
-                          onClick={() => onNewAtHour(dayRange.dateKey, hour)}
-                          className="opacity-0 group-hover:opacity-100 transition-opacity text-[11px] text-neutral-500 hover:text-white flex items-center gap-1 px-2 py-1 rounded hover:bg-neutral-800/80"
-                          title={`Schedule item at ${hourLabel}`}
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                          <span>Schedule at {hourLabel}</span>
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </div>
+        </aside>
+        <section aria-label="Day timeline" className="min-w-0">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-800 px-5 py-4 text-xs">
+            <h3 className="font-medium text-neutral-200">Calendar entries</h3>
+            <div className="flex gap-4 text-neutral-500"><span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-blue-400" />Calendar</span></div>
+          </div>
+          {calendarAllDay.length > 0 && <div className="flex flex-wrap gap-2 border-b border-neutral-800 p-3"><span className="text-xs text-neutral-500">All day</span>{calendarAllDay.map((task) => <button key={task.id} type="button" onClick={() => onSelectTask(task)} className="rounded bg-blue-950 px-2 py-1 text-xs text-blue-200">{task.title}</button>)}</div>}
+          <div ref={scrollRef} className="h-[660px] overflow-y-auto overscroll-contain" tabIndex={0} aria-label="24 hour schedule">
+            <div className="relative" style={{ height: 24 * HOUR_HEIGHT }}>
+              {HOURS.map((hour) => <div key={hour} data-testid={`day-hour-${hour}`} className="absolute inset-x-0 flex border-t border-neutral-800/60" style={{ top: hour * HOUR_HEIGHT, height: HOUR_HEIGHT }}>
+                <span className="w-16 shrink-0 pt-2 pr-3 text-right font-mono text-[10px] text-neutral-500">{hourLabel(hour)}</span>
+                <div className="flex-1 border-l border-neutral-800/60">{onNewAtHour && <button type="button" aria-label={`Schedule item at ${hourLabel(hour)}`} onClick={() => onNewAtHour(dayRange.dateKey, hour)} className="h-full w-full text-left text-neutral-600 transition-colors hover:bg-neutral-900/70 focus-visible:bg-neutral-900 focus-visible:outline-emerald-500"><Plus className="ml-2 h-3 w-3" /></button>}</div>
+              </div>)}
+              <div className="pointer-events-none absolute top-0 right-3 left-[72px] h-full">
+                {positioned.map((event) => <button key={event.id} type="button" onClick={event.select} data-testid={`day-${event.id}`} title={`${event.title} · ${event.time}`} className="pointer-events-auto absolute overflow-hidden rounded-md border-l-2 border-blue-400 bg-blue-950 px-2 py-1 text-left text-blue-200 shadow-sm transition-[filter] hover:brightness-125 focus-visible:outline-white" style={{ top: event.start / 60 * HOUR_HEIGHT, height: (event.end - event.start) / 60 * HOUR_HEIGHT - 2, left: `${event.lane / event.lanes * 100}%`, width: `calc(${100 / event.lanes}% - 4px)` }}>
+                  <div className="truncate text-xs font-medium"><Share2 className="mr-1 inline h-3 w-3" />{event.title}</div>
+                  <p className="truncate text-[10px] opacity-60">{event.time}</p>
+                </button>)}
               </div>
-            );
-          })}
-        </div>
+              {isToday && <div className="pointer-events-none absolute right-0 left-14 z-10 flex items-center" style={{ top: (nowParts.hour + nowParts.minute / 60) * HOUR_HEIGHT }}><span className="rounded bg-red-400 px-1 text-[9px] font-semibold text-neutral-950">NOW</span><div className="h-px flex-1 bg-red-400" /></div>}
+            </div>
+          </div>
+          <p className="border-t border-neutral-800 px-4 py-2 text-[10px] text-neutral-500">Click a block for details · Select an empty hour to schedule</p>
+        </section>
       </div>
     </div>
   );

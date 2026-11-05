@@ -30,7 +30,7 @@ export interface AiTokenScopeDescriptor {
 
 /**
  * Human-readable metadata for each supported scope, mapping directly to the
- * 14 registered MCP tools in src/lib/mcp/dispatcher.ts.
+ * registered MCP tools in src/lib/mcp/dispatcher.ts.
  */
 export const AI_TOKEN_SCOPE_DETAILS: readonly AiTokenScopeDescriptor[] = [
   {
@@ -39,8 +39,8 @@ export const AI_TOKEN_SCOPE_DETAILS: readonly AiTokenScopeDescriptor[] = [
     category: 'read',
     domain: 'tasks',
     description:
-      'Search workspace tasks, inspect task details & subtasks, list overdue tasks, and read workspace task summaries.',
-    tools: ['search_tasks', 'get_task_details', 'list_overdue_tasks', 'get_workspace_summary'],
+      'Read tasks, subtasks, overdue work, and summaries. Together with Read Content, also read calendars, projects, your notifications, and reminder preferences.',
+    tools: ['search_tasks', 'get_task_details', 'list_overdue_tasks', 'get_workspace_summary', 'get_calendar', 'list_projects', 'list_notifications', 'get_reminder_preferences', 'delete_task'],
   },
   {
     scope: 'task:write',
@@ -48,8 +48,8 @@ export const AI_TOKEN_SCOPE_DETAILS: readonly AiTokenScopeDescriptor[] = [
     category: 'write',
     domain: 'tasks',
     description:
-      'Create new tasks, update task fields, transition task status, and reschedule task dates.',
-    tools: ['create_task', 'update_task', 'change_task_status', 'reschedule_task'],
+      'Create and edit tasks and subtasks, change status, reschedule work, and manage dependencies. With Read Tasks, permanently delete tasks. Together with Write Content, manage your notifications and reminder preferences.',
+    tools: ['create_task', 'update_task', 'change_task_status', 'reschedule_task', 'add_task_dependency', 'remove_task_dependency', 'delete_task', 'update_notification', 'mark_all_notifications_read', 'update_reminder_preferences'],
   },
   {
     scope: 'content:read',
@@ -57,12 +57,12 @@ export const AI_TOKEN_SCOPE_DETAILS: readonly AiTokenScopeDescriptor[] = [
     category: 'read',
     domain: 'content',
     description:
-      'Search social content items, inspect post details, list scheduled content, and read workspace content summaries.',
+      'Read content, social account profiles, and summaries. Together with Read Tasks, also read calendars, projects, your notifications, and reminder preferences.',
     tools: [
       'search_content',
       'get_content_details',
       'list_scheduled_content',
-      'get_workspace_summary',
+      'get_workspace_summary', 'get_calendar', 'list_projects', 'list_notifications', 'get_reminder_preferences', 'list_social_accounts', 'delete_content_item',
     ],
   },
   {
@@ -71,8 +71,8 @@ export const AI_TOKEN_SCOPE_DETAILS: readonly AiTokenScopeDescriptor[] = [
     category: 'write',
     domain: 'content',
     description:
-      'Create new social content ideas or drafts, update content bodies & metadata, and schedule or reschedule posts.',
-    tools: ['create_content_item', 'update_content_item', 'reschedule_content'],
+      'Create, edit, archive, and schedule content; add social account planning profiles. With Read Content, permanently delete content. Together with Write Tasks, manage your notifications and reminder preferences.',
+    tools: ['create_content_item', 'update_content_item', 'reschedule_content', 'delete_content_item', 'create_social_account', 'update_notification', 'mark_all_notifications_read', 'update_reminder_preferences'],
   },
 ] as const;
 

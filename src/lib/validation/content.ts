@@ -72,6 +72,7 @@ export const externalLinkItemSchema = z.union([
  */
 export const createContentSchema = z
   .object({
+    created_from: z.enum(['content', 'calendar']).optional(),
     platform: socialPlatformEnum,
     action_type: contentActionTypeEnum.default('post'),
     status: contentStatusEnum.default('idea'),

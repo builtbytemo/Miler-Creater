@@ -16,6 +16,7 @@ export const recurrenceInputSchema = z.object({
 
 export const createTaskSchema = z
   .object({
+    created_from: z.enum(['tasks', 'calendar']).optional(),
     title: z.string().trim().min(1, 'Task title is required').max(255, 'Title is too long'),
     description: z.string().trim().max(5000).optional().nullable(),
     priority: taskPriorityEnum.default('medium'),

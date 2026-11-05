@@ -742,6 +742,21 @@ export function CalendarWorkspace({
         </div>
       )}
 
+      <div className={viewMode === 'day' ? '' : 'grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)]'}>
+      {viewMode !== 'day' && <aside aria-label="Assigned tasks and content" className="max-h-[750px] overflow-y-auto rounded-xl border border-neutral-800 bg-neutral-950 p-4">
+        <h2 className="mb-1 text-sm font-semibold text-white">Assigned tasks & content</h2>
+        <p className="mb-4 text-xs text-neutral-500">{currentPeriodLabel}</p>
+        {[
+          ...scheduledTasks.filter((task) => task.created_from !== 'calendar' && task.scheduled_start).map((task) => ({ id: `task-${task.id}`, title: task.title, date: task.scheduled_start!, kind: 'Task', select: () => handleSelectTask(task) })),
+          ...displayedScheduledItems.filter((item) => item.created_from !== 'calendar' && item.scheduled_at).map((item) => ({ id: `content-${item.id}`, title: item.title || item.body || 'Untitled content', date: item.scheduled_at!, kind: 'Content', select: () => handleSelectContent(item) })),
+        ].filter((item) => (viewMode === 'week' ? currentWeek.days : currentMonthGrid.cells).some((day) => day.dateKey === getCalendarDateKey(item.date, userTimeZone)))
+          .sort((a, b) => Date.parse(a.date) - Date.parse(b.date))
+          .map((item) => <button key={item.id} type="button" onClick={item.select} className="mb-2 block w-full rounded-lg border border-neutral-800 p-3 text-left hover:bg-neutral-900">
+            <p className="break-words text-xs font-medium text-neutral-200">{item.title}</p>
+            <p className="mt-1 text-[10px] text-neutral-500">{item.kind} · {toLocalDatetimeString(item.date, userTimeZone).replace('T', ' ')}</p>
+          </button>)}
+      </aside>}
+      <div className="min-w-0">
       {/* Main View: Day Timeline, Week Grid, or Month Grid */}
       {viewMode === 'day' ? (
         <CalendarDayView
@@ -757,8 +772,8 @@ export function CalendarWorkspace({
       ) : viewMode === 'week' ? (
         <CalendarWeekView
           weekRange={currentWeek}
-          items={displayedScheduledItems}
-          taskItems={scheduledTasks}
+          items={displayedScheduledItems.filter((item) => item.created_from === 'calendar')}
+          taskItems={scheduledTasks.filter((task) => task.created_from === 'calendar')}
           userTimeZone={userTimeZone}
           onSelectItem={handleSelectContent}
           onSelectTask={handleSelectTask}
@@ -769,8 +784,8 @@ export function CalendarWorkspace({
       ) : (
         <CalendarMonthView
           monthGrid={currentMonthGrid}
-          items={displayedScheduledItems}
-          taskItems={scheduledTasks}
+          items={displayedScheduledItems.filter((item) => item.created_from === 'calendar')}
+          taskItems={scheduledTasks.filter((task) => task.created_from === 'calendar')}
           userTimeZone={userTimeZone}
           onSelectItem={handleSelectContent}
           onSelectTask={handleSelectTask}
@@ -779,6 +794,9 @@ export function CalendarWorkspace({
           isLoading={isLoading}
         />
       )}
+
+      </div>
+      </div>
 
       {/* Unscheduled Content Backlog Drawer */}
       <UnscheduledContentDrawer
@@ -883,6 +901,7 @@ export function CalendarWorkspace({
       {/* Content Creation Modal */}
       {isCreateContentOpen && (
         <CreateContentModal
+          createdFrom="calendar"
           workspaceId={workspaceId}
           isOpen={isCreateContentOpen}
           onClose={() => {
@@ -901,6 +920,7 @@ export function CalendarWorkspace({
       {/* Task Creation Modal */}
       {isCreateTaskOpen && (
         <CreateTaskModal
+          createdFrom="calendar"
           workspaceId={workspaceId}
           projects={projects}
           isOpen={isCreateTaskOpen}

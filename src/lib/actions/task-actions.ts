@@ -70,6 +70,7 @@ export async function createTaskAction(
       supabase,
       workspaceId,
       {
+        created_from: (formData.get('created_from') || undefined) as 'tasks' | 'calendar' | undefined,
         title,
         description,
         priority,

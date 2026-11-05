@@ -69,7 +69,7 @@ export default async function DashboardPage() {
         return (
           <div className="min-h-screen bg-neutral-900 text-neutral-100 flex flex-col font-sans">
             <AppNavigation />
-            <main className="flex-1 max-w-7xl w-full mx-auto p-6 md:p-8">
+            <main id="main-content" tabIndex={-1} className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
               <div className="p-8 rounded-xl bg-neutral-950 border border-neutral-800 text-center space-y-3">
                 <div className="w-10 h-10 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center justify-center mx-auto">
                   <Layers className="w-5 h-5" />
@@ -110,7 +110,7 @@ export default async function DashboardPage() {
 
   // Generate dynamic operational summary text
   const getAttentionSummaryText = () => {
-    if (!summary) return 'Loading workspace activity...';
+    if (!summary) return 'Workspace activity is unavailable right now. Try refreshing the page.';
     const overdue = summary.tasks.overdueCount;
     const dueToday = summary.tasks.dueTodayCount;
     const sched24h = summary.content.scheduledNext24HoursCount;
@@ -180,7 +180,7 @@ export default async function DashboardPage() {
       <AppNavigation />
 
       {/* Main Operational Dashboard Content */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-6 md:p-8 space-y-8">
+      <main id="main-content" tabIndex={-1} className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-8">
         {/* Workspace Identity & Quick Actions Bar */}
         <div className="p-6 rounded-xl bg-neutral-950 border border-neutral-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-1.5">
@@ -189,7 +189,7 @@ export default async function DashboardPage() {
               <span>Workspace: {workspace?.name || 'Personal Workspace'}</span>
             </div>
             <h2 className="text-xl font-semibold text-neutral-100">
-              Operational Command Center
+              Your workspace, at a glance
             </h2>
             <p className="text-xs text-neutral-400 max-w-2xl">
               {getAttentionSummaryText()}
@@ -197,20 +197,20 @@ export default async function DashboardPage() {
           </div>
 
           {/* Quick Action Shortcuts */}
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
             <Link
               href="/tasks"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium transition-colors shadow-sm focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>New Task</span>
+              <span>View tasks</span>
             </Link>
             <Link
               href="/content"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-medium border border-neutral-700 transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>New Content</span>
+              <span>View content</span>
             </Link>
             <Link
               href="/calendar"

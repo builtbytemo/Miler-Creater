@@ -11,6 +11,7 @@ import { validateTaskDependency, type TaskDependencyEdge, type TaskNode } from '
 import { calculateNextOccurrence } from '@/lib/temporal/recurrence';
 
 export interface TaskWithMeta {
+  created_from?: 'tasks' | 'calendar';
   id: string;
   workspace_id: string;
   parent_task_id: string | null;
@@ -449,6 +450,7 @@ export async function createTask(
     .from('tasks')
     .insert({
       workspace_id: workspaceId,
+      ...(validated.created_from ? { created_from: validated.created_from } : {}),
       title: validated.title,
       description: validated.description || null,
       priority: validated.priority,
@@ -669,6 +671,7 @@ export async function completeTask(
             .from('tasks')
             .insert({
               workspace_id: workspaceId,
+              ...(current.created_from ? { created_from: current.created_from } : {}),
               title: current.title,
               description: current.description,
               priority: current.priority,

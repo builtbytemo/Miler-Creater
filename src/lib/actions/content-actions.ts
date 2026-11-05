@@ -52,6 +52,8 @@ function parseContentFormData(formData: FormData): {
     (formData.get('content_id') as string) || (formData.get('id') as string) || undefined;
   const data: Record<string, unknown> = {};
 
+  if (formData.has('created_from')) data.created_from = formData.get('created_from');
+
   if (formData.has('platform')) {
     const val = formData.get('platform');
     if (typeof val === 'string' && val.trim()) data.platform = val.trim();

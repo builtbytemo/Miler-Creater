@@ -18,6 +18,7 @@ import {
 } from '@/lib/validation/content';
 
 export interface ContentItemWithMeta {
+  created_from?: 'content' | 'calendar';
   id: string;
   workspace_id: string;
   social_account_id: string | null;
@@ -359,6 +360,7 @@ export async function createContentItem(
     .from('content_items')
     .insert({
       workspace_id: workspaceId,
+      ...(validated.created_from ? { created_from: validated.created_from } : {}),
       social_account_id: validated.social_account_id || null,
       platform: validated.platform,
       action_type: validated.action_type,

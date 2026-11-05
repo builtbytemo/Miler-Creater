@@ -41,7 +41,7 @@ interface ContentWorkspaceProps {
   userTimeZone: string;
 }
 
-type TabKey = 'all' | 'ideas' | 'archived';
+type TabKey = 'all' | 'ideas' | 'drafts' | 'scheduled' | 'archived';
 
 export function ContentWorkspace({
   initialItems,
@@ -56,8 +56,8 @@ export function ContentWorkspace({
   // Merge items safely to guarantee no duplicates
   const initialMerged = useMemo(() => {
     const map = new Map<string, ContentItemWithMeta>();
-    initialItems.forEach((i) => map.set(i.id, i));
-    initialIdeas.forEach((i) => map.set(i.id, i));
+    initialItems.filter((i) => i.created_from !== 'calendar').forEach((i) => map.set(i.id, i));
+    initialIdeas.filter((i) => i.created_from !== 'calendar').forEach((i) => map.set(i.id, i));
     return Array.from(map.values());
   }, [initialItems, initialIdeas]);
 
@@ -130,7 +130,11 @@ export function ContentWorkspace({
   const displayedItems = useMemo(() => {
     return items.filter((item) => {
       // Tab filter
-      if (activeTab === 'ideas') {
+      if (activeTab === 'drafts') {
+        if (item.status !== 'draft') return false;
+      } else if (activeTab === 'scheduled') {
+        if (!item.scheduled_at || item.status === 'archived') return false;
+      } else if (activeTab === 'ideas') {
         const isIdeaInbox = item.status === 'idea' && !item.scheduled_at;
         if (!isIdeaInbox) return false;
       } else if (activeTab === 'archived') {
@@ -182,6 +186,8 @@ export function ContentWorkspace({
   // Item handlers
   const handleContentCreated = (newItem: ContentItemWithMeta) => {
     setItems((prev) => [newItem, ...prev.filter((i) => i.id !== newItem.id)]);
+    resetFilters();
+    setActiveTab(newItem.scheduled_at ? 'scheduled' : newItem.status === 'idea' ? 'ideas' : newItem.status === 'draft' ? 'drafts' : 'all');
     setSuccessMessage(
       newItem.status === 'idea' && !newItem.scheduled_at
         ? 'Idea captured in Inbox'
@@ -270,10 +276,10 @@ export function ContentWorkspace({
         <div>
           <h1 className="text-xl font-bold tracking-tight text-neutral-100 flex items-center gap-2.5">
             <Share2 className="w-5 h-5 text-blue-500" />
-            <span>Content Engine</span>
+            <span>Content</span>
           </h1>
           <p className="text-xs text-neutral-400 mt-1">
-            Personal editorial planning, idea capture, and cross-platform scheduling.
+            Capture an idea, shape a draft, and plan when to publish.
           </p>
         </div>
 
@@ -353,10 +359,10 @@ export function ContentWorkspace({
       </div>
 
       {/* Tabs & View Switcher */}
-      <div className="flex items-center gap-2 border-b border-neutral-800">
+      <div className="flex items-center gap-2 overflow-x-auto border-b border-neutral-800 [&>button]:shrink-0">
         <button
           type="button"
-          onClick={() => setActiveTab('all')}
+          onClick={() => { resetFilters(); setActiveTab('all'); }}
           className={`flex items-center gap-2 px-4 py-2.5 text-xs font-medium border-b-2 transition-all ${
             activeTab === 'all'
               ? 'border-blue-500 text-blue-400'
@@ -371,7 +377,7 @@ export function ContentWorkspace({
 
         <button
           type="button"
-          onClick={() => setActiveTab('ideas')}
+          onClick={() => { resetFilters(); setActiveTab('ideas'); }}
           className={`flex items-center gap-2 px-4 py-2.5 text-xs font-medium border-b-2 transition-all ${
             activeTab === 'ideas'
               ? 'border-amber-500 text-amber-400'
@@ -385,9 +391,11 @@ export function ContentWorkspace({
           </span>
         </button>
 
+        {([{ id: 'drafts', label: 'Drafts', count: stats.draftsCount }, { id: 'scheduled', label: 'Scheduled', count: stats.scheduledCount }] as const).map((tab) => <button key={tab.id} type="button" aria-pressed={activeTab === tab.id} onClick={() => { resetFilters(); setActiveTab(tab.id); }} className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-xs font-medium ${activeTab === tab.id ? 'border-blue-500 text-blue-400' : 'border-transparent text-neutral-400 hover:text-neutral-200'}`}>{tab.label}<span className="rounded-full bg-neutral-900 px-1.5 text-[10px]">{tab.count}</span></button>)}
+
         <button
           type="button"
-          onClick={() => setActiveTab('archived')}
+          onClick={() => { resetFilters(); setActiveTab('archived'); }}
           className={`flex items-center gap-2 px-4 py-2.5 text-xs font-medium border-b-2 transition-all ${
             activeTab === 'archived'
               ? 'border-neutral-400 text-neutral-200'
@@ -412,6 +420,7 @@ export function ContentWorkspace({
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
+              aria-label="Search content"
               placeholder="Search title, body, tag..."
               className="w-full pl-9 pr-3 py-1.5 rounded-lg bg-neutral-900 border border-neutral-800 text-xs text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-blue-500 transition-colors"
             />
@@ -537,6 +546,8 @@ export function ContentWorkspace({
                   ? 'Idea Inbox is empty'
                   : activeTab === 'archived'
                   ? 'No archived content'
+                  : activeTab === 'drafts' ? 'No drafts yet'
+                  : activeTab === 'scheduled' ? 'Nothing scheduled yet'
                   : 'No content created yet'}
               </h3>
               <p className="text-xs text-neutral-400">
@@ -546,6 +557,8 @@ export function ContentWorkspace({
                   ? 'Capture quick content sparks and thoughts without committing to dates.'
                   : activeTab === 'archived'
                   ? 'Archived content remains safely stored here and can be recovered anytime.'
+                  : activeTab === 'drafts' ? 'Start a draft and work on it at your own pace.'
+                  : activeTab === 'scheduled' ? 'Open a content item and choose a publishing date to see it here.'
                   : 'Create your first post, schedule an update, or add social accounts.'}
               </p>
             </div>
@@ -575,7 +588,7 @@ export function ContentWorkspace({
               ) : activeTab === 'archived' ? (
                 <button
                   type="button"
-                  onClick={() => setActiveTab('all')}
+                  onClick={() => { resetFilters(); setActiveTab('all'); }}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-neutral-800 bg-neutral-900 hover:bg-neutral-850 text-neutral-300 text-xs transition-colors"
                 >
                   <span>View Active Content</span>

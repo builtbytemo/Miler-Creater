@@ -2,6 +2,8 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { getCalendarDateKey } from '@/lib/temporal/calendar';
+import { matchesTaskDate, sortTaskView, type TaskDateFilter, type TaskSort } from '@/lib/tasks/task-view';
 import {
   Search,
   Plus,
@@ -77,8 +79,13 @@ export function TaskWorkspace({
   userTimeZone,
 }: TaskWorkspaceProps) {
   const router = useRouter();
-  const [tasks, setTasks] = useState<TaskWithMeta[]>(initialTasks);
+  const [tasks, setTasks] = useState<TaskWithMeta[]>(() => initialTasks.filter((task) => task.created_from !== 'calendar'));
   const [search, setSearch] = useState('');
+  const [dateFilter, setDateFilter] = useState<TaskDateFilter>('all');
+  const [sort, setSort] = useState<TaskSort>('default');
+  const [clock, setClock] = useState(() => new Date());
+  useEffect(() => { const timer = setInterval(() => setClock(new Date()), 60_000); return () => clearInterval(timer); }, []);
+  const todayKey = getCalendarDateKey(clock, userTimeZone);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
   const [projectFilter, setProjectFilter] = useState<string>('all');
@@ -88,10 +95,11 @@ export function TaskWorkspace({
   const [subtasksByParent, setSubtasksByParent] = useState<Record<string, TaskWithMeta[]>>({});
   const [pendingTaskId, setPendingTaskId] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   // Synchronize client state when server revalidates or initialTasks prop updates
   useEffect(() => {
-    setTasks(initialTasks);
+    setTasks(initialTasks.filter((task) => task.created_from !== 'calendar'));
   }, [initialTasks]);
 
   // Auto-dismiss success message after 5 seconds
@@ -158,10 +166,11 @@ export function TaskWorkspace({
 
   // Filter tasks client-side for immediate responsive interactions
   const filteredTasks = useMemo(() => {
-    return tasks.filter((t) => {
+    return sortTaskView(tasks.filter((t) => {
+      if (!matchesTaskDate(t, dateFilter, todayKey, userTimeZone)) return false;
       // 1. Search filter
       if (search.trim() !== '') {
-        const query = search.toLowerCase();
+        const query = search.trim().toLowerCase();
         const matchesTitle = t.title.toLowerCase().includes(query);
         const matchesDesc = t.description?.toLowerCase().includes(query);
         if (!matchesTitle && !matchesDesc) return false;
@@ -187,12 +196,13 @@ export function TaskWorkspace({
       }
 
       return true;
-    });
-  }, [tasks, search, statusFilter, priorityFilter, projectFilter]);
+    }), sort);
+  }, [tasks, search, statusFilter, priorityFilter, projectFilter, dateFilter, sort, todayKey, userTimeZone]);
 
   const handleQuickToggleDone = async (taskId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     try {
+      setActionError(null);
       setPendingTaskId(taskId);
       const res = await completeTaskAction(workspaceId, taskId);
       if (res.success && res.data) {
@@ -204,8 +214,13 @@ export function TaskWorkspace({
           }
           return next;
         });
+        setSuccessMessage('Task completed');
         router.refresh();
+      } else {
+        setActionError(res.error || 'Could not complete this task. Please try again.');
       }
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Could not complete this task. Please try again.');
     } finally {
       setPendingTaskId(null);
     }
@@ -237,9 +252,10 @@ export function TaskWorkspace({
 
   return (
     <div className="space-y-6">
+      {actionError && <div role="alert" className="flex items-center justify-between gap-3 rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200"><span>{actionError}</span><button type="button" aria-label="Dismiss error" onClick={() => setActionError(null)} className="rounded p-2 hover:bg-red-500/10"><X className="h-4 w-4" /></button></div>}
       {/* Success Notification Banner */}
       {successMessage && (
-        <div className="flex items-center justify-between p-3.5 rounded-xl bg-emerald-950/40 border border-emerald-800 text-emerald-200 text-xs shadow-sm animate-in fade-in duration-200">
+        <div role="status" className="flex items-center justify-between p-3.5 rounded-xl bg-emerald-950/40 border border-emerald-800 text-emerald-200 text-xs shadow-sm animate-in fade-in duration-200">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
             <span>{successMessage}</span>
@@ -265,6 +281,7 @@ export function TaskWorkspace({
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
+              aria-label="Search tasks"
               placeholder="Search tasks by title or keyword..."
               className="w-full pl-9 pr-3 py-2 text-xs rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-100 placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
@@ -311,6 +328,7 @@ export function TaskWorkspace({
             <Filter className="w-3.5 h-3.5 text-neutral-500" />
             {/* Priority Selector */}
             <select
+              aria-label="Filter by priority"
               value={priorityFilter}
               onChange={(e) => setPriorityFilter(e.target.value)}
               className="px-2.5 py-1 text-xs rounded-md border border-neutral-800 bg-neutral-900 text-neutral-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
@@ -325,6 +343,7 @@ export function TaskWorkspace({
             {/* Project Selector */}
             {projects.length > 0 && (
               <select
+                aria-label="Filter by project"
                 value={projectFilter}
                 onChange={(e) => setProjectFilter(e.target.value)}
                 className="px-2.5 py-1 text-xs rounded-md border border-neutral-800 bg-neutral-900 text-neutral-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
@@ -341,6 +360,15 @@ export function TaskWorkspace({
         </div>
       </div>
 
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap gap-1.5" aria-label="Filter tasks by date">
+          {([{ id: 'all', label: 'Any date' }, { id: 'today', label: 'Today' }, { id: 'overdue', label: 'Overdue' }, { id: 'unscheduled', label: 'No date' }] as const).map((item) => <button key={item.id} type="button" aria-pressed={dateFilter === item.id} onClick={() => setDateFilter(item.id)} className={`min-h-9 rounded-lg px-3 text-xs font-medium ${dateFilter === item.id ? 'bg-blue-500/15 text-blue-300 ring-1 ring-blue-500/30' : 'text-neutral-400 hover:bg-neutral-800'}`}>{item.label}</button>)}
+        </div>
+        <div className="flex items-center gap-3"><span role="status" className="text-xs text-neutral-500">{filteredTasks.length} tasks</span>
+          <select aria-label="Sort tasks" value={sort} onChange={(e) => setSort(e.target.value as TaskSort)} className="min-h-9 rounded-lg border border-neutral-800 bg-neutral-950 px-3 text-xs text-neutral-300"><option value="default">Original order</option><option value="due">Due date: soonest</option><option value="priority">Priority: highest</option><option value="newest">Newest first</option></select>
+        </div>
+      </div>
+
       {/* Task List Container */}
       <div className="space-y-2">
         {filteredTasks.length === 0 ? (
@@ -351,8 +379,8 @@ export function TaskWorkspace({
             <div>
               <h3 className="text-sm font-semibold text-neutral-200">No tasks found</h3>
               <p className="text-xs text-neutral-500 mt-1 max-w-sm mx-auto">
-                {search || statusFilter !== 'all' || priorityFilter !== 'all'
-                  ? 'No tasks matched your active filter criteria. Try adjusting your search query or filters.'
+                {search || statusFilter !== 'all' || priorityFilter !== 'all' || projectFilter !== 'all' || dateFilter !== 'all'
+                  ? 'Try a different search or clear your filters to see more tasks.'
                   : 'Get started by creating your first task in this workspace.'}
               </p>
             </div>
@@ -364,6 +392,7 @@ export function TaskWorkspace({
               <Plus className="w-3.5 h-3.5" />
               <span>Create Task</span>
             </button>
+            {(search || statusFilter !== 'all' || priorityFilter !== 'all' || projectFilter !== 'all' || dateFilter !== 'all') && <button type="button" onClick={() => { setSearch(''); setStatusFilter('all'); setPriorityFilter('all'); setProjectFilter('all'); setDateFilter('all'); }} className="ml-2 rounded-lg px-3 py-2 text-xs font-medium text-blue-300 hover:bg-blue-500/10">Clear filters</button>}
           </div>
         ) : (
           filteredTasks.map((task) => {

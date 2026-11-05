@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useId } from 'react';
+import { useDialog } from '@/lib/hooks/use-dialog';
 import { X, Calendar, Clock, AlertCircle } from 'lucide-react';
 import { createTaskAction } from '@/lib/actions/task-actions';
 import type { TaskWithMeta } from '@/lib/services/task-service';
@@ -14,6 +15,7 @@ interface ProjectOption {
 }
 
 interface CreateTaskModalProps {
+  createdFrom?: 'tasks' | 'calendar';
   workspaceId: string;
   projects: ProjectOption[];
   parentTaskId?: string | null;
@@ -26,6 +28,7 @@ interface CreateTaskModalProps {
 }
 
 export function CreateTaskModal({
+  createdFrom = 'tasks',
   workspaceId,
   projects,
   parentTaskId,
@@ -66,6 +69,9 @@ export function CreateTaskModal({
     }
   }, [isOpen, initialScheduledStart, initialScheduledEnd, userTimeZone]);
 
+  const dialogRef = useDialog(isOpen, onClose, isPending);
+  const titleId = useId();
+
   if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -74,6 +80,7 @@ export function CreateTaskModal({
 
     const form = e.currentTarget;
     const formData = new FormData(form);
+    if (createdFrom === 'calendar') formData.set('created_from', createdFrom);
 
     const title = (formData.get('title') as string || '').trim();
     if (!title) {
@@ -136,10 +143,10 @@ export function CreateTaskModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-neutral-900 border border-neutral-800 rounded-xl max-w-xl w-full p-6 text-neutral-100 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} className="bg-neutral-900 border border-neutral-800 rounded-xl max-w-xl w-full p-6 text-neutral-100 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between border-b border-neutral-800 pb-3">
           <div>
-            <h2 className="text-base font-semibold text-neutral-100">
+            <h2 id={titleId} className="text-base font-semibold text-neutral-100">
               {parentTaskId ? 'Add Subtask' : 'Create New Task'}
             </h2>
             <p className="text-xs text-neutral-400">
@@ -149,6 +156,8 @@ export function CreateTaskModal({
           <button
             type="button"
             onClick={onClose}
+            disabled={isPending}
+            aria-label="Close dialog"
             className="p-1.5 rounded-lg text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800 transition-colors"
           >
             <X className="w-4 h-4" />
@@ -156,7 +165,7 @@ export function CreateTaskModal({
         </div>
 
         {error && (
-          <div className="flex items-start gap-2 p-3 rounded-lg bg-red-950/40 border border-red-800 text-red-300 text-xs">
+          <div role="alert" className="flex items-start gap-2 p-3 rounded-lg bg-red-950/40 border border-red-800 text-red-300 text-xs">
             <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
             <span>{error}</span>
           </div>

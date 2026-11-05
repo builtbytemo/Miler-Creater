@@ -270,9 +270,9 @@ describe('DashboardPage Server Component (Operational Command Center)', () => {
 
     // 4. Quick Action Shortcuts
     expect(html).toContain('href="/tasks"');
-    expect(html).toContain('New Task');
+    expect(html).toContain('View tasks');
     expect(html).toContain('href="/content"');
-    expect(html).toContain('New Content');
+    expect(html).toContain('View content');
     expect(html).toContain('href="/calendar"');
 
     // 5. Seven KPI Cards with counts
@@ -391,7 +391,7 @@ describe('DashboardPage Server Component (Operational Command Center)', () => {
     const html = renderToStaticMarkup(pageElement);
 
     // Page should still render without throwing
-    expect(html).toContain('Operational Command Center');
+    expect(html).toContain('Your workspace, at a glance');
     expect(html).toContain('Failed to load workspace metrics');
     expect(html).toContain('PostgreSQL connection timeout');
 

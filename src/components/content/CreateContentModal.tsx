@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useId } from 'react';
+import { useDialog } from '@/lib/hooks/use-dialog';
 import {
   X,
   Calendar,
@@ -29,6 +30,7 @@ interface ProjectOption {
 }
 
 interface CreateContentModalProps {
+  createdFrom?: 'content' | 'calendar';
   workspaceId: string;
   isOpen: boolean;
   onClose: () => void;
@@ -48,6 +50,7 @@ const PLATFORM_LIMITS: Record<SocialPlatform, { maxChars: number; label: string 
 };
 
 export function CreateContentModal({
+  createdFrom = 'content',
   workspaceId,
   isOpen,
   onClose,
@@ -116,6 +119,9 @@ export function CreateContentModal({
     }
   };
 
+  const dialogRef = useDialog(isOpen, onClose, isPending);
+  const titleId = useId();
+
   if (!isOpen) return null;
 
   const currentLimit = PLATFORM_LIMITS[platform]?.maxChars || 280;
@@ -172,6 +178,7 @@ export function CreateContentModal({
       }
 
       const res = await createContentItemAction({
+        ...(createdFrom === 'calendar' ? { created_from: createdFrom } : {}),
         workspace_id: workspaceId,
         platform,
         action_type: actionType,
@@ -205,11 +212,11 @@ export function CreateContentModal({
 
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
-      <div className="w-full max-w-2xl rounded-2xl bg-neutral-950 border border-neutral-800 p-6 space-y-5 shadow-2xl animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} className="w-full max-w-2xl rounded-2xl bg-neutral-950 border border-neutral-800 p-6 space-y-5 shadow-2xl animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-neutral-800/80 pb-4">
           <div>
-            <h2 className="text-base font-semibold text-neutral-100">
+            <h2 id={titleId} className="text-base font-semibold text-neutral-100">
               {defaultStatus === 'idea' ? 'Capture New Idea' : 'Create Content Draft'}
             </h2>
             <p className="text-xs text-neutral-400 mt-0.5">
@@ -221,6 +228,8 @@ export function CreateContentModal({
           <button
             type="button"
             onClick={onClose}
+            disabled={isPending}
+            aria-label="Close dialog"
             className="p-1 rounded-md text-neutral-400 hover:text-neutral-200 hover:bg-neutral-900 transition-colors"
           >
             <X className="w-4 h-4" />
@@ -228,7 +237,7 @@ export function CreateContentModal({
         </div>
 
         {error && (
-          <div className="p-3 rounded-lg bg-red-950/40 border border-red-800 text-red-200 text-xs flex items-center gap-2">
+          <div role="alert" className="p-3 rounded-lg bg-red-950/40 border border-red-800 text-red-200 text-xs flex items-center gap-2">
             <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
             <span>{error}</span>
           </div>

@@ -31,6 +31,8 @@
  *   legacy or draft version string (such as "2024-11-05").
  */
 
+import { WORKSPACE_TOOLS } from './workspace-tools';
+
 import type {
   AIExecutionContext,
   ToolDefinition,
@@ -83,10 +85,11 @@ import {
 } from '@/lib/services/content-service';
 
 // -----------------------------------------------------------------------------
-// AUTHORITATIVE TOOL DEFINITIONS (EXACTLY 14 TOOLS)
+// AUTHORITATIVE TOOL DEFINITIONS
 // -----------------------------------------------------------------------------
 
 export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
+  ...WORKSPACE_TOOLS,
   // --- 1. get_workspace_summary ---
   get_workspace_summary: {
     name: 'get_workspace_summary',
@@ -114,9 +117,9 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
     requiredScopes: ['task:read'],
     schema: searchTasksInputSchema,
     execute: async (context: AIExecutionContext, input: SearchTasksInput) => {
-      const { limit, ...filters } = input;
+      const { limit, offset = 0, ...filters } = input;
       const tasks = await getTasks(context.supabase, context.workspaceId, filters);
-      return tasks.slice(0, limit);
+      return tasks.slice(offset, offset + limit);
     },
   },
 
@@ -160,9 +163,9 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
     requiredScopes: ['content:read'],
     schema: searchContentInputSchema,
     execute: async (context: AIExecutionContext, input: SearchContentInput) => {
-      const { limit, ...filters } = input;
+      const { limit, offset = 0, ...filters } = input;
       const items = await getContentItems(context.supabase, context.workspaceId, filters);
-      return items.slice(0, limit);
+      return items.slice(offset, offset + limit);
     },
   },
 

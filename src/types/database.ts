@@ -250,6 +250,7 @@ export interface Database {
       };
       content_items: {
         Row: {
+          created_from?: 'content' | 'calendar';
           id: string;
           workspace_id: string;
           social_account_id: string | null;
@@ -273,6 +274,7 @@ export interface Database {
           updated_at: string;
         };
         Insert: {
+          created_from?: 'content' | 'calendar';
           id?: string;
           workspace_id: string;
           social_account_id?: string | null;
@@ -296,6 +298,7 @@ export interface Database {
           updated_at?: string;
         };
         Update: {
+          created_from?: 'content' | 'calendar';
           id?: string;
           workspace_id?: string;
           social_account_id?: string | null;
@@ -321,6 +324,7 @@ export interface Database {
       };
       tasks: {
         Row: {
+          created_from?: 'tasks' | 'calendar';
           id: string;
           workspace_id: string;
           parent_task_id: string | null;
@@ -344,6 +348,7 @@ export interface Database {
           updated_at: string;
         };
         Insert: {
+          created_from?: 'tasks' | 'calendar';
           id?: string;
           workspace_id: string;
           parent_task_id?: string | null;
@@ -367,6 +372,7 @@ export interface Database {
           updated_at?: string;
         };
         Update: {
+          created_from?: 'tasks' | 'calendar';
           id?: string;
           workspace_id?: string;
           parent_task_id?: string | null;

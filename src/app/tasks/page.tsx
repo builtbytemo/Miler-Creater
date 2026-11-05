@@ -27,7 +27,7 @@ export default async function TasksPage({ searchParams }: TasksPageProps) {
     return (
       <div className="min-h-screen bg-neutral-900 text-neutral-100 flex flex-col font-sans">
         <AppNavigation />
-        <main className="flex-1 max-w-7xl w-full mx-auto p-6 md:p-8 space-y-6">
+        <main id="main-content" tabIndex={-1} className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
           <div className="p-6 rounded-xl bg-amber-950/30 border border-amber-800 text-amber-200">
             <h2 className="text-base font-semibold mb-1">Configuration Required</h2>
             <p className="text-xs text-amber-300/80">
@@ -58,7 +58,7 @@ export default async function TasksPage({ searchParams }: TasksPageProps) {
     return (
       <div className="min-h-screen bg-neutral-900 text-neutral-100 flex flex-col font-sans">
         <AppNavigation />
-        <main className="flex-1 max-w-7xl w-full mx-auto p-6 md:p-8">
+        <main id="main-content" tabIndex={-1} className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
           <div className="p-6 rounded-xl bg-neutral-950 border border-neutral-800 text-center">
             <p className="text-sm text-neutral-400">No workspace membership found.</p>
           </div>
@@ -97,18 +97,16 @@ export default async function TasksPage({ searchParams }: TasksPageProps) {
     <div className="min-h-screen bg-neutral-900 text-neutral-100 flex flex-col font-sans">
       <AppNavigation />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto p-6 md:p-8 space-y-6">
+      <main id="main-content" tabIndex={-1} className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
         {/* Header & Quick Stats */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-neutral-800">
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold tracking-tight text-neutral-100">Tasks Command Center</h1>
-              <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">
-                Phase 2 Engine
-              </span>
+              <h1 className="text-xl font-bold tracking-tight text-neutral-100">Tasks</h1>
+
             </div>
             <p className="text-xs text-neutral-400 mt-1">
-              Hierarchical subtasks, dependency validation, recurrence engine, and unified scheduling
+              Know what to do next. Organize your work, track progress, and plan your day.
             </p>
           </div>
 

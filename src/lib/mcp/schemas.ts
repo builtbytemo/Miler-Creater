@@ -1,9 +1,10 @@
 import { z } from 'zod';
-import { taskPriorityEnum, taskStatusEnum } from '@/lib/validation/task';
+import { taskPriorityEnum, taskStatusEnum, recurrenceInputSchema } from '@/lib/validation/task';
 import {
   socialPlatformEnum,
   contentActionTypeEnum,
   contentStatusEnum,
+  mediaItemSchema, externalLinkItemSchema, targetReferenceSchema,
 } from '@/lib/validation/content';
 
 // -----------------------------------------------------------------------------
@@ -23,6 +24,12 @@ export type GetWorkspaceSummaryInput = z.infer<typeof getWorkspaceSummaryInputSc
  */
 export const searchTasksInputSchema = z
   .object({
+    project_id: z.string().uuid().optional(),
+    parent_task_id: z.string().uuid().optional().nullable(),
+    scheduled_from: z.string().datetime().optional(),
+    scheduled_to: z.string().datetime().optional(),
+    is_scheduled: z.boolean().optional(),
+    offset: z.number().int().min(0).max(100000).optional(),
     search: z.string().trim().max(255).optional(),
     status: taskStatusEnum.optional(),
     priority: taskPriorityEnum.optional(),
@@ -61,6 +68,12 @@ export type ListOverdueTasksInput = z.infer<typeof listOverdueTasksInputSchema>;
  */
 export const searchContentInputSchema = z
   .object({
+    project_id: z.string().uuid().optional(),
+    social_account_id: z.string().uuid().optional(),
+    is_scheduled: z.boolean().optional(),
+    scheduled_from: z.string().datetime().optional(),
+    scheduled_to: z.string().datetime().optional(),
+    offset: z.number().int().min(0).max(100000).optional(),
     search: z.string().trim().max(255).optional(),
     platform: socialPlatformEnum.optional(),
     status: contentStatusEnum.optional(),
@@ -104,6 +117,10 @@ export type ListScheduledContentInput = z.infer<typeof listScheduledContentInput
  */
 export const createTaskInputSchema = z
   .object({
+    created_from: z.enum(['tasks', 'calendar']).optional(),
+    parent_task_id: z.string().uuid().optional().nullable(),
+    milestone_id: z.string().uuid().optional().nullable(),
+    recurrence: recurrenceInputSchema.strict().optional().nullable(),
     title: z.string().trim().min(1, 'Task title is required').max(255, 'Title is too long'),
     description: z.string().trim().max(5000).optional().nullable(),
     priority: taskPriorityEnum.default('medium'),
@@ -139,6 +156,9 @@ export type CreateTaskInput = z.infer<typeof createTaskInputSchema>;
  */
 export const updateTaskInputSchema = z
   .object({
+    is_all_day: z.boolean().optional(),
+    milestone_id: z.string().uuid().optional().nullable(),
+    parent_task_id: z.string().uuid().optional().nullable(),
     task_id: z.string().uuid('task_id must be a valid UUID'),
     title: z.string().trim().min(1, 'Task title cannot be empty').max(255).optional(),
     description: z.string().trim().max(5000).optional().nullable(),
@@ -218,6 +238,13 @@ export type RescheduleTaskInput = z.infer<typeof rescheduleTaskInputSchema>;
  */
 export const createContentItemInputSchema = z
   .object({
+    social_account_id: z.string().uuid().optional().nullable(),
+    milestone_id: z.string().uuid().optional().nullable(),
+    media_urls: z.array(mediaItemSchema).optional(),
+    external_links: z.array(externalLinkItemSchema).optional(),
+    target_reference: targetReferenceSchema.optional().nullable(),
+    created_from: z.enum(['content', 'calendar']).optional(),
+    recurrence: recurrenceInputSchema.strict().optional().nullable(),
     platform: socialPlatformEnum,
     action_type: contentActionTypeEnum.default('post'),
     status: z.enum(['idea', 'draft', 'scheduled']).default('idea'),
@@ -249,6 +276,11 @@ export type CreateContentItemInput = z.infer<typeof createContentItemInputSchema
  */
 export const updateContentItemInputSchema = z
   .object({
+    social_account_id: z.string().uuid().optional().nullable(),
+    milestone_id: z.string().uuid().optional().nullable(),
+    media_urls: z.array(mediaItemSchema).optional(),
+    external_links: z.array(externalLinkItemSchema).optional(),
+    target_reference: targetReferenceSchema.optional().nullable(),
     content_id: z.string().uuid('content_id must be a valid UUID'),
     title: z.string().trim().max(255).optional().nullable(),
     body: z.string().optional(),

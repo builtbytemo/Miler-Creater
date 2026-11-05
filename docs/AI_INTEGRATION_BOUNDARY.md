@@ -1,3 +1,5 @@
+> Historical architecture proposal: the confirmation queue described below is not an implemented execution boundary. For current controls, permission requirements, deletion behavior, and setup, see [Claude setup](CLAUDE_SETUP.md).
+
 # AI Integration Boundary Architecture (MCP & External Assistants)
 
 ## 1. Executive Summary

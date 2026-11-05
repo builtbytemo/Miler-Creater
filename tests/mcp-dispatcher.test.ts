@@ -67,22 +67,22 @@ describe('Unified AI Tool Dispatcher (Phase 7.3)', () => {
   });
 
   describe('Registry Integrity and Authoritative Tool Count', () => {
-    it('registers exactly 14 tools', () => {
+    it('registers the complete workspace tool catalog', () => {
       const names = getRegisteredToolNames();
-      expect(names).toHaveLength(14);
-      expect(listToolDefinitions()).toHaveLength(14);
-      expect(Object.keys(TOOL_REGISTRY)).toHaveLength(14);
+      expect(names).toHaveLength(27);
+      expect(listToolDefinitions()).toHaveLength(27);
+      expect(Object.keys(TOOL_REGISTRY)).toHaveLength(27);
     });
 
-    it('contains exactly 7 read tools and 7 write tools', () => {
+    it('retains the original tools alongside the workspace extensions', () => {
       const tools = listToolDefinitions();
       const readTools = tools.filter((t) => t.category === 'read');
       const writeTools = tools.filter((t) => t.category === 'write');
 
-      expect(readTools).toHaveLength(7);
-      expect(writeTools).toHaveLength(7);
+      expect(readTools).toHaveLength(12);
+      expect(writeTools).toHaveLength(15);
 
-      expect(readTools.map((t) => t.name)).toEqual([
+      expect(readTools.map((t) => t.name)).toEqual(expect.arrayContaining([
         'get_workspace_summary',
         'search_tasks',
         'get_task_details',
@@ -90,9 +90,9 @@ describe('Unified AI Tool Dispatcher (Phase 7.3)', () => {
         'search_content',
         'get_content_details',
         'list_scheduled_content',
-      ]);
+      ]));
 
-      expect(writeTools.map((t) => t.name)).toEqual([
+      expect(writeTools.map((t) => t.name)).toEqual(expect.arrayContaining([
         'create_task',
         'update_task',
         'change_task_status',
@@ -100,7 +100,7 @@ describe('Unified AI Tool Dispatcher (Phase 7.3)', () => {
         'create_content_item',
         'update_content_item',
         'reschedule_content',
-      ]);
+      ]));
     });
 
     it('ensures each tool has non-empty description, schema, and requiredScopes', () => {

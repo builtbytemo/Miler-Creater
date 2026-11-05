@@ -2709,7 +2709,7 @@ describe('Claude Web Remote MCP OAuth 2.1 Architecture & Security Suite', () => 
       const listJson = listText.startsWith('event:')
         ? JSON.parse(listText.match(/^data:\s*(.+)$/m)![1])
         : JSON.parse(listText);
-      expect(listJson.result.tools).toHaveLength(14);
+      expect(listJson.result.tools).toHaveLength(27);
 
       // Step 5: Claude calls create_task — succeeds in Workspace A!
       vi.mocked(createTask).mockResolvedValueOnce({
