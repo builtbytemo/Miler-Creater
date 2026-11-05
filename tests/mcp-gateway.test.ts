@@ -171,6 +171,19 @@ describe('MCP Streamable HTTP Gateway (/api/mcp) — Modern 2026-07-28 Protocol'
   }
 
   // ---------------------------------------------------------------------------
+  it('advertises calendar creation and placement fields in the actual MCP response', async () => {
+    const response = await POST(createModernRequest('tools/list', { id: 400 }));
+    const payload = await parseResponsePayload(response);
+    const tools = payload.result.tools;
+    const task = tools.find((tool: any) => tool.name === 'create_task');
+    expect(task.inputSchema.properties.created_from.enum).toEqual(['tasks', 'calendar']);
+    const content = tools.find((tool: any) => tool.name === 'create_content_item');
+    expect(content.inputSchema.properties.created_from.enum).toEqual(['content', 'calendar']);
+    const calendar = tools.find((tool: any) => tool.name === 'create_calendar_entry');
+    expect(calendar.inputSchema.properties.created_from.const).toBe('calendar');
+    expect(calendar.inputSchema.required).toContain('scheduled_start');
+  });
+
   // 1. CURRENT PROTOCOL VERSION IS SUPPORTED
   // ---------------------------------------------------------------------------
   it('1. current protocol version (2026-07-28) is supported via server/discover and requests', async () => {
@@ -194,7 +207,7 @@ describe('MCP Streamable HTTP Gateway (/api/mcp) — Modern 2026-07-28 Protocol'
     const modernRes = await POST(modernReq);
     expect(modernRes.status).toBe(200);
     const modernPayload = await parseResponsePayload(modernRes);
-    expect(modernPayload.result.tools).toHaveLength(27);
+    expect(modernPayload.result.tools).toHaveLength(28);
 
     // Legacy initialize requests succeed statelessly across 2025-11-25, 2025-06-18, and 2025-03-26
     for (const legacyVersion of ['2025-11-25', '2025-06-18', '2025-03-26']) {
@@ -249,7 +262,7 @@ describe('MCP Streamable HTTP Gateway (/api/mcp) — Modern 2026-07-28 Protocol'
     expect(legacyListRes.status).toBe(200);
     expect(legacyListRes.headers.get('mcp-session-id')).toBeNull();
     const legacyListPayload = await parseResponsePayload(legacyListRes);
-    expect(legacyListPayload.result.tools).toHaveLength(27);
+    expect(legacyListPayload.result.tools).toHaveLength(28);
 
     // Legacy stateless tools/call request succeeds without mcp-session-id
     vi.mocked(getDashboardSummary).mockResolvedValueOnce({
@@ -388,7 +401,7 @@ describe('MCP Streamable HTTP Gateway (/api/mcp) — Modern 2026-07-28 Protocol'
 
     const payload = await parseResponsePayload(res);
     const returnedToolNames = payload.result.tools.map((t: any) => t.name);
-    expect(returnedToolNames).toHaveLength(27);
+    expect(returnedToolNames).toHaveLength(28);
     for (const toolName of expectedTools) {
       expect(returnedToolNames).toContain(toolName);
     }
@@ -548,7 +561,7 @@ describe('MCP Streamable HTTP Gateway (/api/mcp) — Modern 2026-07-28 Protocol'
     expect(res.status).toBe(200);
     const payload = await parseResponsePayload(res);
     expect(payload.result).toBeDefined();
-    expect(payload.result.tools).toHaveLength(27);
+    expect(payload.result.tools).toHaveLength(28);
 
     // 2. Envelope-less request with an unknown/unsupported MCP-Protocol-Version header is rejected with 400
     const badVersionReq = new Request('http://localhost:3000/api/mcp', {
@@ -932,7 +945,7 @@ describe('MCP Streamable HTTP Gateway (/api/mcp) — Modern 2026-07-28 Protocol'
 
     // 1. List tools
     const toolList = await client.listTools();
-    expect(toolList.tools).toHaveLength(27);
+    expect(toolList.tools).toHaveLength(28);
 
     // 2. Call tool
     const callRes = await client.callTool({
@@ -996,7 +1009,7 @@ describe('MCP Streamable HTTP Gateway (/api/mcp) — Modern 2026-07-28 Protocol'
 
     // 1. List all 14 tools over legacy 2025-11-25 Streamable HTTP
     const toolList = await legacyClient.listTools();
-    expect(toolList.tools).toHaveLength(27);
+    expect(toolList.tools).toHaveLength(28);
 
     // 2. Call tool over legacy 2025-11-25 Streamable HTTP
     const callRes = await legacyClient.callTool({
@@ -1078,7 +1091,7 @@ describe('MCP Streamable HTTP Gateway (/api/mcp) — Modern 2026-07-28 Protocol'
       const res = await POST(req);
       expect(res.status).toBe(200);
       const payload = await parseResponsePayload(res);
-      expect(payload.result.tools).toHaveLength(27);
+      expect(payload.result.tools).toHaveLength(28);
     });
 
     it('allows requests with valid Host when Origin is legitimately omitted (Claude Desktop)', async () => {

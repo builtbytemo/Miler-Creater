@@ -22,6 +22,19 @@ describe('Claude workspace control', () => {
     expect(result.success).toBe(true);
     expect(createTask).toHaveBeenCalledWith(context.supabase, context.workspaceId, expect.objectContaining({ parent_task_id: taskId, created_from: 'calendar', recurrence: expect.objectContaining({ frequency: 'weekly', timezone: 'Africa/Cairo' }) }), context.userId);
   });
+  it('creates calendar-only entries without requiring Claude to supply an origin flag', async () => {
+    const result = await dispatchTool('create_calendar_entry', { title: 'Meeting', scheduled_start: '2026-11-06T07:00:00Z', scheduled_end: '2026-11-06T08:00:00Z' }, context);
+    expect(result.success).toBe(true);
+    expect(createTask).toHaveBeenCalledWith(context.supabase, context.workspaceId, expect.objectContaining({ title: 'Meeting', created_from: 'calendar', scheduled_start: '2026-11-06T07:00:00Z' }), context.userId);
+  });
+  it('rejects calendar entries without a start, with reversed times, or with Tasks placement', async () => {
+    for (const input of [
+      { title: 'Missing start' },
+      { title: 'Reversed', scheduled_start: '2026-11-06T08:00:00Z', scheduled_end: '2026-11-06T07:00:00Z' },
+      { title: 'Wrong origin', scheduled_start: '2026-11-06T08:00:00Z', created_from: 'tasks' },
+    ]) expect((await dispatchTool('create_calendar_entry', input, context)).error?.code).toBe('INVALID_ARGUMENTS');
+    expect(createTask).not.toHaveBeenCalled();
+  });
   it('pins notifications to both the token workspace and the token owner', async () => {
     await dispatchTool('list_notifications', { unread_only: true }, context);
     expect(getNotifications).toHaveBeenCalledWith(context.supabase, context.workspaceId, context.userId, { unread_only: true, page: 1, limit: 20 });

@@ -123,7 +123,7 @@ A high-performance, unified operational workspace for planning social media cont
 1. **Service-Role Isolation**: `SUPABASE_SERVICE_ROLE_KEY` is quarantined on the server. If `createAdminClient()` is ever invoked in a browser environment, it immediately throws a fatal security exception.
 2. **Row Level Security (RLS)**: Active on all 14 database tables. Authenticated users can only read or mutate rows belonging to workspaces where they hold valid membership.
 3. **Workspace-Centric Multi-Tenancy**: The database provisions a personal workspace on signup, but all queries and foreign keys route through `workspace_id`. Adding team collaboration requires zero database restructuring.
-4. **AI Boundaries**: AI clients operate with scoped, revocable authorization. The 27-tool MCP catalog includes permanent deletion under read/write permissions; an in-app confirmation queue is not implemented. See [Claude setup and supported controls](docs/CLAUDE_SETUP.md) for exact behavior.
+4. **AI Boundaries**: AI clients operate with scoped, revocable authorization. The 28-tool MCP catalog includes permanent deletion under read/write permissions; an in-app confirmation queue is not implemented. See [Claude setup and supported controls](docs/CLAUDE_SETUP.md) for exact behavior.
 
 ---
 

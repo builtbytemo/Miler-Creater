@@ -205,7 +205,7 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
   create_task: {
     name: 'create_task',
     description:
-      'Create a new task in the workspace with title, description, priority, deadline, and tags.',
+      'Create a task in Tasks by default, including subtasks and recurrence. For meetings or time blocks on the calendar, prefer create_calendar_entry; alternatively set created_from to calendar.',
     category: 'write',
     requiredScopes: ['task:write'],
     schema: createTaskInputSchema,

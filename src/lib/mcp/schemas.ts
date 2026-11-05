@@ -117,7 +117,7 @@ export type ListScheduledContentInput = z.infer<typeof listScheduledContentInput
  */
 export const createTaskInputSchema = z
   .object({
-    created_from: z.enum(['tasks', 'calendar']).optional(),
+    created_from: z.enum(['tasks', 'calendar']).optional().describe('Use calendar to appear only on the calendar; omit or use tasks for the Tasks tab and calendar left panel.'),
     parent_task_id: z.string().uuid().optional().nullable(),
     milestone_id: z.string().uuid().optional().nullable(),
     recurrence: recurrenceInputSchema.strict().optional().nullable(),
@@ -147,6 +147,13 @@ export const createTaskInputSchema = z
     }
   );
 export type CreateTaskInput = z.infer<typeof createTaskInputSchema>;
+
+/** A dedicated calendar action makes placement unambiguous for MCP clients. */
+export const createCalendarEntryInputSchema = createTaskInputSchema.safeExtend({
+  created_from: z.literal('calendar').default('calendar'),
+  scheduled_start: z.string().datetime().describe('Required start time as an ISO 8601 timestamp with a timezone offset.'),
+});
+
 
 /**
  * 9. update_task
@@ -243,7 +250,7 @@ export const createContentItemInputSchema = z
     media_urls: z.array(mediaItemSchema).optional(),
     external_links: z.array(externalLinkItemSchema).optional(),
     target_reference: targetReferenceSchema.optional().nullable(),
-    created_from: z.enum(['content', 'calendar']).optional(),
+    created_from: z.enum(['content', 'calendar']).optional().describe('Use calendar for calendar-only placement; omit or use content for the Content tab and calendar left panel.'),
     recurrence: recurrenceInputSchema.strict().optional().nullable(),
     platform: socialPlatformEnum,
     action_type: contentActionTypeEnum.default('post'),

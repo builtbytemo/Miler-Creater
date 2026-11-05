@@ -1,10 +1,11 @@
 import { z } from 'zod';
 import type { ToolDefinition } from './types';
 import { getUnifiedSchedule } from '@/lib/services/scheduling-service';
-import { getTaskById, deleteTask, addTaskDependency, removeTaskDependency } from '@/lib/services/task-service';
+import { createTask, getTaskById, deleteTask, addTaskDependency, removeTaskDependency } from '@/lib/services/task-service';
 import { getContentItemById, deleteContentItem, getSocialAccounts, createSocialAccount } from '@/lib/services/content-service';
 import { getNotifications, markNotificationAsRead, markNotificationAsUnread, markAllNotificationsAsRead, dismissNotification, getNotificationPreferences, saveNotificationPreferences } from '@/lib/services/notification-service';
 import { notificationFilterSchema, updateNotificationPreferencesSchema } from '@/lib/validation/notification';
+import { createCalendarEntryInputSchema } from './schemas';
 import { createSocialAccountSchema } from '@/lib/validation/content';
 
 const uuid = z.string().uuid();
@@ -16,6 +17,11 @@ const range = z.object({
   { message: 'Provide an ordered date range of no more than 120 days.' });
 
 export const WORKSPACE_TOOLS: Record<string, ToolDefinition> = {
+  create_calendar_entry: {
+    name: 'create_calendar_entry', description: 'Create an event or time block directly on the calendar, without adding it to the Tasks tab or left assignment panel. Use this for appointments, meetings, and calendar events. Requires a start time; accepts end time, all-day flag, priority, recurrence, and notes in description.',
+    category: 'write', requiredScopes: ['task:write'], schema: createCalendarEntryInputSchema,
+    execute: (c, v: z.infer<typeof createCalendarEntryInputSchema>) => createTask(c.supabase, c.workspaceId, { ...v, created_from: 'calendar' }, c.userId),
+  },
   get_calendar: {
     name: 'get_calendar', description: 'Read scheduled tasks, content, and deadlines in a UTC date range of up to 120 days, using the account timezone for display.',
     category: 'read', requiredScopes: ['task:read', 'content:read'], schema: range,

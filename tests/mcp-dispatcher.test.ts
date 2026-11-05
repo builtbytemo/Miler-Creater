@@ -69,9 +69,9 @@ describe('Unified AI Tool Dispatcher (Phase 7.3)', () => {
   describe('Registry Integrity and Authoritative Tool Count', () => {
     it('registers the complete workspace tool catalog', () => {
       const names = getRegisteredToolNames();
-      expect(names).toHaveLength(27);
-      expect(listToolDefinitions()).toHaveLength(27);
-      expect(Object.keys(TOOL_REGISTRY)).toHaveLength(27);
+      expect(names).toHaveLength(28);
+      expect(listToolDefinitions()).toHaveLength(28);
+      expect(Object.keys(TOOL_REGISTRY)).toHaveLength(28);
     });
 
     it('retains the original tools alongside the workspace extensions', () => {
@@ -80,7 +80,7 @@ describe('Unified AI Tool Dispatcher (Phase 7.3)', () => {
       const writeTools = tools.filter((t) => t.category === 'write');
 
       expect(readTools).toHaveLength(12);
-      expect(writeTools).toHaveLength(15);
+      expect(writeTools).toHaveLength(16);
 
       expect(readTools.map((t) => t.name)).toEqual(expect.arrayContaining([
         'get_workspace_summary',

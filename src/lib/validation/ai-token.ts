@@ -49,7 +49,7 @@ export const AI_TOKEN_SCOPE_DETAILS: readonly AiTokenScopeDescriptor[] = [
     domain: 'tasks',
     description:
       'Create and edit tasks and subtasks, change status, reschedule work, and manage dependencies. With Read Tasks, permanently delete tasks. Together with Write Content, manage your notifications and reminder preferences.',
-    tools: ['create_task', 'update_task', 'change_task_status', 'reschedule_task', 'add_task_dependency', 'remove_task_dependency', 'delete_task', 'update_notification', 'mark_all_notifications_read', 'update_reminder_preferences'],
+    tools: ['create_calendar_entry', 'create_task', 'update_task', 'change_task_status', 'reschedule_task', 'add_task_dependency', 'remove_task_dependency', 'delete_task', 'update_notification', 'mark_all_notifications_read', 'update_reminder_preferences'],
   },
   {
     scope: 'content:read',
