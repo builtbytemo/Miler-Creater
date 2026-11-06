@@ -1042,6 +1042,19 @@ describe('Claude Web Remote MCP OAuth 2.1 Architecture & Security Suite', () => 
       expect(body.client_secret).toBeUndefined();
     });
 
+    it('accepts only narrowly scoped Codex loopback callbacks', () => {
+      expect(validateRedirectUri('http://127.0.0.1:45678/callback/abc_123').valid).toBe(true);
+      expect(validateRedirectUri('http://127.0.0.1:45678/callback').valid).toBe(true);
+      for (const uri of [
+        'http://localhost:45678/callback/abc',
+        'http://127.0.0.1.evil.example:45678/callback/abc',
+        'http://127.0.0.1:45678/other',
+        'http://127.0.0.1:45678/callback/abc?next=evil',
+        'http://127.0.0.1:45678/callback/../other',
+        'http://user@127.0.0.1:45678/callback',
+      ]) expect(validateRedirectUri(uri).valid).toBe(false);
+    });
+
     it('rejects arbitrary, HTTP, fragment, query, path-traversal, and credentialed redirect URIs', async () => {
       const maliciousUris = [
         'https://evil.example.com/api/mcp/auth_callback',
@@ -2637,6 +2650,28 @@ describe('Claude Web Remote MCP OAuth 2.1 Architecture & Security Suite', () => 
   // 8. END-TO-END FLOW: OAUTH -> DISCOVER ALL 14 TOOLS -> CREATE TASK (MODERN & LEGACY)
   // ===========================================================================
   describe('8. Full OAuth 2.1 -> MCP 14-Tool Discovery & Task Creation Flow', () => {
+    it('registers and exchanges a Codex loopback callback with PKCE', async () => {
+      const redirectUri = 'http://127.0.0.1:45678/callback/codex_123';
+      const registered = await registerOAuthClient(
+        { client_name: 'Codex', redirect_uris: [redirectUri] },
+        { adminClient }
+      );
+      const issued = await issueOAuthAuthorizationCode({
+        userId, workspaceId: workspaceA, approvedScopes: ['task:read'],
+        clientId: registered.client_id, redirectUri, responseType: 'code',
+        codeChallenge: validChallenge, codeChallengeMethod: 'S256',
+        state: 'codex-state', resource: CANONICAL_MCP_RESOURCE,
+      }, { adminClient });
+      const response = await handleOAuthTokenRequest(new Request('http://localhost:3000/api/oauth/token', {
+        method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ grant_type: 'authorization_code', code: issued.code,
+          client_id: registered.client_id, redirect_uri: redirectUri,
+          code_verifier: validVerifier, resource: CANONICAL_MCP_RESOURCE }),
+      }), { adminClient });
+      expect(response.status).toBe(200);
+      expect((await response.json()).access_token).toMatch(/^ctc_live_[0-9a-f]{64}$/);
+    });
+
     it('completes OAuth 2.1 PKCE flow, discovers all 14 MCP tools, creates a task in the authorized workspace, and enforces workspace isolation & consented scopes', async () => {
       // Step 1: Dynamic Client Registration by Claude
       const registered = await registerOAuthClient(

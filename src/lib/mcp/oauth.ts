@@ -296,7 +296,16 @@ export function validateRedirectUri(rawUri: unknown): {
     return { valid: false, reason: 'redirect_uri is not a valid URL' };
   }
 
-  if (parsed.protocol !== 'https:') {
+  // Native Codex clients use an ephemeral loopback listener with PKCE. Keep
+  // this exception restricted to the literal IPv4 loopback and Codex callback
+  // paths; the registered URI must still match exactly during authorization.
+  const isCodexLoopback =
+    /^http:\/\/127\.0\.0\.1:\d{1,5}\/callback(?:\/[A-Za-z0-9_-]+)?$/.test(trimmed) &&
+    parsed.hostname === '127.0.0.1' &&
+    !!parsed.port &&
+    /^\/callback(?:\/[A-Za-z0-9_-]+)?$/.test(parsed.pathname);
+
+  if (parsed.protocol !== 'https:' && !isCodexLoopback) {
     return { valid: false, reason: 'redirect_uri must use the https scheme' };
   }
 
@@ -315,7 +324,7 @@ export function validateRedirectUri(rawUri: unknown): {
   const normalized = `${parsed.origin}${parsed.pathname}`;
   const allowlist = getAllowedRedirectUris();
 
-  if (!allowlist.has(normalized)) {
+  if (!isCodexLoopback && !allowlist.has(normalized)) {
     return {
       valid: false,
       reason: `redirect_uri "${normalized}" is not an allowlisted MCP callback URI`,
