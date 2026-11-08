@@ -60,13 +60,22 @@ export function parseEndpoint(value) {
   return url;
 }
 
+const MCP_DISCOVER_PRIOR = {
+  kind: 'modern',
+  discover: {
+    supportedVersions: ['2026-07-28'],
+    capabilities: { tools: { listChanged: true } },
+    serverInfo: { name: 'content-task-command-center', version: '1.1.0' },
+  },
+};
+
 export async function loginWithCredential(token, env = process.env) {
   if (!/^ctc_live_[0-9a-f]{64}$/.test(token)) throw new Error('Invalid CLI username format.');
   const url = parseEndpoint(env.MILLER_URL || DEFAULT_URL);
   const transport = new StreamableHTTPClientTransport(url, { requestInit: { headers: { Authorization: `Bearer ${token}` }, redirect: 'error' } });
   const client = new Client({ name: 'miler-cli', version: '0.2.0' }, { versionNegotiation: { mode: 'auto' } });
   try {
-    await client.connect(transport);
+    await client.connect(transport, { prior: MCP_DISCOVER_PRIOR });
     await client.listTools();
   } catch {
     throw new Error('Login failed. Check your CLI username, deployment URL, and network connection.');
@@ -140,7 +149,7 @@ export async function run(args, env = process.env, output = console) {
   });
   const client = new Client({ name: 'miller-creator-cli', version: '0.1.0' }, { versionNegotiation: { mode: 'auto' } });
   try {
-    await client.connect(transport);
+    await client.connect(transport, { prior: MCP_DISCOVER_PRIOR });
     if (command === 'call') {
       const result = await client.callTool({ name, arguments: toolArgs });
       if (result.isError) {

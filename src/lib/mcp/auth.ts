@@ -189,13 +189,25 @@ export async function authenticateAiToken(
     }
   }
 
-  // 7 & 8. Re-verify active workspace membership and role of token creator
-  const { data: memberRecord, error: memberErr } = await adminClient
-    .from('workspace_members')
-    .select('role')
-    .eq('workspace_id', tokenRecord.workspace_id)
-    .eq('user_id', tokenRecord.created_by)
-    .maybeSingle();
+  // 7, 8, 9 & 10. Concurrently execute workspace membership verification, atomic rate limiting, and profile timezone lookup
+  const [
+    { data: memberRecord, error: memberErr },
+    rateLimitResult,
+    { data: profile },
+  ] = await Promise.all([
+    adminClient
+      .from('workspace_members')
+      .select('role')
+      .eq('workspace_id', tokenRecord.workspace_id)
+      .eq('user_id', tokenRecord.created_by)
+      .maybeSingle(),
+    checkTokenRateLimit(adminClient, tokenRecord.id, options),
+    adminClient
+      .from('profiles')
+      .select('timezone')
+      .eq('id', tokenRecord.created_by)
+      .maybeSingle(),
+  ]);
 
   if (memberErr || !memberRecord) {
     await logAiAuditEvent(adminClient, {
@@ -250,9 +262,6 @@ export async function authenticateAiToken(
     };
   }
 
-  // 9. Enforce atomic serverless rate limiting (fails closed on database error)
-  const rateLimitResult = await checkTokenRateLimit(adminClient, tokenRecord.id, options);
-
   if (!rateLimitResult.allowed) {
     return {
       success: false,
@@ -267,13 +276,6 @@ export async function authenticateAiToken(
       },
     };
   }
-
-  // 10. Load profile timezone, update last_used_at, and construct immutable AIExecutionContext
-  const { data: profile } = await adminClient
-    .from('profiles')
-    .select('timezone')
-    .eq('id', tokenRecord.created_by)
-    .maybeSingle();
 
   // Async non-blocking update of last_used_at
   updateTokenLastUsed(adminClient, tokenRecord.id).catch(() => {});
