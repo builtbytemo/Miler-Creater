@@ -15,7 +15,7 @@ vi.mock('@modelcontextprotocol/client', () => ({
 vi.mock('@supabase/supabase-js', () => ({ createClient: () => ({ auth: { signInWithPassword: mocks.signIn } }) }));
 import { parseEndpoint, run } from '../cli/miller.mjs';
 
-const env = { ...process.env, MILLER_URL: 'https://example.com', MILLER_TOKEN: 'secret' };
+const env = { ...process.env, MILLER_URL: 'https://example.com', MILLER_TOKEN: 'secret', XDG_CONFIG_HOME: '/tmp/miler-cli-test-isolated' };
 const output = { ...console, log: vi.fn() };
 
 beforeEach(() => {
@@ -120,3 +120,62 @@ it('executes logout cleanly', async () => {
   expect(code).toBe(0);
   expect(output.log).toHaveBeenCalledWith('Signed out on this device.');
 });
+
+it('formats tool output as human-readable table by default and supports --json', async () => {
+  const sampleTasks = [
+    {
+      id: 'task-12345678',
+      title: 'Submit quarterly tax report',
+      status: 'todo',
+      priority: 'high',
+      due_date: '2026-11-15T18:00:00Z',
+    },
+  ];
+  mocks.callTool.mockResolvedValue({
+    content: [{ type: 'text', text: JSON.stringify(sampleTasks) }],
+    isError: false,
+  });
+
+  // Default human-readable output
+  const codePretty = await run(['tasks', 'list'], env, output);
+  expect(codePretty).toBe(0);
+  const prettyOutput = output.log.mock.calls.at(-1)![0];
+  expect(prettyOutput).toContain('Tasks (1):');
+  expect(prettyOutput).toContain('STATUS');
+  expect(prettyOutput).toContain('PRIORITY');
+  expect(prettyOutput).toContain('Submit quarterly tax report');
+  expect(prettyOutput).toContain('task-123');
+
+  // JSON output with --json flag
+  const codeJson = await run(['tasks', 'list', '--json'], env, output);
+  expect(codeJson).toBe(0);
+  const jsonOutput = output.log.mock.calls.at(-1)![0];
+  const parsed = JSON.parse(jsonOutput);
+  expect(parsed).toEqual(sampleTasks);
+});
+
+it('formats tools list cleanly and supports --json', async () => {
+  mocks.listTools.mockResolvedValueOnce({
+    tools: [
+      { name: 'search_tasks', description: 'Search tasks in workspace' },
+      { name: 'create_task', description: 'Create a new task' },
+    ],
+  });
+
+  const codePretty = await run(['tools'], env, output);
+  expect(codePretty).toBe(0);
+  const prettyOutput = output.log.mock.calls.at(-1)![0];
+  expect(prettyOutput).toContain('Available MCP Tools (2):');
+  expect(prettyOutput).toContain('search_tasks');
+  expect(prettyOutput).toContain('create_task');
+
+  mocks.listTools.mockResolvedValueOnce({
+    tools: [{ name: 'search_tasks', description: 'Search tasks in workspace' }],
+  });
+  const codeJson = await run(['tools', '--json'], env, output);
+  expect(codeJson).toBe(0);
+  const jsonOutput = output.log.mock.calls.at(-1)![0];
+  const parsed = JSON.parse(jsonOutput);
+  expect(parsed[0].name).toBe('search_tasks');
+});
+

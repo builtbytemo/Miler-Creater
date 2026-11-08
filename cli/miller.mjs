@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url';
 import { realpathSync } from 'node:fs';
 import { parseFriendlyCommand } from './commands.mjs';
 import { readCredentials, saveCredentials, deleteCredentials, promptSecret } from './credentials.mjs';
+import { formatToolOutput, formatToolsList } from './format.mjs';
 
 const DEFAULT_URL = 'https://miler-creater.vercel.app';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
@@ -35,11 +36,14 @@ Usage:
   npm run --silent cli -- auth login
 
 Use miler login to enter your private CLI username from the website.
+Commands output human-readable tables by default. Add --json for raw JSON output.
 MILLER_URL can select a different deployment, and MILLER_TOKEN can override
-the stored credential. HTTPS is required except for localhost. Output is JSON.
+the stored credential. HTTPS is required except for localhost.
 Examples:
-  npm run cli -- tools
-  npm run cli -- describe search_tasks
+  miler tasks list
+  miler tasks list --json
+  miler tools
+  miler describe search_tasks
   npm run cli -- call search_tasks '{}'
 `;
 
@@ -86,7 +90,7 @@ export async function run(args, env = process.env, output = console) {
     return 0;
   }
   const friendly = parseFriendlyCommand(args);
-  if (friendly) return run(['call', friendly.name, JSON.stringify(friendly.arguments)], env, output);
+  if (friendly) return run(['call', friendly.name, JSON.stringify(friendly.arguments), friendly.isJson ? '--json' : '--pretty'], env, output);
   if (command === 'auth') {
     if (name !== 'login' || rawArgs || extra.length) throw new Error('Usage: auth login');
     const supabaseUrl = parseEndpoint(env.MILLER_SUPABASE_URL);
@@ -115,7 +119,10 @@ export async function run(args, env = process.env, output = console) {
     output.log(JSON.stringify(payload, null, 2));
     return result.ok ? 0 : 1;
   }
-  if (!['tools', 'describe', 'call'].includes(command) || (command === 'tools' && (name || rawArgs || extra.length)) || (command === 'describe' && (!name || rawArgs || extra.length)) || (command === 'call' && (!name || extra.length))) {
+  if (!['tools', 'describe', 'call'].includes(command) ||
+      (command === 'tools' && ((name && name !== '--json') || rawArgs || extra.length)) ||
+      (command === 'describe' && (!name || rawArgs || extra.length)) ||
+      (command === 'call' && (!name || extra.length > 1 || (extra.length === 1 && extra[0] !== '--pretty' && extra[0] !== '--json')))) {
     throw new Error('Invalid command or arguments. Run with --help for usage.');
   }
   let toolArgs = {};
@@ -136,8 +143,26 @@ export async function run(args, env = process.env, output = console) {
     await client.connect(transport);
     if (command === 'call') {
       const result = await client.callTool({ name, arguments: toolArgs });
-      output.log(JSON.stringify(result, null, 2));
-      return result.isError ? 1 : 0;
+      if (result.isError) {
+        output.log(JSON.stringify(result, null, 2));
+        return 1;
+      }
+      const wantsJson = extra.includes('--json');
+      if (wantsJson) {
+        if (Array.isArray(result.content) && result.content[0]?.text) {
+          try {
+            const parsed = JSON.parse(result.content[0].text);
+            output.log(JSON.stringify(parsed, null, 2));
+          } catch {
+            output.log(JSON.stringify(result, null, 2));
+          }
+        } else {
+          output.log(JSON.stringify(result, null, 2));
+        }
+      } else {
+        output.log(formatToolOutput(name, result));
+      }
+      return 0;
     }
     const tools = [];
     let cursor;
@@ -150,7 +175,10 @@ export async function run(args, env = process.env, output = console) {
       const tool = tools.find(item => item.name === name);
       if (!tool) throw new Error(`Unknown tool: ${name}`);
       output.log(JSON.stringify(tool, null, 2));
-    } else output.log(JSON.stringify(tools, null, 2));
+    } else {
+      const wantsJson = name === '--json' || extra.includes('--json');
+      output.log(formatToolsList(tools, { json: wantsJson }));
+    }
     return 0;
   } finally { await client.close(); }
 }

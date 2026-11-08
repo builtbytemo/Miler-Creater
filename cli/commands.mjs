@@ -31,7 +31,9 @@ const definitions = {
 };
 
 export function parseFriendlyCommand(argv) {
-  const [group, action, ...tokens] = argv;
+  const isJson = argv.includes('--json');
+  const cleanArgv = argv.filter(a => a !== '--json');
+  const [group, action, ...tokens] = cleanArgv;
   if (!['tasks', 'content', 'calendar', 'notifications', 'projects', 'accounts', 'workspace', 'reminders'].includes(group)) return null;
   const definition = definitions[`${group} ${action}`];
   if (!definition) throw new Error(`Unknown ${group} command. Run --help for usage.`);
@@ -68,5 +70,5 @@ export function parseFriendlyCommand(argv) {
   if (group === 'content' && action === 'create' && (!args.platform || (!args.title && !args.body))) throw new Error('Content create requires --platform and --title or --body.');
   if (group === 'accounts' && action === 'create' && (!args.platform || !args.account_handle)) throw new Error('Accounts create requires --platform and --handle.');
   if (group === 'content' && action === 'scheduled' && (!args.start_date || !args.end_date)) throw new Error('Content scheduled requires --from and --to.');
-  return { name, arguments: args };
+  return { name, arguments: args, isJson };
 }
