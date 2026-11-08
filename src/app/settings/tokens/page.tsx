@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { resolveAuthorizedWorkspace } from '@/lib/auth/workspace';
 import { AppNavigation } from '@/components/layout/AppNavigation';
 import { ClaudeConnection } from '@/components/settings/ClaudeConnection';
+import { CliConnection } from '@/components/settings/CliConnection';
 import { AiTokensManager } from '@/components/settings/AiTokensManager';
 
 export const instant = false;
@@ -51,6 +52,7 @@ export default async function AiTokensSettingsPage() {
       <AppNavigation />
 
       <main id="main-content" tabIndex={-1} className="flex-1 max-w-4xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+        <CliConnection workspaceId={workspaceId} />
         <ClaudeConnection />
         <AiTokensManager
           workspaceId={workspaceId}
