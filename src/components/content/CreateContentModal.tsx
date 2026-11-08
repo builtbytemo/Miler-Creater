@@ -1,15 +1,11 @@
 'use client';
 
-import { useState, useEffect, useId } from 'react';
+import { useState, useId } from 'react';
 import { useDialog } from '@/lib/hooks/use-dialog';
 import {
   X,
-  Calendar,
-  Clock,
   AlertCircle,
   Loader2,
-  Tag,
-  AtSign,
   Link as LinkIcon,
   ChevronDown,
   ChevronUp,
@@ -84,7 +80,10 @@ export function CreateContentModal({
   const [error, setError] = useState<string | null>(null);
 
   // Synchronize initial state when modal opens or defaultStatus/initialScheduledAt changes
-  useEffect(() => {
+  const syncKey = `${isOpen}:${defaultStatus}:${initialScheduledAt ?? ''}:${userTimeZone}`;
+  const [prevSyncKey, setPrevSyncKey] = useState(syncKey);
+  if (prevSyncKey !== syncKey) {
+    setPrevSyncKey(syncKey);
     if (isOpen) {
       const initialLocal = initialScheduledAt
         ? toLocalDatetimeString(initialScheduledAt, userTimeZone)
@@ -107,7 +106,7 @@ export function CreateContentModal({
       setIsTargetRefOpen(false);
       setError(null);
     }
-  }, [isOpen, defaultStatus, initialScheduledAt, userTimeZone]);
+  }
 
   const handlePlatformChange = (newPlatform: SocialPlatform) => {
     setPlatform(newPlatform);
@@ -210,16 +209,32 @@ export function CreateContentModal({
     }
   };
 
+  const inputBaseClass =
+    'w-full px-3.5 py-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] hover:border-[var(--border-strong)] focus:outline-none focus:border-[var(--border-strong)] text-xs transition-colors';
+
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
-      <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} className="w-full max-w-2xl rounded-2xl bg-neutral-950 border border-neutral-800 p-6 space-y-5 shadow-2xl animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
+    <div
+      className="fixed inset-0 bg-black/55 dark:bg-black/75 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-5 overflow-y-auto"
+      onClick={() => {
+        if (!isPending) onClose();
+      }}
+    >
+      <div
+        ref={dialogRef}
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        className="w-full max-w-2xl surface-elevated bg-[var(--bg-surface-elevated)] border border-[var(--border-strong)] text-[var(--text-primary)] rounded-3xl p-5 sm:p-6 space-y-5 shadow-[var(--shadow-elevated)] max-h-[90vh] overflow-y-auto focus:outline-none"
+      >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-neutral-800/80 pb-4">
-          <div>
-            <h2 id={titleId} className="text-base font-semibold text-neutral-100">
+        <div className="flex items-start justify-between gap-3 border-b border-[var(--border-subtle)] pb-4">
+          <div className="space-y-0.5 min-w-0">
+            <h2 id={titleId} className="heading-section text-base sm:text-lg text-[var(--text-primary)]">
               {defaultStatus === 'idea' ? 'Capture New Idea' : 'Create Content Draft'}
             </h2>
-            <p className="text-xs text-neutral-400 mt-0.5">
+            <p className="text-xs text-[var(--text-secondary)]">
               {defaultStatus === 'idea'
                 ? 'Save quick thoughts to your Idea Inbox without committing to dates'
                 : 'Plan, draft, and configure planned social interactions'}
@@ -230,35 +245,39 @@ export function CreateContentModal({
             onClick={onClose}
             disabled={isPending}
             aria-label="Close dialog"
-            className="p-1 rounded-md text-neutral-400 hover:text-neutral-200 hover:bg-neutral-900 transition-colors"
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-muted)] transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {error && (
-          <div role="alert" className="p-3 rounded-lg bg-red-950/40 border border-red-800 text-red-200 text-xs flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
+          <div
+            role="alert"
+            className="p-3.5 rounded-2xl border badge-danger text-xs flex items-center gap-2.5"
+          >
+            <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{error}</span>
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4 text-xs">
           {/* Row 1: Platform & Action Type */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             {/* Platform Selection */}
             <div className="space-y-1.5">
-              <label className="font-medium text-neutral-300">Platform</label>
+              <label className="block font-medium text-[var(--text-secondary)]">Platform</label>
               <div className="grid grid-cols-4 gap-1.5">
                 {(['x', 'linkedin', 'reddit', 'threads'] as const).map((p) => (
                   <button
                     key={p}
                     type="button"
                     onClick={() => handlePlatformChange(p)}
-                    className={`py-1.5 px-2 rounded-lg text-xs font-medium border text-center transition-colors capitalize ${
+                    aria-pressed={platform === p}
+                    className={`py-2 px-2 rounded-xl text-xs font-semibold border text-center transition-colors capitalize ${
                       platform === p
-                        ? 'bg-blue-600/20 border-blue-500 text-blue-300'
-                        : 'bg-neutral-900 border-neutral-800 text-neutral-400 hover:border-neutral-700'
+                        ? 'bg-[var(--text-primary)] border-[var(--text-primary)] text-[var(--bg-canvas)] shadow-2xs'
+                        : 'bg-[var(--bg-surface)] border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--border-strong)]'
                     }`}
                   >
                     {p === 'x' ? 'X' : p}
@@ -269,7 +288,7 @@ export function CreateContentModal({
 
             {/* Action Type Selection */}
             <div className="space-y-1.5">
-              <label className="font-medium text-neutral-300">Action Type</label>
+              <label className="block font-medium text-[var(--text-secondary)]">Action Type</label>
               <select
                 value={actionType}
                 onChange={(e) => {
@@ -277,7 +296,7 @@ export function CreateContentModal({
                   setActionType(val);
                   if (val !== 'post') setIsTargetRefOpen(true);
                 }}
-                className="w-full px-3 py-2 rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs"
+                className={inputBaseClass}
               >
                 <option value="post">Post (Original Publication)</option>
                 <option value="comment">Comment</option>
@@ -291,32 +310,38 @@ export function CreateContentModal({
 
           {/* Title / Headline (Optional) */}
           <div className="space-y-1.5">
-            <label className="font-medium text-neutral-300">
-              Title / Hook <span className="text-neutral-500">(Optional headline or summary)</span>
+            <label className="block font-medium text-[var(--text-secondary)]">
+              Title / Hook{' '}
+              <span className="text-[var(--text-tertiary)] font-normal">
+                (Optional headline or summary)
+              </span>
             </label>
             <input
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="e.g. 5 lessons from building agentic workflows"
-              className="w-full px-3 py-2 rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-100 placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs"
+              className={inputBaseClass}
             />
           </div>
 
           {/* Content Body with Advisory Character Counter */}
           <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <label className="font-medium text-neutral-300">
-                Body Content <span className="text-neutral-500">(Draft text)</span>
+            <div className="flex items-center justify-between gap-2">
+              <label className="font-medium text-[var(--text-secondary)]">
+                Body Content{' '}
+                <span className="text-[var(--text-tertiary)] font-normal">(Draft text)</span>
               </label>
               <div
                 className={`text-[11px] font-mono ${
-                  isOverRecommendedLimit ? 'text-amber-400' : 'text-neutral-500'
+                  isOverRecommendedLimit
+                    ? 'text-[var(--status-warn-text)] font-semibold'
+                    : 'text-[var(--text-tertiary)]'
                 }`}
               >
                 {body.length} / {currentLimit} chars
                 {isOverRecommendedLimit && (
-                  <span className="ml-1 text-[10px] text-amber-400/80">
+                  <span className="ml-1 text-[10px]">
                     (Draft exceeds recommended limit)
                   </span>
                 )}
@@ -327,65 +352,80 @@ export function CreateContentModal({
               value={body}
               onChange={(e) => setBody(e.target.value)}
               placeholder="Write your draft, thoughts, or outline here..."
-              className="w-full px-3 py-2 rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-100 placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs font-sans leading-relaxed"
+              className={`${inputBaseClass} font-sans leading-relaxed`}
             />
           </div>
 
           {/* Contextual Target Reference (Collapsible) */}
-          <div className="border border-neutral-800/80 rounded-xl bg-neutral-900/40 p-3 space-y-2">
+          <div className="border border-[var(--border-subtle)] rounded-2xl bg-[var(--bg-surface-muted)] p-3.5 space-y-2.5">
             <button
               type="button"
               onClick={() => setIsTargetRefOpen((prev) => !prev)}
-              className="w-full flex items-center justify-between text-xs font-medium text-neutral-300 hover:text-neutral-100"
+              className="w-full flex items-center justify-between text-xs font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
             >
               <span className="flex items-center gap-1.5">
-                <LinkIcon className="w-3.5 h-3.5 text-neutral-400" />
-                <span>Target Post & Author Context {isContextualAction && '(Recommended for ' + actionType + ')'}</span>
+                <LinkIcon className="w-3.5 h-3.5 text-[var(--text-tertiary)]" />
+                <span>
+                  Target Post &amp; Author Context{' '}
+                  {isContextualAction && `(Recommended for ${actionType})`}
+                </span>
               </span>
-              {isTargetRefOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              {isTargetRefOpen ? (
+                <ChevronUp className="w-4 h-4" />
+              ) : (
+                <ChevronDown className="w-4 h-4" />
+              )}
             </button>
 
             {isTargetRefOpen && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-neutral-800/80">
-                <div>
-                  <label className="text-[11px] text-neutral-400">Target Post URL</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2.5 border-t border-[var(--border-subtle)]">
+                <div className="space-y-1">
+                  <label className="block text-[11px] font-medium text-[var(--text-secondary)]">
+                    Target Post URL
+                  </label>
                   <input
                     type="url"
                     value={targetUrl}
                     onChange={(e) => setTargetUrl(e.target.value)}
                     placeholder="https://..."
-                    className="w-full px-2.5 py-1.5 rounded-lg border border-neutral-800 bg-neutral-950 text-neutral-200 text-xs mt-0.5"
+                    className={inputBaseClass}
                   />
                 </div>
-                <div>
-                  <label className="text-[11px] text-neutral-400">Author Handle</label>
+                <div className="space-y-1">
+                  <label className="block text-[11px] font-medium text-[var(--text-secondary)]">
+                    Author Handle
+                  </label>
                   <input
                     type="text"
                     value={targetAuthorHandle}
                     onChange={(e) => setTargetAuthorHandle(e.target.value)}
                     placeholder="@handle or u/author"
-                    className="w-full px-2.5 py-1.5 rounded-lg border border-neutral-800 bg-neutral-950 text-neutral-200 text-xs mt-0.5"
+                    className={inputBaseClass}
                   />
                 </div>
-                <div>
-                  <label className="text-[11px] text-neutral-400">Target Post ID</label>
+                <div className="space-y-1">
+                  <label className="block text-[11px] font-medium text-[var(--text-secondary)]">
+                    Target Post ID
+                  </label>
                   <input
                     type="text"
                     value={targetPostId}
                     onChange={(e) => setTargetPostId(e.target.value)}
                     placeholder="e.g. 182390123"
-                    className="w-full px-2.5 py-1.5 rounded-lg border border-neutral-800 bg-neutral-950 text-neutral-200 text-xs mt-0.5"
+                    className={inputBaseClass}
                   />
                 </div>
                 {platform === 'reddit' && (
-                  <div>
-                    <label className="text-[11px] text-neutral-400">Subreddit</label>
+                  <div className="space-y-1">
+                    <label className="block text-[11px] font-medium text-[var(--text-secondary)]">
+                      Subreddit
+                    </label>
                     <input
                       type="text"
                       value={subreddit}
                       onChange={(e) => setSubreddit(e.target.value)}
                       placeholder="e.g. webdev"
-                      className="w-full px-2.5 py-1.5 rounded-lg border border-neutral-800 bg-neutral-950 text-neutral-200 text-xs mt-0.5"
+                      className={inputBaseClass}
                     />
                   </div>
                 )}
@@ -394,14 +434,14 @@ export function CreateContentModal({
           </div>
 
           {/* Row 2: Status, Scheduled Date, Duration */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 p-3.5 rounded-2xl bg-[var(--bg-surface-muted)] border border-[var(--border-subtle)]">
             {/* Status */}
             <div className="space-y-1.5">
-              <label className="font-medium text-neutral-300">Status</label>
+              <label className="block font-medium text-[var(--text-secondary)]">Status</label>
               <select
                 value={status}
                 onChange={(e) => setStatus(e.target.value as ContentStatus)}
-                className="w-full px-3 py-2 rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs"
+                className={inputBaseClass}
               >
                 <option value="idea">Idea (Unscheduled Inbox)</option>
                 <option value="draft">Draft (In Progress)</option>
@@ -411,8 +451,9 @@ export function CreateContentModal({
 
             {/* Scheduled Datetime */}
             <div className="space-y-1.5">
-              <label className="font-medium text-neutral-300">
-                Scheduled Date & Time <span className="text-neutral-500">(Optional)</span>
+              <label className="block font-medium text-[var(--text-secondary)]">
+                Scheduled Date &amp; Time{' '}
+                <span className="text-[var(--text-tertiary)] font-normal">(Optional)</span>
               </label>
               <input
                 type="datetime-local"
@@ -423,14 +464,17 @@ export function CreateContentModal({
                     setStatus('scheduled');
                   }
                 }}
-                className="w-full px-3 py-2 rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs font-mono"
+                className={`${inputBaseClass} font-mono`}
               />
             </div>
 
             {/* Duration Minutes */}
             <div className="space-y-1.5">
-              <label className="font-medium text-neutral-300">
-                Duration <span className="text-neutral-500">(Mins for calendar block)</span>
+              <label className="block font-medium text-[var(--text-secondary)]">
+                Duration{' '}
+                <span className="text-[var(--text-tertiary)] font-normal">
+                  (Mins for calendar block)
+                </span>
               </label>
               <input
                 type="number"
@@ -439,20 +483,22 @@ export function CreateContentModal({
                 value={durationMinutes}
                 onChange={(e) => setDurationMinutes(e.target.value)}
                 placeholder="e.g. 30"
-                className="w-full px-3 py-2 rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs font-mono"
+                className={`${inputBaseClass} font-mono`}
               />
             </div>
           </div>
 
           {/* Row 3: Target Social Account, Project, Tags */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
             {/* Target Social Account Picker */}
             <div className="space-y-1.5">
-              <label className="font-medium text-neutral-300">Target Social Account</label>
+              <label className="block font-medium text-[var(--text-secondary)]">
+                Target Social Account
+              </label>
               <select
                 value={socialAccountId}
                 onChange={(e) => setSocialAccountId(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs"
+                className={inputBaseClass}
               >
                 <option value="">None (Personal / Unassigned)</option>
                 {socialAccounts
@@ -463,18 +509,18 @@ export function CreateContentModal({
                     </option>
                   ))}
               </select>
-              <p className="text-[10px] text-neutral-500">
+              <p className="text-[10px] text-[var(--text-tertiary)]">
                 Destination profile for this {platform.toUpperCase()} content
               </p>
             </div>
 
             {/* Project */}
             <div className="space-y-1.5">
-              <label className="font-medium text-neutral-300">Project</label>
+              <label className="block font-medium text-[var(--text-secondary)]">Project</label>
               <select
                 value={projectId}
                 onChange={(e) => setProjectId(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs"
+                className={inputBaseClass}
               >
                 <option value="">None</option>
                 {projects.map((p) => (
@@ -487,43 +533,45 @@ export function CreateContentModal({
 
             {/* Tags */}
             <div className="space-y-1.5">
-              <label className="font-medium text-neutral-300">Tags (comma-separated)</label>
+              <label className="block font-medium text-[var(--text-secondary)]">
+                Tags (comma-separated)
+              </label>
               <input
                 type="text"
                 value={tagsInput}
                 onChange={(e) => setTagsInput(e.target.value)}
                 placeholder="tech, ai, launch"
-                className="w-full px-3 py-2 rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs"
+                className={inputBaseClass}
               />
             </div>
           </div>
 
           {/* Notes */}
           <div className="space-y-1.5">
-            <label className="font-medium text-neutral-300">Editorial Notes</label>
+            <label className="block font-medium text-[var(--text-secondary)]">Editorial Notes</label>
             <input
               type="text"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Internal editorial notes or references..."
-              className="w-full px-3 py-2 rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs"
+              className={inputBaseClass}
             />
           </div>
 
           {/* Actions */}
-          <div className="flex items-center justify-end gap-2 pt-4 border-t border-neutral-900">
+          <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-[var(--border-subtle)]">
             <button
               type="button"
               disabled={isPending}
               onClick={onClose}
-              className="px-4 py-2 rounded-lg bg-neutral-900 hover:bg-neutral-800 text-neutral-300 font-medium text-xs transition-colors"
+              className="btn-secondary px-4 py-2 text-xs font-semibold"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isPending}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs transition-colors shadow-sm disabled:opacity-50"
+              className="btn-accent px-5 py-2 text-xs font-semibold disabled:opacity-50"
             >
               {isPending && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
               <span>{isPending ? 'Saving...' : status === 'idea' ? 'Save Idea' : 'Save Content'}</span>

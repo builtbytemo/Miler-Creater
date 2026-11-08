@@ -1,333 +1,333 @@
 'use client';
 
-import { useState } from 'react';
-import Link from 'next/link';
+import { useState, useMemo } from 'react';
 import {
-  X,
-  Calendar as CalendarIcon,
+  Inbox,
   Search,
-  Lightbulb,
-  FileText,
-  Clock,
-  ExternalLink,
-  Plus,
+  CalendarPlus,
+  X,
   AtSign,
-  Tag,
+  Folder,
+  Sparkles,
+  FileEdit,
+  Share2,
 } from 'lucide-react';
 import type { ContentItemWithMeta } from '@/lib/services/content-service';
 import type { SocialPlatform } from '@/types/database';
-import { PLATFORM_CONFIG, STATUS_CONFIG, ACTION_CONFIG } from '@/components/content/ContentCard';
-import clsx from 'clsx';
+import { ACTION_CONFIG } from '@/components/content/ContentCard';
+import {
+  resolveCalendarItemColor,
+  type CalendarItemColorMap,
+} from '@/lib/calendar/item-colors';
 
 interface UnscheduledContentDrawerProps {
-  isOpen: boolean;
-  onClose: () => void;
   items: ContentItemWithMeta[];
-  userTimeZone: string;
-  onSelectItem: (item: ContentItemWithMeta) => void;
+  isOpen: boolean;
+  itemColorMap?: CalendarItemColorMap;
+  onClose: () => void;
   onScheduleItem: (item: ContentItemWithMeta) => void;
-  onCaptureNewIdea?: () => void;
+  onOpenDetail: (item: ContentItemWithMeta) => void;
 }
 
-type TabFilter = 'all' | 'ideas' | 'drafts';
+const PLATFORM_PILL_MAP: Record<SocialPlatform, { label: string; badgeClass: string }> = {
+  x: {
+    label: 'X (Twitter)',
+    badgeClass: 'bg-[var(--bg-elevated)] text-[var(--text-primary)] border-[var(--border-strong)]',
+  },
+  linkedin: {
+    label: 'LinkedIn',
+    badgeClass: 'badge-info',
+  },
+  reddit: {
+    label: 'Reddit',
+    badgeClass: 'badge-warning',
+  },
+  threads: {
+    label: 'Threads',
+    badgeClass: 'badge-neutral',
+  },
+};
 
 export function UnscheduledContentDrawer({
-  isOpen,
-  onClose,
   items,
-  userTimeZone,
-  onSelectItem,
+  isOpen,
+  itemColorMap,
+  onClose,
   onScheduleItem,
-  onCaptureNewIdea,
+  onOpenDetail,
 }: UnscheduledContentDrawerProps) {
-  const [activeTab, setActiveTab] = useState<TabFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedPlatform, setSelectedPlatform] = useState<string>('all');
+  const [platformFilter, setPlatformFilter] = useState<SocialPlatform | ''>('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'idea' | 'draft'>('all');
+
+  // Strict Backlog Filter: Only include unscheduled items that are actively in 'idea' or 'draft' status.
+  const activeUnscheduledItems = useMemo(() => {
+    return items.filter(
+      (item) =>
+        item.scheduled_at === null && (item.status === 'idea' || item.status === 'draft')
+    );
+  }, [items]);
+
+  const filteredItems = useMemo(() => {
+    return activeUnscheduledItems.filter((item) => {
+      if (platformFilter && item.platform !== platformFilter) return false;
+      if (statusFilter === 'idea' && item.status !== 'idea') return false;
+      if (statusFilter === 'draft' && item.status !== 'draft') return false;
+
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchTitle = item.title?.toLowerCase().includes(q);
+        const matchBody = item.body.toLowerCase().includes(q);
+        const matchTags = item.tags.some((t) => t.toLowerCase().includes(q));
+        if (!matchTitle && !matchBody && !matchTags) return false;
+      }
+
+      return true;
+    });
+  }, [activeUnscheduledItems, platformFilter, statusFilter, searchQuery]);
+
+  const ideaCount = useMemo(
+    () => activeUnscheduledItems.filter((i) => i.status === 'idea').length,
+    [activeUnscheduledItems]
+  );
+  const draftCount = useMemo(
+    () => activeUnscheduledItems.filter((i) => i.status === 'draft').length,
+    [activeUnscheduledItems]
+  );
 
   if (!isOpen) return null;
 
-  // Filter strictly for active unscheduled backlog items:
-  // Must have scheduled_at === null, excluding archived and automated lifecycle statuses (publishing/published/failed)
-  const activeUnscheduled = items.filter(
-    (item) => item.scheduled_at === null && (item.status === 'idea' || item.status === 'draft')
-  );
-
-  const ideasCount = activeUnscheduled.filter((item) => item.status === 'idea').length;
-  const draftsCount = activeUnscheduled.filter((item) => item.status === 'draft').length;
-
-  // Apply filters
-  const filteredItems = activeUnscheduled.filter((item) => {
-    // Tab filter: strictly 'idea' for ideas, strictly 'draft' for drafts
-    if (activeTab === 'ideas' && item.status !== 'idea') return false;
-    if (activeTab === 'drafts' && item.status !== 'draft') return false;
-
-    // Platform filter
-    if (selectedPlatform !== 'all' && item.platform !== selectedPlatform) return false;
-
-    // Search query
-    if (searchQuery.trim().length > 0) {
-      const q = searchQuery.toLowerCase().trim();
-      const titleMatch = item.title?.toLowerCase().includes(q) || false;
-      const bodyMatch = item.body?.toLowerCase().includes(q) || false;
-      const tagMatch = item.tags?.some((t) => t.toLowerCase().includes(q)) || false;
-      if (!titleMatch && !bodyMatch && !tagMatch) return false;
-    }
-
-    return true;
-  });
-
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden bg-black/60 backdrop-blur-xs flex justify-end animate-in fade-in duration-200">
-      <div
-        className="w-full max-w-md bg-neutral-950 border-l border-neutral-800 h-full flex flex-col shadow-2xl animate-in slide-in-from-right duration-200"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Unscheduled Content Backlog"
+    <div
+      className="fixed inset-0 z-40 flex justify-end bg-black/45 backdrop-blur-xs"
+      onClick={onClose}
+    >
+      <aside
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-md h-full bg-[var(--bg-surface)] border-l border-[var(--border-default)] shadow-2xl flex flex-col overflow-hidden"
+        aria-label="Unscheduled content backlog"
+        data-testid="unscheduled-content-drawer"
       >
-        {/* Drawer Header */}
-        <div className="p-4 sm:p-5 border-b border-neutral-800 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Clock className="w-5 h-5 text-amber-400" />
-            <div>
-              <h2 className="text-sm font-bold text-white">Unscheduled Backlog</h2>
-              <p className="text-[11px] text-neutral-400">
-                Ideas and drafts without a scheduled time.
-              </p>
-            </div>
+      {/* Drawer Header */}
+      <div className="px-4 py-3.5 border-b border-[var(--border-subtle)] bg-[var(--bg-subtle)]/55 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="p-2 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-primary)] shrink-0">
+            <Inbox className="w-4 h-4" />
           </div>
-
-          <div className="flex items-center gap-2">
-            <span className="px-2 py-0.5 rounded-full text-xs font-mono font-medium bg-neutral-900 border border-neutral-800 text-neutral-300">
-              {activeUnscheduled.length}
-            </span>
-            <button
-              type="button"
-              onClick={onClose}
-              className="p-1.5 rounded-lg text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800 transition-colors"
-              aria-label="Close drawer"
-            >
-              <X className="w-4 h-4" />
-            </button>
+          <div className="min-w-0">
+            <h3 className="text-sm font-semibold text-[var(--text-primary)] flex items-center gap-1.5">
+              <span>Unscheduled Backlog</span>
+              <span className="px-2 py-0.2 rounded-full text-[11px] font-mono font-semibold bg-[var(--bg-surface)] text-[var(--text-secondary)] border border-[var(--border-subtle)]">
+                {activeUnscheduledItems.length}
+              </span>
+            </h3>
+            <p className="text-[11px] text-[var(--text-tertiary)] truncate">
+              {ideaCount} ideas · {draftCount} drafts ready to schedule
+            </p>
           </div>
         </div>
 
-        {/* Tab Filters: All, Ideas, Drafts */}
-        <div className="px-4 sm:px-5 pt-3 pb-2 border-b border-neutral-800/80 bg-neutral-900/40">
-          <div className="flex items-center gap-1.5 p-1 rounded-lg bg-neutral-900 border border-neutral-800 text-xs">
+        <button
+          type="button"
+          onClick={onClose}
+          className="p-1.5 rounded-full text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
+          aria-label="Close unscheduled drawer"
+          data-testid="close-unscheduled-drawer"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Filters & Search */}
+      <div className="p-3.5 border-b border-[var(--border-subtle)] space-y-2.5 bg-[var(--bg-surface)]">
+        {/* Search Input */}
+        <div className="relative">
+          <Search className="w-3.5 h-3.5 text-[var(--text-tertiary)] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search unscheduled drafts & ideas..."
+            aria-label="Search unscheduled backlog"
+            className="w-full pl-8 pr-3 py-1.5 bg-[var(--bg-subtle)] border border-[var(--border-subtle)] rounded-full text-xs text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:border-[var(--border-strong)]"
+          />
+        </div>
+
+        {/* Status Pills & Platform Select */}
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="inline-flex items-center gap-1 p-0.5 rounded-full bg-[var(--bg-subtle)] border border-[var(--border-subtle)]">
             <button
               type="button"
-              onClick={() => setActiveTab('all')}
-              className={clsx(
-                'flex-1 py-1.5 px-2 rounded-md font-medium transition-colors text-center',
-                activeTab === 'all'
-                  ? 'bg-neutral-800 text-white shadow-xs'
-                  : 'text-neutral-400 hover:text-neutral-200'
-              )}
+              onClick={() => setStatusFilter('all')}
+              className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-colors ${
+                statusFilter === 'all'
+                  ? 'bg-[var(--text-primary)] text-[var(--bg-canvas)] font-semibold'
+                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+              }`}
             >
-              All ({activeUnscheduled.length})
+              All ({activeUnscheduledItems.length})
             </button>
             <button
               type="button"
-              onClick={() => setActiveTab('ideas')}
-              className={clsx(
-                'flex-1 py-1.5 px-2 rounded-md font-medium transition-colors text-center flex items-center justify-center gap-1',
-                activeTab === 'ideas'
-                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                  : 'text-neutral-400 hover:text-neutral-200'
-              )}
+              onClick={() => setStatusFilter('idea')}
+              className={`px-2.5 py-1 rounded-full text-[11px] font-medium flex items-center gap-1 transition-colors ${
+                statusFilter === 'idea'
+                  ? 'bg-[var(--text-primary)] text-[var(--bg-canvas)] font-semibold'
+                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+              }`}
             >
-              <Lightbulb className="w-3 h-3 text-amber-400" />
-              <span>Ideas ({ideasCount})</span>
+              <Sparkles className="w-2.5 h-2.5" />
+              Ideas ({ideaCount})
             </button>
             <button
               type="button"
-              onClick={() => setActiveTab('drafts')}
-              className={clsx(
-                'flex-1 py-1.5 px-2 rounded-md font-medium transition-colors text-center flex items-center justify-center gap-1',
-                activeTab === 'drafts'
-                  ? 'bg-neutral-800 text-white shadow-xs'
-                  : 'text-neutral-400 hover:text-neutral-200'
-              )}
+              onClick={() => setStatusFilter('draft')}
+              className={`px-2.5 py-1 rounded-full text-[11px] font-medium flex items-center gap-1 transition-colors ${
+                statusFilter === 'draft'
+                  ? 'bg-[var(--text-primary)] text-[var(--bg-canvas)] font-semibold'
+                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+              }`}
             >
-              <FileText className="w-3 h-3 text-neutral-400" />
-              <span>Drafts ({draftsCount})</span>
+              <FileEdit className="w-2.5 h-2.5" />
+              Drafts ({draftCount})
             </button>
           </div>
 
-          {/* Search & Platform Filter Row */}
-          <div className="flex items-center gap-2 mt-3 mb-1">
-            <div className="relative flex-1">
-              <Search className="w-3.5 h-3.5 text-neutral-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search unscheduled..."
-                className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-neutral-900 border border-neutral-800 text-xs text-neutral-200 placeholder-neutral-500 focus:outline-none focus:border-blue-500"
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-neutral-300 text-xs"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              )}
-            </div>
-
-            <select
-              value={selectedPlatform}
-              onChange={(e) => setSelectedPlatform(e.target.value)}
-              className="px-2.5 py-1.5 rounded-lg bg-neutral-900 border border-neutral-800 text-xs text-neutral-300 focus:outline-none focus:border-blue-500"
-              aria-label="Filter by platform"
-            >
-              <option value="all">All Channels</option>
-              <option value="linkedin">LinkedIn</option>
-              <option value="reddit">Reddit</option>
-              <option value="threads">Threads</option>
-              <option value="x">X</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Backlog Item List */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-2.5">
-          {filteredItems.length === 0 ? (
-            <div className="h-64 flex flex-col items-center justify-center p-6 text-center border border-dashed border-neutral-800 rounded-xl">
-              <Clock className="w-8 h-8 text-neutral-600 mb-2" />
-              <p className="text-xs font-semibold text-neutral-300 mb-1">
-                {searchQuery
-                  ? 'No matching unscheduled items'
-                  : activeTab === 'ideas'
-                    ? 'No unscheduled ideas'
-                    : activeTab === 'drafts'
-                      ? 'No unscheduled drafts'
-                      : 'No unscheduled items'}
-              </p>
-              <p className="text-[11px] text-neutral-500 max-w-xs mb-3">
-                {searchQuery
-                  ? 'Try clearing your search query or platform filter.'
-                  : 'Capture ideas or compose drafts to schedule them onto your calendar.'}
-              </p>
-              {onCaptureNewIdea && (
-                <button
-                  type="button"
-                  onClick={onCaptureNewIdea}
-                  className="px-3 py-1.5 rounded-lg bg-neutral-900 border border-neutral-800 text-xs text-neutral-300 hover:text-white hover:bg-neutral-800 transition-colors inline-flex items-center gap-1.5"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Capture New Idea</span>
-                </button>
-              )}
-            </div>
-          ) : (
-            filteredItems.map((item) => {
-              const platformInfo = PLATFORM_CONFIG[item.platform];
-              const statusInfo = STATUS_CONFIG[item.status];
-              const actionInfo = ACTION_CONFIG[item.action_type];
-
-              return (
-                <div
-                  key={item.id}
-                  data-testid={`unscheduled-item-${item.id}`}
-                  className="p-3.5 rounded-xl border border-neutral-800 bg-neutral-900/70 hover:border-neutral-700 transition-all space-y-2.5 group"
-                >
-                  {/* Top Metadata */}
-                  <div className="flex items-center justify-between gap-1.5">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span
-                        className={clsx(
-                          'px-2 py-0.5 rounded text-[10px] font-medium border',
-                          platformInfo?.badgeClass || 'bg-neutral-800 text-neutral-300'
-                        )}
-                      >
-                        {platformInfo?.label.split(' ')[0] || item.platform}
-                      </span>
-
-                      <span className="px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-400 text-[10px] font-mono">
-                        {actionInfo?.label || item.action_type}
-                      </span>
-
-                      <span
-                        className={clsx(
-                          'px-1.5 py-0.5 rounded border text-[10px] font-mono',
-                          statusInfo?.badgeClass || 'bg-neutral-800 text-neutral-300'
-                        )}
-                      >
-                        {statusInfo?.label || item.status}
-                      </span>
-                    </div>
-
-                    {item.social_account && (
-                      <span className="text-[10px] text-neutral-400 flex items-center gap-0.5 truncate max-w-[120px]">
-                        <AtSign className="w-2.5 h-2.5 text-neutral-500" />
-                        <span className="truncate">{item.social_account.account_handle}</span>
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Title & Body */}
-                  <div
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => onSelectItem(item)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        onSelectItem(item);
-                      }
-                    }}
-                    className="cursor-pointer text-left focus:outline-none"
-                  >
-                    <h3 className="text-xs font-semibold text-neutral-200 hover:text-white transition-colors line-clamp-2">
-                      {item.title || item.body || 'Untitled Content'}
-                    </h3>
-                    {item.title && item.body && (
-                      <p className="text-[11px] text-neutral-400 line-clamp-2 mt-1">
-                        {item.body}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Footer Actions: Inspect & Schedule */}
-                  <div className="flex items-center justify-between pt-1 border-t border-neutral-800/60 text-xs">
-                    <button
-                      type="button"
-                      onClick={() => onSelectItem(item)}
-                      className="text-neutral-400 hover:text-neutral-200 text-[11px] font-medium transition-colors"
-                    >
-                      Inspect / Edit
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => onScheduleItem(item)}
-                      className="px-2.5 py-1 rounded-md bg-blue-600 hover:bg-blue-500 text-white text-[11px] font-medium flex items-center gap-1 transition-colors shadow-xs"
-                      title="Set a scheduled date and time"
-                    >
-                      <CalendarIcon className="w-3 h-3" />
-                      <span>Schedule</span>
-                    </button>
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
-
-        {/* Drawer Footer Link to Content Workspace */}
-        <div className="p-3.5 border-t border-neutral-800 bg-neutral-900/60 flex items-center justify-between text-xs">
-          <span className="text-[11px] text-neutral-500">Need full backlog management?</span>
-          <Link
-            href="/content"
-            className="text-blue-400 hover:text-blue-300 font-medium inline-flex items-center gap-1 text-[11px]"
+          <select
+            value={platformFilter}
+            onChange={(e) => setPlatformFilter(e.target.value as SocialPlatform | '')}
+            aria-label="Filter unscheduled by platform"
+            className="px-2.5 py-1 bg-[var(--bg-subtle)] border border-[var(--border-subtle)] rounded-full text-[11px] font-medium text-[var(--text-secondary)] focus:outline-none focus:border-[var(--border-strong)]"
           >
-            <span>Open Content Workspace</span>
-            <ExternalLink className="w-3 h-3" />
-          </Link>
+            <option value="">All Platforms</option>
+            <option value="x">X (Twitter)</option>
+            <option value="linkedin">LinkedIn</option>
+            <option value="reddit">Reddit</option>
+            <option value="threads">Threads</option>
+          </select>
         </div>
       </div>
+
+      {/* Unscheduled Items List */}
+      <div className="flex-1 p-3.5 space-y-2.5 overflow-y-auto bg-[var(--bg-surface)]">
+        {filteredItems.length === 0 ? (
+          <div className="py-10 px-4 text-center rounded-2xl border border-dashed border-[var(--border-default)] bg-[var(--bg-subtle)]/35 space-y-1.5">
+            <Inbox className="w-6 h-6 text-[var(--text-tertiary)] mx-auto mb-1" />
+            <p className="text-xs font-semibold text-[var(--text-secondary)]">
+              {activeUnscheduledItems.length === 0
+                ? 'No unscheduled items in backlog'
+                : 'No items match your filters'}
+            </p>
+            <p className="text-[11px] text-[var(--text-tertiary)]">
+              {activeUnscheduledItems.length === 0
+                ? 'All ideas and drafts have been scheduled onto the calendar.'
+                : 'Try clearing your search or switching platform filters.'}
+            </p>
+          </div>
+        ) : (
+          filteredItems.map((item) => {
+            const colorToken = resolveCalendarItemColor('content', item, itemColorMap);
+            const platformInfo = PLATFORM_PILL_MAP[item.platform] || {
+              label: item.platform,
+              badgeClass: 'badge-neutral',
+            };
+            const actionInfo = ACTION_CONFIG[item.action_type] || {
+              label: item.action_type,
+            };
+
+            return (
+              <div
+                key={item.id}
+                onClick={() => onOpenDetail(item)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onOpenDetail(item);
+                  }
+                }}
+                data-testid={`unscheduled-item-${item.id}`}
+                data-cal-color={colorToken.name}
+                className={`p-3.5 rounded-2xl border border-l-4 transition-all cursor-pointer space-y-2 group text-left ${colorToken.colorClass} cal-card-surface`}
+              >
+                {/* Badges Row */}
+                <div className="flex items-center justify-between gap-1.5 flex-wrap">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span
+                      className="w-2 h-2 rounded-full shrink-0 cal-swatch-dot"
+                      aria-hidden="true"
+                    />
+                    <span
+                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${platformInfo.badgeClass}`}
+                    >
+                      <Share2 className="w-2.5 h-2.5 shrink-0" />
+                      {platformInfo.label}
+                    </span>
+                    <span className="text-[10px] font-medium text-[var(--text-tertiary)]">
+                      {actionInfo.label}
+                    </span>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+                        item.status === 'idea' ? 'badge-warning' : 'badge-neutral'
+                      }`}
+                    >
+                      {item.status === 'idea' ? 'Idea' : 'Draft'}
+                    </span>
+                  </div>
+
+                  {/* Quick Schedule Button */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onScheduleItem(item);
+                    }}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-[var(--accent)] text-[var(--accent-ink)] hover:opacity-90 transition-opacity shadow-xs"
+                    title="Schedule onto calendar"
+                  >
+                    <CalendarPlus className="w-3 h-3" />
+                    <span>Schedule</span>
+                  </button>
+                </div>
+
+                {/* Title & Body Preview */}
+                <div className="space-y-0.5">
+                  {item.title && (
+                    <h4 className="text-xs font-semibold text-[var(--text-primary)] line-clamp-1 group-hover:underline">
+                      {item.title}
+                    </h4>
+                  )}
+                  <p className="text-[11px] text-[var(--text-secondary)] line-clamp-2 leading-relaxed">
+                    {item.body || 'No content body'}
+                  </p>
+                </div>
+
+                {/* Account & Project Metadata */}
+                {(item.social_account || item.project) && (
+                  <div className="flex items-center gap-3 pt-1.5 border-t border-[var(--border-subtle)] text-[10px] text-[var(--text-tertiary)]">
+                    {item.social_account && (
+                      <span className="flex items-center gap-0.5 truncate max-w-[120px] font-mono">
+                        <AtSign className="w-2.5 h-2.5 shrink-0" />
+                        <span className="truncate">
+                          {item.social_account.account_handle.replace(/^@/, '')}
+                        </span>
+                      </span>
+                    )}
+                    {item.project && (
+                      <span className="flex items-center gap-1 truncate max-w-[120px]">
+                        <Folder className="w-2.5 h-2.5 shrink-0" />
+                        <span className="truncate">{item.project.name}</span>
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+      </aside>
     </div>
   );
 }

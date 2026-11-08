@@ -99,6 +99,12 @@ A high-performance, unified operational workspace for planning social media cont
 
 ---
 
+## CLI
+
+Use the [Miller Creator CLI](docs/CLI.md) to discover and invoke the actions exposed by your deployment. The guide describes setup, permissions, and current coverage.
+
+---
+
 ## 4. Supabase & Google Cloud Configuration
 
 ### Supabase Dashboard:

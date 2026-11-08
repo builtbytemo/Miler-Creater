@@ -139,7 +139,7 @@ describe('CalendarPage Server Component (Phase 4, Step 2)', () => {
     const result = await CalendarPage();
 
     expect(result).toBeDefined();
-    expect(result.props.className).toContain('bg-neutral-900');
+    expect(result.props.className).toContain('bg-[var(--bg-canvas)]');
     expect(mockGetUser).not.toHaveBeenCalled();
   });
 

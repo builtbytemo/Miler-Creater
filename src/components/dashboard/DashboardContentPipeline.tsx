@@ -1,12 +1,5 @@
 import Link from 'next/link';
-import {
-  Share2,
-  Calendar,
-  Clock,
-  ArrowRight,
-  FileText,
-  Lightbulb,
-} from 'lucide-react';
+import { ArrowUpRight } from 'lucide-react';
 import type { DashboardContentMetrics } from '@/lib/services/dashboard-service';
 import { formatInTimeZone } from '@/lib/temporal/timezone';
 import type { SocialPlatform } from '@/types/database';
@@ -30,130 +23,130 @@ export function DashboardContentPipeline({
   const platforms: SocialPlatform[] = ['linkedin', 'reddit', 'threads', 'x'];
 
   return (
-    <section className="space-y-4" aria-labelledby="content-pipeline-heading">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-md bg-purple-500/10 text-purple-400 border border-purple-500/20 flex items-center justify-center">
-            <Share2 className="w-3.5 h-3.5" />
-          </div>
-          <h3 id="content-pipeline-heading" className="text-sm font-semibold text-neutral-100">
-            Content Pipeline & Scheduling
-          </h3>
-        </div>
+    <section className="space-y-6 min-w-0" aria-labelledby="content-pipeline-heading">
+      <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-[var(--border-subtle)] pb-3">
+        <h3 id="content-pipeline-heading" className="heading-section text-lg">
+          Content Pipeline &amp; Scheduling
+        </h3>
         <Link
           href="/content"
-          className="text-xs text-neutral-400 hover:text-neutral-200 flex items-center gap-1 transition-colors"
+          className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors whitespace-nowrap"
         >
           <span>View all content</span>
-          <ArrowRight className="w-3 h-3" />
+          <ArrowUpRight className="w-3.5 h-3.5" aria-hidden="true" />
         </Link>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Left Column: Platform Distribution & Status Counts */}
-        <div className="space-y-3">
-          <div className="p-4 rounded-xl bg-neutral-950 border border-neutral-800 space-y-3">
-            <p className="text-xs font-semibold text-neutral-300">Scheduled by Platform</p>
-            <div className="grid grid-cols-2 gap-2">
-              {platforms.map((platform) => (
-                <div
-                  key={platform}
-                  className="p-2.5 rounded-lg bg-neutral-900 border border-neutral-850 flex items-center justify-between"
-                >
-                  <span className="text-xs text-neutral-400">
-                    {platformNames[platform]}
-                  </span>
-                  <span className="text-xs font-bold text-neutral-200 font-mono">
-                    {content.byPlatform[platform]}
-                  </span>
-                </div>
-              ))}
+      {/* Upcoming Scheduled Posts */}
+      <div className="space-y-3 min-w-0">
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--text-muted)]">
+          <span className="font-medium text-[var(--text-secondary)]">Upcoming Scheduled Posts</span>
+          <span className="font-mono shrink-0">Next {content.upcomingItems.length} items</span>
+        </div>
+
+        {content.upcomingItems.length === 0 ? (
+          <div className="py-8 px-5 text-center space-y-2 border border-dashed border-[var(--border-subtle)] rounded-2xl">
+            <p className="text-sm font-semibold text-[var(--text-primary)]">
+              No content currently scheduled
+            </p>
+            <p className="text-xs text-[var(--text-muted)] max-w-xs mx-auto leading-relaxed">
+              Create new drafts or schedule posts for publishing across social platforms.
+            </p>
+            <div className="pt-1">
+              <Link
+                href="/content"
+                className="btn-accent px-4 py-1.5 text-xs"
+              >
+                <span>Go to Content Studio</span>
+                <ArrowUpRight className="w-3.5 h-3.5" aria-hidden="true" />
+              </Link>
             </div>
           </div>
+        ) : (
+          <div className="surface-card divide-y divide-[var(--border-subtle)] overflow-hidden">
+            {content.upcomingItems.map((item) => (
+              <Link
+                key={item.id}
+                href="/content"
+                className="group block px-4 py-3.5 transition-colors hover:bg-[var(--bg-surface-hover)] space-y-1.5"
+              >
+                <div className="flex items-start justify-between gap-2.5 min-w-0">
+                  <p className="text-sm font-medium text-[var(--text-primary)] group-hover:underline line-clamp-2 break-words min-w-0 flex-1">
+                    {item.title || 'Untitled Post'}
+                  </p>
+                  <ArrowUpRight
+                    aria-hidden="true"
+                    className="h-3.5 w-3.5 shrink-0 mt-0.5 text-[var(--text-muted)] opacity-50 transition-all group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-[var(--text-primary)] group-hover:opacity-100"
+                  />
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-[var(--bg-surface-muted)] text-[var(--text-secondary)] capitalize shrink-0">
+                    {item.platform}
+                  </span>
+                  <span className="text-[11px] text-[var(--text-muted)] font-mono shrink-0">
+                    {item.scheduled_at
+                      ? formatInTimeZone(item.scheduled_at, timeZone, {
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })
+                      : 'Unscheduled'}
+                  </span>
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
+      </div>
 
-          <div className="p-4 rounded-xl bg-neutral-950 border border-neutral-800 flex items-center justify-around gap-2 text-center">
-            <div className="space-y-0.5">
-              <div className="flex items-center justify-center gap-1 text-[11px] text-neutral-400">
-                <FileText className="w-3 h-3 text-emerald-400" />
-                <span>Drafts</span>
-              </div>
-              <p className="text-lg font-bold text-neutral-100">{content.draftCount}</p>
-            </div>
-            <div className="w-px h-8 bg-neutral-800" />
-            <div className="space-y-0.5">
-              <div className="flex items-center justify-center gap-1 text-[11px] text-neutral-400">
-                <Lightbulb className="w-3 h-3 text-amber-400" />
-                <span>Ideas</span>
-              </div>
-              <p className="text-lg font-bold text-neutral-100">{content.ideaCount}</p>
-            </div>
-            <div className="w-px h-8 bg-neutral-800" />
-            <div className="space-y-0.5">
-              <div className="flex items-center justify-center gap-1 text-[11px] text-neutral-400">
-                <Calendar className="w-3 h-3 text-purple-400" />
-                <span>7-Day Sched</span>
-              </div>
-              <p className="text-lg font-bold text-neutral-100">{content.scheduledNext7DaysCount}</p>
-            </div>
+      {/* Editorial Pipeline Breakdown & Platform Ledger (No Box-Inside-Box Clutter) */}
+      <div className="pt-2 space-y-5 min-w-0">
+        <div className="grid grid-cols-3 gap-3 border-y border-[var(--border-subtle)] py-4">
+          <div className="min-w-0">
+            <p className="text-xs text-[var(--text-muted)] truncate">Drafts</p>
+            <p className="mt-1 text-2xl font-semibold tracking-tight tabular-nums text-[var(--text-primary)]">
+              {content.draftCount}
+            </p>
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs text-[var(--text-muted)] truncate">Ideas</p>
+            <p className="mt-1 text-2xl font-semibold tracking-tight tabular-nums text-[var(--text-primary)]">
+              {content.ideaCount}
+            </p>
+          </div>
+          <div className="min-w-0">
+            <p
+              className="text-xs text-[var(--text-muted)] truncate"
+              title="Scheduled in next 7 days"
+            >
+              7-Day Sched
+            </p>
+            <p className="mt-1 text-2xl font-semibold tracking-tight tabular-nums text-[var(--text-primary)]">
+              {content.scheduledNext7DaysCount}
+            </p>
           </div>
         </div>
 
-        {/* Right Column (Span 2): Upcoming Scheduled Posts */}
-        <div className="lg:col-span-2 p-4 rounded-xl bg-neutral-950 border border-neutral-800 space-y-3">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold text-neutral-300">Upcoming Scheduled Posts</p>
-            <span className="text-[11px] text-neutral-500 font-mono">
-              Next {content.upcomingItems.length} items
-            </span>
-          </div>
-
-          {content.upcomingItems.length === 0 ? (
-            <div className="p-6 text-center space-y-1.5 border border-dashed border-neutral-800 rounded-lg">
-              <p className="text-xs text-neutral-400">No content currently scheduled</p>
-              <p className="text-[11px] text-neutral-500">
-                Create new drafts or schedule posts for publishing across social platforms.
-              </p>
-              <Link
-                href="/content"
-                className="inline-flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 mt-2 font-medium"
+        <div className="space-y-2 min-w-0">
+          <p className="text-xs font-medium text-[var(--text-secondary)]">
+            Scheduled by Platform
+          </p>
+          <div className="divide-y divide-[var(--border-subtle)] border-t border-[var(--border-subtle)]">
+            {platforms.map((platform) => (
+              <div
+                key={platform}
+                className="flex items-center justify-between gap-2 py-2 text-xs min-w-0"
               >
-                <span>Go to Content Studio</span>
-                <ArrowRight className="w-3 h-3" />
-              </Link>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {content.upcomingItems.map((item) => (
-                <Link
-                  key={item.id}
-                  href="/content"
-                  className="group p-2.5 rounded-lg bg-neutral-900 border border-neutral-850 hover:border-neutral-750 flex items-center justify-between gap-3 transition-colors"
-                >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-neutral-800 text-neutral-300 border border-neutral-700 capitalize shrink-0">
-                      {item.platform}
-                    </span>
-                    <p className="text-xs text-neutral-200 group-hover:text-purple-300 truncate transition-colors">
-                      {item.title || 'Untitled Post'}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-[11px] text-neutral-400 font-mono shrink-0">
-                    <Clock className="w-3 h-3 text-neutral-500" />
-                    <span>
-                      {item.scheduled_at
-                        ? formatInTimeZone(item.scheduled_at, timeZone, {
-                            month: 'short',
-                            day: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })
-                        : 'Unscheduled'}
-                    </span>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          )}
+                <span className="text-[var(--text-secondary)] truncate">
+                  {platformNames[platform]}
+                </span>
+                <span className="font-semibold tabular-nums font-mono text-[var(--text-primary)] shrink-0">
+                  {content.byPlatform[platform]}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </section>

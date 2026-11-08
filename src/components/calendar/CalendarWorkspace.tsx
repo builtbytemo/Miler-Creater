@@ -1,21 +1,27 @@
 'use client';
 
-import { useState, useRef, useMemo, useEffect } from 'react';
+import { useState, useCallback, useRef, useMemo } from 'react';
 import {
   Calendar as CalendarIcon,
   ChevronLeft,
   ChevronRight,
-  Clock,
   Plus,
-  RefreshCw,
-  AlertTriangle,
   Inbox,
+  Globe,
+  RefreshCw,
+  AlertCircle,
+  Filter,
+  LayoutGrid,
+  Columns,
+  Clock,
   CheckSquare,
   Share2,
+  X,
+  Layers,
 } from 'lucide-react';
 import type { ContentItemWithMeta, SocialAccountRow } from '@/lib/services/content-service';
-import type { TaskWithMeta, TaskDetail } from '@/lib/services/task-service';
-import type { WeekRange, MonthGrid, DayRange } from '@/lib/temporal/calendar';
+import type { TaskDetail, TaskWithMeta } from '@/lib/services/task-service';
+import type { SocialPlatform, ContentStatus, TaskPriority } from '@/types/database';
 import {
   getWeekRange,
   getNextWeekRange,
@@ -27,21 +33,27 @@ import {
   getNextDayDate,
   getPrevDayDate,
   getCalendarDateKey,
-  toLocalDatetimeString,
+  parseLocalDatetimeString,
+  getItemHourInTimeZone,
+  type WeekRange,
 } from '@/lib/temporal/calendar';
-import { DEFAULT_TIMEZONE } from '@/lib/temporal/timezone';
-import { getCalendarEventsAction } from '@/lib/actions/content-actions';
-import { getTaskDetailAction } from '@/lib/actions/task-actions';
 import { CalendarDayView } from './CalendarDayView';
 import { CalendarWeekView } from './CalendarWeekView';
 import { CalendarMonthView } from './CalendarMonthView';
 import { UnscheduledContentDrawer } from './UnscheduledContentDrawer';
-import { ContentDetailModal } from '@/components/content/ContentDetailModal';
 import { CreateContentModal } from '@/components/content/CreateContentModal';
+import { ContentDetailModal } from '@/components/content/ContentDetailModal';
 import { CreateTaskModal } from '@/components/tasks/CreateTaskModal';
 import { TaskDetailModal } from '@/components/tasks/TaskDetailModal';
-import type { ContentStatus } from '@/types/database';
-import clsx from 'clsx';
+import { getCalendarEventsAction } from '@/lib/actions/content-actions';
+import { getTaskDetailAction } from '@/lib/actions/task-actions';
+import { useDialog } from '@/lib/hooks/use-dialog';
+import {
+  buildCalendarItemColorMap,
+  resolveCalendarItemColor,
+} from '@/lib/calendar/item-colors';
+
+export type CalendarViewMode = 'day' | 'week' | 'month';
 
 interface ProjectOption {
   id: string;
@@ -54,14 +66,17 @@ interface CalendarWorkspaceProps {
   initialScheduledTasks?: TaskWithMeta[];
   initialUnscheduledItems: ContentItemWithMeta[];
   workspaceId: string;
-  socialAccounts?: SocialAccountRow[];
-  projects?: ProjectOption[];
-  userTimeZone?: string;
+  workspaceName?: string;
+  socialAccounts: SocialAccountRow[];
+  projects: ProjectOption[];
+  userTimeZone: string;
   initialWeekRange: WeekRange;
   initialLoadedRange?: { startIso: string; endIso: string };
 }
 
-// Deduplication helper to prevent duplicate key errors and repeated items
+/**
+ * Deduplicate an array of items by `id`, keeping the latest entry.
+ */
 function deduplicateById<T extends { id: string }>(items: T[]): T[] {
   const seen = new Set<string>();
   const result: T[] = [];
@@ -74,7 +89,10 @@ function deduplicateById<T extends { id: string }>(items: T[]): T[] {
   return result;
 }
 
-// Replaces items within the given timestamp interval with fresh items while preserving items outside the interval
+/**
+ * Replaces items falling within [rangeStartMs, rangeEndMs] with `fresh` items,
+ * while preserving cached items outside that range.
+ */
 function replaceItemsInRange<T extends { id: string }>(
   existing: T[],
   fresh: T[],
@@ -93,20 +111,60 @@ function replaceItemsInRange<T extends { id: string }>(
   return deduplicateById([...outside, ...fresh]);
 }
 
+const PRIORITY_BADGE_MAP: Record<TaskPriority, { label: string; badgeClass: string }> = {
+  urgent: { label: 'Urgent', badgeClass: 'badge-danger' },
+  high: { label: 'High', badgeClass: 'badge-warning' },
+  medium: { label: 'Med', badgeClass: 'badge-info' },
+  low: { label: 'Low', badgeClass: 'badge-neutral' },
+};
+
+function formatTime12h(hour: number, minute: number): string {
+  const period = hour >= 12 ? 'PM' : 'AM';
+  const hour12 = hour % 12 === 0 ? 12 : hour % 12;
+  return `${hour12}:${String(minute).padStart(2, '0')} ${period}`;
+}
+
+function getTaskEffectiveTimestamp(task: TaskWithMeta): string | null {
+  return task.scheduled_start || (task.created_from !== 'calendar' ? task.due_date : null);
+}
+
+function doesTaskMatchRange(task: TaskWithMeta, startMs: number, endMs: number): boolean {
+  if (task.scheduled_start) {
+    const ms = new Date(task.scheduled_start).getTime();
+    if (ms >= startMs && ms <= endMs) return true;
+  }
+  if (task.created_from !== 'calendar' && task.due_date) {
+    const dueMs = new Date(task.due_date).getTime();
+    if (dueMs >= startMs && dueMs <= endMs) return true;
+  }
+  return false;
+}
+
 export function CalendarWorkspace({
   initialScheduledItems,
   initialScheduledTasks = [],
   initialUnscheduledItems,
   workspaceId,
-  socialAccounts = [],
-  projects = [],
-  userTimeZone = DEFAULT_TIMEZONE,
+  workspaceName = 'Workspace',
+  socialAccounts,
+  projects,
+  userTimeZone,
   initialWeekRange,
   initialLoadedRange,
 }: CalendarWorkspaceProps) {
-  // Navigation & Temporal State
-  const [referenceDate, setReferenceDate] = useState<Date>(initialWeekRange.weekStart);
-  const [viewMode, setViewMode] = useState<'day' | 'week' | 'month'>('week');
+  // View mode & reference date state
+  const [viewMode, setViewMode] = useState<CalendarViewMode>('week');
+  const [referenceDate, setReferenceDate] = useState<Date>(() => {
+    const now = new Date();
+    const startMs = new Date(initialWeekRange.weekStart).getTime();
+    const endMs = new Date(initialWeekRange.weekEnd).getTime();
+    if (now.getTime() >= startMs && now.getTime() <= endMs) {
+      return now;
+    }
+    return new Date(initialWeekRange.weekStart);
+  });
+
+  // Scheduled & Unscheduled state
   const [scheduledItems, setScheduledItems] = useState<ContentItemWithMeta[]>(() =>
     deduplicateById(initialScheduledItems)
   );
@@ -116,838 +174,1206 @@ export function CalendarWorkspace({
   const [unscheduledItems, setUnscheduledItems] = useState<ContentItemWithMeta[]>(() =>
     deduplicateById(initialUnscheduledItems)
   );
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // In-memory cache of loaded date intervals (in ms) to eliminate redundant network fetches
-  const loadedRangesRef = useRef<Array<{ start: number; end: number }>>([]);
+  // Filter & Drawer state
+  const [platformFilter, setPlatformFilter] = useState<SocialPlatform | ''>('');
+  const [isUnscheduledDrawerOpen, setIsUnscheduledDrawerOpen] = useState(false);
+  const [isAssignedPanelOpen, setIsAssignedPanelOpen] = useState(true);
 
-  useEffect(() => {
-    if (initialLoadedRange) {
-      loadedRangesRef.current = [
-        {
-          start: new Date(initialLoadedRange.startIso).getTime(),
-          end: new Date(initialLoadedRange.endIso).getTime(),
-        },
-      ];
-    } else {
-      loadedRangesRef.current = [
-        {
-          start: initialWeekRange.weekStart.getTime(),
-          end: initialWeekRange.weekEnd.getTime(),
-        },
-      ];
-    }
-  }, [initialLoadedRange, initialWeekRange]);
+  // Content Modal states
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [createDefaultStatus, setCreateDefaultStatus] = useState<ContentStatus>('scheduled');
+  const [createInitialScheduledAt, setCreateInitialScheduledAt] = useState<string | null>(null);
+  const [selectedItem, setSelectedItem] = useState<ContentItemWithMeta | null>(null);
 
-  // Synchronize state when initial props change (e.g. navigation or server action revalidation)
-  useEffect(() => {
-    setScheduledItems(deduplicateById(initialScheduledItems));
-  }, [initialScheduledItems]);
-
-  useEffect(() => {
-    setScheduledTasks(deduplicateById(initialScheduledTasks));
-  }, [initialScheduledTasks]);
-
-  useEffect(() => {
-    setUnscheduledItems(deduplicateById(initialUnscheduledItems));
-  }, [initialUnscheduledItems]);
-
-  // Request ID ref to protect against out-of-order race conditions
-  const requestIdRef = useRef(0);
-
-  // Content Modal States
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const [selectedContent, setSelectedContent] = useState<ContentItemWithMeta | null>(null);
-  const [isContentDetailOpen, setIsContentDetailOpen] = useState(false);
-  const [isCreateContentOpen, setIsCreateContentOpen] = useState(false);
-  const [createContentDefaultStatus, setCreateContentDefaultStatus] = useState<ContentStatus>('draft');
-  const [createContentInitialScheduledAt, setCreateContentInitialScheduledAt] = useState<string | null>(null);
-
-  // Task Modal States
-  const [selectedTaskDetail, setSelectedTaskDetail] = useState<TaskDetail | null>(null);
-  const [isTaskDetailOpen, setIsTaskDetailOpen] = useState(false);
-  const [isCreateTaskOpen, setIsCreateTaskOpen] = useState(false);
+  // Task Modal states
+  const [isCreateTaskModalOpen, setIsCreateTaskModalOpen] = useState(false);
   const [createTaskInitialStart, setCreateTaskInitialStart] = useState<string | null>(null);
   const [createTaskInitialEnd, setCreateTaskInitialEnd] = useState<string | null>(null);
+  const [selectedTask, setSelectedTask] = useState<TaskDetail | null>(null);
 
-  // Slot Scheduling Picker Modal (when an empty time/day slot is clicked)
-  const [isSlotPickerOpen, setIsSlotPickerOpen] = useState(false);
-  const [pendingSlotDateKey, setPendingSlotDateKey] = useState<string | null>(null);
-  const [pendingSlotHour, setPendingSlotHour] = useState<number | null>(null);
+  const handleOpenTaskDetail = useCallback(
+    async (task: TaskWithMeta) => {
+      setSelectedTask({
+        ...task,
+        subtasks: [],
+        dependencies: [],
+        blocking_tasks: task.blocking_tasks || [],
+      });
+      try {
+        const res = await getTaskDetailAction(workspaceId, task.id);
+        if (res.success && res.data) {
+          setSelectedTask(res.data as TaskDetail);
+        }
+      } catch {
+        // Keep optimistic task detail on network error
+      }
+    },
+    [workspaceId]
+  );
+
+  // Slot Type Picker state (when clicking a calendar slot/date to schedule either Task or Content)
+  const [slotPickerContext, setSlotPickerContext] = useState<{
+    dateKey: string;
+    hour: number | null;
+    label: string;
+  } | null>(null);
   const [pendingSlotTime, setPendingSlotTime] = useState<string>('');
-  const [slotPickerError, setSlotPickerError] = useState<string | null>(null);
+  const [slotTimeError, setSlotTimeError] = useState<string | null>(null);
 
-  // Platform Filter State
-  const [selectedPlatform, setSelectedPlatform] = useState<string>('all');
+  const closeSlotPicker = useCallback(() => {
+    setSlotPickerContext(null);
+    setSlotTimeError(null);
+  }, []);
 
-  // Derived Temporal Ranges
-  const currentDayRange: DayRange = useMemo(
+  const slotPickerDialogRef = useDialog(Boolean(slotPickerContext), closeSlotPicker);
+
+  // Sequence counter to prevent out-of-order race conditions during rapid navigation
+  const requestIdRef = useRef(0);
+
+  // Track loaded date ranges in memory so switching Day/Week/Month within an already-fetched range is instant
+  const loadedRangesRef = useRef<Array<{ start: number; end: number }>>(
+    initialLoadedRange
+      ? [
+          {
+            start: new Date(initialLoadedRange.startIso).getTime(),
+            end: new Date(initialLoadedRange.endIso).getTime(),
+          },
+        ]
+      : [
+          {
+            start: initialWeekRange.weekStart.getTime(),
+            end: initialWeekRange.weekEnd.getTime(),
+          },
+        ]
+  );
+
+  // Derived active ranges based on referenceDate and userTimeZone
+  const currentDayRange = useMemo(
     () => getDayRange(referenceDate, userTimeZone),
     [referenceDate, userTimeZone]
   );
 
-  const currentWeek: WeekRange = useMemo(
+  const currentWeekRange = useMemo(
     () => getWeekRange(referenceDate, userTimeZone),
     [referenceDate, userTimeZone]
   );
 
-  const currentMonthGrid: MonthGrid = useMemo(
+  const currentMonthGrid = useMemo(
     () => getMonthGrid(referenceDate, userTimeZone),
     [referenceDate, userTimeZone]
   );
 
-  // Helper to check if a required interval [startMs, endMs] is already covered by any cached range
-  const isRangeCovered = (startMs: number, endMs: number): boolean => {
+  const isRangeCovered = useCallback((startMs: number, endMs: number) => {
     return loadedRangesRef.current.some(
       (range) => range.start <= startMs + 1000 && range.end >= endMs - 1000
     );
-  };
+  }, []);
 
-  // Unified data fetch for visible range across Day, Week, and Month views
-  const fetchContentAndTasks = async (
-    targetDate: Date,
-    mode: 'day' | 'week' | 'month',
-    force = false
-  ) => {
-    let neededStartMs: number;
-    let neededEndMs: number;
+  const recordLoadedRange = useCallback((startMs: number, endMs: number) => {
+    loadedRangesRef.current.push({ start: startMs, end: endMs });
+  }, []);
 
-    if (mode === 'day') {
-      const dayRange = getDayRange(targetDate, userTimeZone);
-      neededStartMs = dayRange.dayStart.getTime();
-      neededEndMs = dayRange.dayEnd.getTime();
-    } else if (mode === 'week') {
-      const week = getWeekRange(targetDate, userTimeZone);
-      neededStartMs = week.weekStart.getTime();
-      neededEndMs = week.weekEnd.getTime();
-    } else {
-      const grid = getMonthGrid(targetDate, userTimeZone);
-      neededStartMs = grid.cells[0].startOfDay.getTime();
-      neededEndMs = grid.cells[grid.cells.length - 1].endOfDay.getTime();
-    }
+  /**
+   * Fetch scheduled content items AND scheduled tasks for the visible range (Day, Week, or Month)
+   * via the composite Server Action `getCalendarEventsAction`.
+   * Uses sequence ID (`requestIdRef`) to discard stale responses if the user clicks rapidly,
+   * and skips network round-trips when the target range is already cached in memory (unless `force` is true).
+   */
+  const fetchContentAndTasks = useCallback(
+    async (targetDate: Date, mode: CalendarViewMode, force = false) => {
+      let rangeStart: Date;
+      let rangeEnd: Date;
 
-    if (!force && isRangeCovered(neededStartMs, neededEndMs)) {
-      return;
-    }
+      if (mode === 'day') {
+        const day = getDayRange(targetDate, userTimeZone);
+        rangeStart = day.dayStart;
+        rangeEnd = day.dayEnd;
+      } else if (mode === 'week') {
+        const week = getWeekRange(targetDate, userTimeZone);
+        rangeStart = week.weekStart;
+        rangeEnd = week.weekEnd;
+      } else {
+        const grid = getMonthGrid(targetDate, userTimeZone);
+        const firstCell = grid.cells[0];
+        const lastCell = grid.cells[grid.cells.length - 1];
+        rangeStart = firstCell.startOfDay;
+        rangeEnd = lastCell.endOfDay;
+      }
 
-    const reqId = ++requestIdRef.current;
-    setIsLoading(true);
-    setError(null);
+      const rangeStartMs = rangeStart.getTime();
+      const rangeEndMs = rangeEnd.getTime();
 
-    // Compute month grid window enclosing targetDate to batch-cache adjacent days/weeks
-    const grid = getMonthGrid(targetDate, userTimeZone);
-    const gridStartMs = grid.cells[0].startOfDay.getTime();
-    const gridEndMs = grid.cells[grid.cells.length - 1].endOfDay.getTime();
-    const fetchStartMs = Math.min(gridStartMs, neededStartMs);
-    const fetchEndMs = Math.max(gridEndMs, neededEndMs);
-    const fetchStartIso = new Date(fetchStartMs).toISOString();
-    const fetchEndIso = new Date(fetchEndMs).toISOString();
+      if (!force && isRangeCovered(rangeStartMs, rangeEndMs)) {
+        setErrorMessage(null);
+        return;
+      }
 
-    try {
-      const res = await getCalendarEventsAction(workspaceId, {
-        scheduled_from: fetchStartIso,
-        scheduled_to: fetchEndIso,
-      });
+      // Fetch the full enclosing month grid window so subsequent Day/Week/Month navigations are cached
+      const enclosingGrid = getMonthGrid(targetDate, userTimeZone);
+      const gridFirst = enclosingGrid.cells[0];
+      const gridLast = enclosingGrid.cells[enclosingGrid.cells.length - 1];
+      const fetchStartMs = Math.min(rangeStartMs, gridFirst.startOfDay.getTime());
+      const fetchEndMs = Math.max(rangeEndMs, gridLast.endOfDay.getTime());
 
-      // Ignore out-of-order responses if a newer request was dispatched
-      if (reqId !== requestIdRef.current) return;
+      const currentRequestId = ++requestIdRef.current;
 
-      if (res.error) {
-        setError(res.error);
-      } else if (res.data) {
-        // Record covered interval
-        loadedRangesRef.current.push({
-          start: fetchStartMs,
-          end: fetchEndMs,
+      try {
+        setIsLoading(true);
+        setErrorMessage(null);
+
+        const res = await getCalendarEventsAction(workspaceId, {
+          scheduled_from: new Date(fetchStartMs).toISOString(),
+          scheduled_to: new Date(fetchEndMs).toISOString(),
         });
 
-        const freshContent = res.data.content || [];
-        const freshTasks = res.data.tasks || [];
+        if (currentRequestId !== requestIdRef.current) return;
 
-        setScheduledItems((prev) =>
-          replaceItemsInRange(
-            prev,
-            freshContent,
-            fetchStartMs,
-            fetchEndMs,
-            (item) => (item.scheduled_at ? new Date(item.scheduled_at).getTime() : null)
-          )
-        );
+        if (res.error) {
+          setErrorMessage(res.error);
+          return;
+        }
 
-        setScheduledTasks((prev) =>
-          replaceItemsInRange(
-            prev,
-            freshTasks,
-            fetchStartMs,
-            fetchEndMs,
-            (task) => (task.scheduled_start ? new Date(task.scheduled_start).getTime() : null)
-          )
-        );
+        if (res.data) {
+          setScheduledItems((prev) =>
+            replaceItemsInRange(
+              prev,
+              res.data!.content,
+              fetchStartMs,
+              fetchEndMs,
+              (item) => (item.scheduled_at ? new Date(item.scheduled_at).getTime() : null)
+            )
+          );
+
+          setScheduledTasks((prev) =>
+            replaceItemsInRange(
+              prev,
+              res.data!.tasks,
+              fetchStartMs,
+              fetchEndMs,
+              (task) => {
+                const effective = getTaskEffectiveTimestamp(task);
+                return effective ? new Date(effective).getTime() : null;
+              }
+            )
+          );
+        }
+
+        recordLoadedRange(fetchStartMs, fetchEndMs);
+      } catch (err) {
+        if (currentRequestId !== requestIdRef.current) return;
+        setErrorMessage(err instanceof Error ? err.message : 'An unexpected error occurred');
+      } finally {
+        if (currentRequestId === requestIdRef.current) {
+          setIsLoading(false);
+        }
       }
-    } catch (err) {
-      if (reqId !== requestIdRef.current) return;
-      setError(err instanceof Error ? err.message : 'Failed to load calendar events');
-    } finally {
-      if (reqId === requestIdRef.current) {
-        setIsLoading(false);
-      }
+    },
+    [workspaceId, userTimeZone, isRangeCovered, recordLoadedRange]
+  );
+
+  // Navigation Handlers
+  const handlePrev = () => {
+    if (viewMode === 'day') {
+      const prevDate = getPrevDayDate(referenceDate, userTimeZone);
+      setReferenceDate(prevDate);
+      fetchContentAndTasks(prevDate, 'day');
+    } else if (viewMode === 'week') {
+      const prevWeek = getPrevWeekRange(currentWeekRange.weekStart, userTimeZone);
+      setReferenceDate(prevWeek.weekStart);
+      fetchContentAndTasks(prevWeek.weekStart, 'week');
+    } else {
+      const prevMonthDate = getPrevMonthDate(referenceDate, userTimeZone);
+      setReferenceDate(prevMonthDate);
+      fetchContentAndTasks(prevMonthDate, 'month');
     }
   };
 
-  // Switch between Day, Week, and Month views while preserving referenceDate
-  const handleSwitchView = (newMode: 'day' | 'week' | 'month') => {
+  const handleNext = () => {
+    if (viewMode === 'day') {
+      const nextDate = getNextDayDate(referenceDate, userTimeZone);
+      setReferenceDate(nextDate);
+      fetchContentAndTasks(nextDate, 'day');
+    } else if (viewMode === 'week') {
+      const nextWeek = getNextWeekRange(currentWeekRange.weekStart, userTimeZone);
+      setReferenceDate(nextWeek.weekStart);
+      fetchContentAndTasks(nextWeek.weekStart, 'week');
+    } else {
+      const nextMonthDate = getNextMonthDate(referenceDate, userTimeZone);
+      setReferenceDate(nextMonthDate);
+      fetchContentAndTasks(nextMonthDate, 'month');
+    }
+  };
+
+  const handleToday = () => {
+    const now = new Date();
+    setReferenceDate(now);
+    fetchContentAndTasks(now, viewMode);
+  };
+
+  const handleViewModeChange = (newMode: CalendarViewMode) => {
     if (newMode === viewMode) return;
     setViewMode(newMode);
     fetchContentAndTasks(referenceDate, newMode);
   };
 
-  // Previous period navigation
-  const handlePrev = () => {
-    if (viewMode === 'day') {
-      const prevDay = getPrevDayDate(referenceDate, userTimeZone);
-      setReferenceDate(prevDay);
-      fetchContentAndTasks(prevDay, 'day');
-    } else if (viewMode === 'week') {
-      const prevWeek = getPrevWeekRange(referenceDate, userTimeZone);
-      setReferenceDate(prevWeek.weekStart);
-      fetchContentAndTasks(prevWeek.weekStart, 'week');
-    } else {
-      const prevMonth = getPrevMonthDate(referenceDate, userTimeZone);
-      setReferenceDate(prevMonth);
-      fetchContentAndTasks(prevMonth, 'month');
-    }
-  };
-
-  // Next period navigation
-  const handleNext = () => {
-    if (viewMode === 'day') {
-      const nextDay = getNextDayDate(referenceDate, userTimeZone);
-      setReferenceDate(nextDay);
-      fetchContentAndTasks(nextDay, 'day');
-    } else if (viewMode === 'week') {
-      const nextWeek = getNextWeekRange(referenceDate, userTimeZone);
-      setReferenceDate(nextWeek.weekStart);
-      fetchContentAndTasks(nextWeek.weekStart, 'week');
-    } else {
-      const nextMonth = getNextMonthDate(referenceDate, userTimeZone);
-      setReferenceDate(nextMonth);
-      fetchContentAndTasks(nextMonth, 'month');
-    }
-  };
-
-  // Jump to today
-  const handleToday = () => {
-    const today = new Date();
-    setReferenceDate(today);
-    fetchContentAndTasks(today, viewMode);
-  };
-
-  // Clicking a date cell in month view jumps to Day view for that date
-  const handleSelectDateFromMonth = (date: Date) => {
+  // Drill-down from Month or Week view cell header to Day view
+  const handleSelectDate = (date: Date) => {
     setReferenceDate(date);
     setViewMode('day');
     fetchContentAndTasks(date, 'day');
   };
 
-  // Clicking a day header in week view jumps to Day view for that date
-  const handleSelectDayFromWeek = (dateKey: string) => {
-    const [y, m, d] = dateKey.split('-').map(Number);
-    const target = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
-    setReferenceDate(target);
-    setViewMode('day');
-    fetchContentAndTasks(target, 'day');
+  // Interactive Slot Scheduling Handlers
+  const handleScheduleAtHour = (hour: number) => {
+    const formatted = `${String(hour).padStart(2, '0')}:00`;
+    setPendingSlotTime(formatted);
+    setSlotTimeError(null);
+    setSlotPickerContext({
+      dateKey: currentDayRange.dateKey,
+      hour,
+      label: `${currentDayRange.label} at ${formatted}`,
+    });
   };
 
-  // Open slot scheduling choice (Content vs Task)
-  const handleOpenSlot = (dateKey: string, hour: number | null = null) => {
-    setPendingSlotDateKey(dateKey);
-    setPendingSlotHour(hour);
-    setPendingSlotTime(hour !== null ? `${String(hour).padStart(2, '0')}:00` : '');
-    setSlotPickerError(null);
-    setIsSlotPickerOpen(true);
+  const handleScheduleAtTime = (timeHHMM: string) => {
+    const cleanTime = timeHHMM.trim() || '09:00';
+    const [hStr] = cleanTime.split(':');
+    const parsedHour = Number(hStr);
+    setPendingSlotTime(cleanTime);
+    setSlotTimeError(null);
+    setSlotPickerContext({
+      dateKey: currentDayRange.dateKey,
+      hour: Number.isFinite(parsedHour) ? parsedHour : 9,
+      label: `${currentDayRange.label} at ${cleanTime}`,
+    });
   };
 
-  const handleStartScheduleContentFromSlot = () => {
-    const dateKey = pendingSlotDateKey || getCalendarDateKey(referenceDate, userTimeZone);
-    if (pendingSlotHour === null && !pendingSlotTime.trim()) {
-      setSlotPickerError('Please choose a time for this date before continuing.');
-      return;
-    }
-    const time = pendingSlotTime.trim() || '09:00';
-    const localIso = `${dateKey}T${time}`;
-
-    setIsSlotPickerOpen(false);
-    setCreateContentInitialScheduledAt(localIso);
-    setCreateContentDefaultStatus('scheduled');
-    setIsCreateContentOpen(true);
+  const handleScheduleOnDate = (dateKey: string) => {
+    setPendingSlotTime('09:00');
+    setSlotTimeError(null);
+    setSlotPickerContext({
+      dateKey,
+      hour: null,
+      label: dateKey,
+    });
   };
 
-  const handleStartScheduleTaskFromSlot = () => {
-    const dateKey = pendingSlotDateKey || getCalendarDateKey(referenceDate, userTimeZone);
-    if (pendingSlotHour === null && !pendingSlotTime.trim()) {
-      setSlotPickerError('Please choose a start time for this date before continuing.');
-      return;
-    }
-    const time = pendingSlotTime.trim() || '09:00';
-    const localStart = `${dateKey}T${time}`;
-    const [hStr, mStr] = time.split(':');
-    const h = parseInt(hStr, 10);
-    const endH = Math.min(23, h + 1);
-    const localEnd = `${dateKey}T${String(endH).padStart(2, '0')}:${mStr || '00'}`;
+  const resolveSelectedSlotTimes = (): { startIso: string; endIso: string } | null => {
+    if (!slotPickerContext) return null;
 
-    setIsSlotPickerOpen(false);
-    setCreateTaskInitialStart(localStart);
-    setCreateTaskInitialEnd(localEnd);
-    setIsCreateTaskOpen(true);
-  };
-
-  // Inspect / edit Content item
-  const handleSelectContent = (item: ContentItemWithMeta) => {
-    setSelectedContent(item);
-    setIsContentDetailOpen(true);
-  };
-
-  // Inspect / edit Task item
-  const handleSelectTask = async (task: TaskWithMeta) => {
-    try {
-      const res = await getTaskDetailAction(workspaceId, task.id);
-      if (res.data) {
-        setSelectedTaskDetail(res.data as TaskDetail);
-        setIsTaskDetailOpen(true);
-      } else {
-        // Fallback minimal task detail
-        setSelectedTaskDetail({
-          ...task,
-          subtasks: [],
-          dependencies: [],
-        });
-        setIsTaskDetailOpen(true);
-      }
-    } catch {
-      setSelectedTaskDetail({
-        ...task,
-        subtasks: [],
-        dependencies: [],
-      });
-      setIsTaskDetailOpen(true);
-    }
-  };
-
-  // Quick schedule action from unscheduled drawer
-  const handleScheduleFromDrawer = (item: ContentItemWithMeta) => {
-    setSelectedContent(item);
-    setIsContentDetailOpen(true);
-  };
-
-  // Optimistic update when content is updated
-  const handleContentUpdated = (updated: ContentItemWithMeta) => {
-    if (updated.scheduled_at) {
-      setUnscheduledItems((prev) => prev.filter((i) => i.id !== updated.id));
-
-      const updatedKey = getCalendarDateKey(updated.scheduled_at, userTimeZone);
-      const isVisibleInCurrentView =
-        viewMode === 'day'
-          ? currentDayRange.dateKey === updatedKey
-          : viewMode === 'week'
-            ? currentWeek.days.some((d) => d.dateKey === updatedKey)
-            : currentMonthGrid.cells.some((c) => c.dateKey === updatedKey);
-
-      if (isVisibleInCurrentView) {
-        setScheduledItems((prev) => {
-          const exists = prev.some((i) => i.id === updated.id);
-          if (exists) {
-            return prev.map((i) => (i.id === updated.id ? updated : i));
-          }
-          return [...prev, updated];
-        });
-      } else {
-        setScheduledItems((prev) => prev.filter((i) => i.id !== updated.id));
-      }
+    let timePart = '';
+    if (pendingSlotTime.trim()) {
+      timePart = pendingSlotTime.trim();
+    } else if (slotPickerContext.hour !== null) {
+      timePart = `${String(slotPickerContext.hour).padStart(2, '0')}:00`;
     } else {
-      setScheduledItems((prev) => prev.filter((i) => i.id !== updated.id));
-      setUnscheduledItems((prev) => {
-        const exists = prev.some((i) => i.id === updated.id);
-        if (exists) {
-          return prev.map((i) => (i.id === updated.id ? updated : i));
-        }
-        return [updated, ...prev];
-      });
+      setSlotTimeError('Please select a time to schedule this item.');
+      return null;
     }
 
-    if (selectedContent?.id === updated.id) {
-      setSelectedContent(updated);
-    }
+    const [hStr, mStr] = timePart.split(':');
+    const h = Number(hStr);
+    const m = Number(mStr || '0');
+    const localStartStr = `${slotPickerContext.dateKey}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    const endHour = Math.min(23, h + 1);
+    const localEndStr = `${slotPickerContext.dateKey}T${String(endHour).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+
+    const startUtc = parseLocalDatetimeString(localStartStr, userTimeZone);
+    const endUtc = parseLocalDatetimeString(localEndStr, userTimeZone);
+
+    return {
+      startIso: startUtc ? startUtc.toISOString() : new Date().toISOString(),
+      endIso: endUtc ? endUtc.toISOString() : new Date(Date.now() + 3600000).toISOString(),
+    };
   };
 
-  // Remove content item upon deletion
-  const handleContentDeleted = (deletedId: string) => {
-    setScheduledItems((prev) => prev.filter((i) => i.id !== deletedId));
-    setUnscheduledItems((prev) => prev.filter((i) => i.id !== deletedId));
-    setIsContentDetailOpen(false);
-    setSelectedContent(null);
+  const handleChooseSlotContent = () => {
+    const resolved = resolveSelectedSlotTimes();
+    if (!resolved) return;
+
+    setCreateDefaultStatus('scheduled');
+    setCreateInitialScheduledAt(resolved.startIso);
+    setSlotPickerContext(null);
+    setSlotTimeError(null);
+    setIsCreateModalOpen(true);
   };
 
-  // Handle new content created (idempotent: does not append duplicate items)
-  const handleContentCreated = (newItem: ContentItemWithMeta) => {
+  const handleChooseSlotTask = () => {
+    const resolved = resolveSelectedSlotTimes();
+    if (!resolved) return;
+
+    setCreateTaskInitialStart(resolved.startIso);
+    setCreateTaskInitialEnd(resolved.endIso);
+    setSlotPickerContext(null);
+    setSlotTimeError(null);
+    setIsCreateTaskModalOpen(true);
+  };
+
+  // Lifecycle Handlers for Content Items (Strictly Idempotent)
+  const handleContentCreated = useCallback((newItem: ContentItemWithMeta) => {
     if (newItem.scheduled_at) {
-      const newKey = getCalendarDateKey(newItem.scheduled_at, userTimeZone);
-      const isVisibleInCurrentView =
-        viewMode === 'day'
-          ? currentDayRange.dateKey === newKey
-          : viewMode === 'week'
-            ? currentWeek.days.some((d) => d.dateKey === newKey)
-            : currentMonthGrid.cells.some((c) => c.dateKey === newKey);
+      setScheduledItems((prev) =>
+        prev.some((i) => i.id === newItem.id) ? prev : [...prev, newItem]
+      );
+      setUnscheduledItems((prev) => prev.filter((i) => i.id !== newItem.id));
+    } else if (newItem.status === 'idea' || newItem.status === 'draft') {
+      setUnscheduledItems((prev) =>
+        prev.some((i) => i.id === newItem.id) ? prev : [newItem, ...prev]
+      );
+    }
+  }, []);
 
-      if (isVisibleInCurrentView) {
-        setScheduledItems((prev) => {
-          if (prev.some((i) => i.id === newItem.id)) return prev;
-          return [...prev, newItem];
-        });
-      }
-    } else {
-      setUnscheduledItems((prev) => {
-        if (prev.some((i) => i.id === newItem.id)) return prev;
-        return [newItem, ...prev];
+  const handleContentUpdated = useCallback((updatedItem: ContentItemWithMeta) => {
+    if (updatedItem.scheduled_at) {
+      setUnscheduledItems((prev) => prev.filter((i) => i.id !== updatedItem.id));
+      setScheduledItems((prev) => {
+        const exists = prev.some((i) => i.id === updatedItem.id);
+        if (exists) {
+          return prev.map((i) => (i.id === updatedItem.id ? updatedItem : i));
+        }
+        return [...prev, updatedItem];
       });
-    }
-    setIsCreateContentOpen(false);
-  };
-
-  // Handle new task created (idempotent: does not append duplicate tasks)
-  const handleTaskCreated = (newTask: TaskWithMeta) => {
-    if (newTask.scheduled_start) {
-      const newKey = getCalendarDateKey(newTask.scheduled_start, userTimeZone);
-      const isVisibleInCurrentView =
-        viewMode === 'day'
-          ? currentDayRange.dateKey === newKey
-          : viewMode === 'week'
-            ? currentWeek.days.some((d) => d.dateKey === newKey)
-            : currentMonthGrid.cells.some((c) => c.dateKey === newKey);
-
-      if (isVisibleInCurrentView) {
-        setScheduledTasks((prev) => {
-          if (prev.some((t) => t.id === newTask.id)) return prev;
-          return [...prev, newTask];
+    } else {
+      setScheduledItems((prev) => prev.filter((i) => i.id !== updatedItem.id));
+      if (updatedItem.status === 'idea' || updatedItem.status === 'draft') {
+        setUnscheduledItems((prev) => {
+          const exists = prev.some((i) => i.id === updatedItem.id);
+          if (exists) {
+            return prev.map((i) => (i.id === updatedItem.id ? updatedItem : i));
+          }
+          return [updatedItem, ...prev];
         });
+      } else {
+        setUnscheduledItems((prev) => prev.filter((i) => i.id !== updatedItem.id));
       }
     }
-    setIsCreateTaskOpen(false);
-  };
 
-  // Handle task updated from TaskDetailModal
-  const handleTaskUpdated = () => {
-    // Re-fetch calendar events to guarantee consistency with dependencies & subtasks (bypass cache)
+    setSelectedItem(updatedItem);
+  }, []);
+
+  const handleContentDeleted = useCallback((id: string) => {
+    setScheduledItems((prev) => prev.filter((i) => i.id !== id));
+    setUnscheduledItems((prev) => prev.filter((i) => i.id !== id));
+    setSelectedItem((prev) => (prev?.id === id ? null : prev));
+  }, []);
+
+  // Lifecycle Handlers for Tasks (Strictly Idempotent)
+  const handleTaskCreated = useCallback((newTask: TaskWithMeta) => {
+    if (newTask.scheduled_start || newTask.due_date) {
+      setScheduledTasks((prev) =>
+        prev.some((t) => t.id === newTask.id) ? prev : [...prev, newTask]
+      );
+    }
+  }, []);
+
+  const handleTaskUpdated = useCallback(() => {
     fetchContentAndTasks(referenceDate, viewMode, true);
+  }, [fetchContentAndTasks, referenceDate, viewMode]);
+
+  // Open detail modal to schedule an unscheduled item
+  const handleScheduleFromDrawer = (item: ContentItemWithMeta) => {
+    const defaultHourDate = new Date(referenceDate);
+    defaultHourDate.setUTCHours(10, 0, 0, 0);
+    setSelectedItem({
+      ...item,
+      status: 'scheduled',
+      scheduled_at: defaultHourDate.toISOString(),
+    });
   };
 
-  // Filter scheduled items by channel if selected
-  const displayedScheduledItems = scheduledItems.filter((item) => {
-    if (selectedPlatform !== 'all' && item.platform !== selectedPlatform) return false;
-    return true;
-  });
+  // Compute a stable, unfiltered color map across all tasks and content items so channel filtering
+  // or view switching never alters an item's assigned color.
+  const itemColorMap = useMemo(
+    () =>
+      buildCalendarItemColorMap(
+        scheduledTasks,
+        [...scheduledItems, ...unscheduledItems],
+        userTimeZone
+      ),
+    [scheduledTasks, scheduledItems, unscheduledItems, userTimeZone]
+  );
 
-  // Strict backlog count: scheduled_at is null, status is idea or draft, not archived
-  const activeUnscheduledCount = unscheduledItems.filter(
-    (i) => !i.scheduled_at && i.status !== 'archived' && (i.status === 'idea' || i.status === 'draft')
-  ).length;
+  // Apply platform filter to scheduled items
+  const filteredScheduledItems = useMemo(() => {
+    return scheduledItems.filter((item) => {
+      if (platformFilter && item.platform !== platformFilter) return false;
+      return true;
+    });
+  }, [scheduledItems, platformFilter]);
 
-  const currentPeriodLabel =
+  // Scope items and tasks to the active view range
+  const { visibleRangeStartMs, visibleRangeEndMs } = useMemo(() => {
+    if (viewMode === 'day') {
+      return {
+        visibleRangeStartMs: currentDayRange.dayStart.getTime(),
+        visibleRangeEndMs: currentDayRange.dayEnd.getTime(),
+      };
+    }
+    if (viewMode === 'week') {
+      return {
+        visibleRangeStartMs: currentWeekRange.weekStart.getTime(),
+        visibleRangeEndMs: currentWeekRange.weekEnd.getTime(),
+      };
+    }
+    const firstCell = currentMonthGrid.cells[0];
+    const lastCell = currentMonthGrid.cells[currentMonthGrid.cells.length - 1];
+    return {
+      visibleRangeStartMs: firstCell.startOfDay.getTime(),
+      visibleRangeEndMs: lastCell.endOfDay.getTime(),
+    };
+  }, [viewMode, currentDayRange, currentWeekRange, currentMonthGrid]);
+
+  const visibleScheduledItems = useMemo(() => {
+    return filteredScheduledItems.filter((item) => {
+      if (!item.scheduled_at) return false;
+      const ms = new Date(item.scheduled_at).getTime();
+      return ms >= visibleRangeStartMs && ms <= visibleRangeEndMs;
+    });
+  }, [filteredScheduledItems, visibleRangeStartMs, visibleRangeEndMs]);
+
+  const visibleScheduledTasks = useMemo(() => {
+    return scheduledTasks.filter((task) =>
+      doesTaskMatchRange(task, visibleRangeStartMs, visibleRangeEndMs)
+    );
+  }, [scheduledTasks, visibleRangeStartMs, visibleRangeEndMs]);
+
+  // Split items & tasks between Workspace-Assigned (created_from !== 'calendar')
+  // and Calendar-Scheduled (created_from === 'calendar') for Week & Month views
+  const assignedTasksForView = useMemo(
+    () => visibleScheduledTasks.filter((t) => t.created_from !== 'calendar'),
+    [visibleScheduledTasks]
+  );
+  const calendarTasksForView = useMemo(
+    () => visibleScheduledTasks.filter((t) => t.created_from === 'calendar'),
+    [visibleScheduledTasks]
+  );
+  const assignedContentForView = useMemo(
+    () => visibleScheduledItems.filter((i) => i.created_from !== 'calendar'),
+    [visibleScheduledItems]
+  );
+  const calendarContentForView = useMemo(
+    () => visibleScheduledItems.filter((i) => i.created_from === 'calendar'),
+    [visibleScheduledItems]
+  );
+
+  // Strict active unscheduled count (ideas + drafts only)
+  const activeUnscheduledCount = useMemo(() => {
+    return unscheduledItems.filter(
+      (item) => item.scheduled_at === null && (item.status === 'idea' || item.status === 'draft')
+    ).length;
+  }, [unscheduledItems]);
+
+  // Active period label
+  const activePeriodLabel =
     viewMode === 'day'
       ? currentDayRange.label
       : viewMode === 'week'
-        ? currentWeek.label
+        ? currentWeekRange.label
         : currentMonthGrid.label;
 
+  const assignedTotalForView = assignedTasksForView.length + assignedContentForView.length;
+  const calendarTotalForView = calendarTasksForView.length + calendarContentForView.length;
+
   return (
-    <div className="space-y-6">
-      {/* Calendar Header with Navigation & Controls */}
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 pb-4 border-b border-neutral-800">
-        {/* Left: Title & Period Navigator */}
-        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-          <div>
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white flex items-center gap-2">
-              <span>Calendar</span>
-            </h1>
-            <div className="flex items-center gap-2 mt-1 text-xs text-neutral-400 font-mono">
-              <Clock className="w-3.5 h-3.5 text-blue-400" />
-              <span>{userTimeZone}</span>
-            </div>
+    <div className="space-y-6" data-testid="calendar-workspace">
+      {/* Editorial Header: Title & Primary Actions */}
+      <header className="flex flex-col lg:flex-row lg:items-end justify-between gap-5 pb-5 border-b border-[var(--border-subtle)]">
+        <div className="space-y-2 min-w-0">
+          <div className="flex items-center gap-2 text-xs font-medium text-[var(--text-tertiary)] flex-wrap">
+            <CalendarIcon className="w-3.5 h-3.5 text-[var(--text-secondary)] shrink-0" />
+            <span className="uppercase tracking-[0.12em] font-semibold text-[var(--text-secondary)] truncate max-w-[240px]">
+              {workspaceName}
+            </span>
+            <span aria-hidden="true">·</span>
+            <span>Schedule &amp; Time Blocking</span>
+            <span
+              className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-mono bg-[var(--bg-subtle)] text-[var(--text-secondary)] border border-[var(--border-subtle)]"
+              title="Active Calendar Timezone"
+              data-testid="calendar-timezone-badge"
+            >
+              <Globe className="w-3 h-3 text-[var(--text-tertiary)]" />
+              {userTimeZone}
+            </span>
           </div>
 
-          {/* Navigation Controls: Prev, Today, Next */}
-          <div className="flex items-center gap-1.5 p-1 rounded-xl bg-neutral-950 border border-neutral-800 shadow-xs">
-            <button
-              type="button"
-              onClick={handlePrev}
-              disabled={isLoading}
-              className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors disabled:opacity-50"
-              aria-label={`Previous ${viewMode}`}
-              title={`Previous ${viewMode}`}
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-
-            <button
-              type="button"
-              onClick={handleToday}
-              disabled={isLoading}
-              className="px-2.5 py-1 text-xs font-semibold text-neutral-200 hover:text-white hover:bg-neutral-800 rounded-lg transition-colors disabled:opacity-50"
-            >
-              Today
-            </button>
-
-            <button
-              type="button"
-              onClick={handleNext}
-              disabled={isLoading}
-              className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors disabled:opacity-50"
-              aria-label={`Next ${viewMode}`}
-              title={`Next ${viewMode}`}
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
-
-            <div className="h-4 w-px bg-neutral-800 mx-1" />
-
-            <span
-              data-testid="calendar-period-label"
-              className="px-2 text-xs font-bold text-neutral-100 font-mono whitespace-nowrap"
-            >
-              {currentPeriodLabel}
-            </span>
+          <div className="flex items-baseline gap-3 flex-wrap">
+            <h1 className="heading-display text-3xl sm:text-4xl text-[var(--text-primary)]">
+              Calendar
+            </h1>
+            <p className="text-sm text-[var(--text-secondary)]">
+              Plan daily focus blocks, task deadlines, and social publishing in one place.
+            </p>
           </div>
         </div>
 
-        {/* Right: View Switcher, Backlog Toggle, New Task & New Content */}
-        <div className="flex flex-wrap items-center gap-2.5">
-          {/* View Switcher: Day / Week / Month */}
-          <div className="flex items-center p-1 rounded-xl bg-neutral-950 border border-neutral-800 text-xs">
-            <button
-              type="button"
-              onClick={() => handleSwitchView('day')}
-              data-testid="view-switch-day"
-              className={clsx(
-                'px-3 py-1 rounded-lg font-medium transition-colors',
-                viewMode === 'day'
-                  ? 'bg-neutral-800 text-white shadow-xs font-semibold'
-                  : 'text-neutral-400 hover:text-neutral-200'
-              )}
-            >
-              Day
-            </button>
-            <button
-              type="button"
-              onClick={() => handleSwitchView('week')}
-              data-testid="view-switch-week"
-              className={clsx(
-                'px-3 py-1 rounded-lg font-medium transition-colors',
-                viewMode === 'week'
-                  ? 'bg-neutral-800 text-white shadow-xs font-semibold'
-                  : 'text-neutral-400 hover:text-neutral-200'
-              )}
-            >
-              Week
-            </button>
-            <button
-              type="button"
-              onClick={() => handleSwitchView('month')}
-              data-testid="view-switch-month"
-              className={clsx(
-                'px-3 py-1 rounded-lg font-medium transition-colors',
-                viewMode === 'month'
-                  ? 'bg-neutral-800 text-white shadow-xs font-semibold'
-                  : 'text-neutral-400 hover:text-neutral-200'
-              )}
-            >
-              Month
-            </button>
-          </div>
-
-          {/* Platform Channel Filter */}
-          <select
-            value={selectedPlatform}
-            onChange={(e) => setSelectedPlatform(e.target.value)}
-            className="px-3 py-1.5 rounded-xl bg-neutral-950 border border-neutral-800 text-xs text-neutral-300 focus:outline-none focus:border-blue-500"
-            aria-label="Filter channels"
-          >
-            <option value="all">All Channels</option>
-            <option value="linkedin">LinkedIn</option>
-            <option value="reddit">Reddit</option>
-            <option value="threads">Threads</option>
-            <option value="x">X</option>
-          </select>
-
-          {/* Unscheduled Backlog Drawer Toggle Button */}
+        {/* Right Actions: Unscheduled Backlog, New Task, New Content */}
+        <div className="flex flex-wrap items-center gap-2.5 shrink-0">
           <button
             type="button"
-            onClick={() => setIsDrawerOpen(true)}
+            onClick={() => setIsUnscheduledDrawerOpen((prev) => !prev)}
             data-testid="toggle-unscheduled-drawer"
-            className="px-3 py-1.5 rounded-xl bg-neutral-950 hover:bg-neutral-900 border border-neutral-800 text-xs text-neutral-300 hover:text-white flex items-center gap-1.5 transition-colors shadow-xs"
+            aria-pressed={isUnscheduledDrawerOpen}
+            className={`inline-flex items-center gap-2 px-3.5 py-2.5 rounded-full text-xs font-semibold border transition-all ${
+              isUnscheduledDrawerOpen
+                ? 'bg-[var(--text-primary)] text-[var(--bg-canvas)] border-[var(--text-primary)]'
+                : 'bg-[var(--bg-surface)] text-[var(--text-secondary)] border-[var(--border-default)] hover:text-[var(--text-primary)] hover:border-[var(--border-strong)]'
+            }`}
           >
-            <Inbox className="w-3.5 h-3.5 text-amber-400" />
+            <Inbox className="w-3.5 h-3.5" />
             <span>Unscheduled</span>
-            <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+            <span
+              className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold ${
+                isUnscheduledDrawerOpen
+                  ? 'bg-[var(--bg-canvas)] text-[var(--text-primary)]'
+                  : 'bg-[var(--bg-subtle)] text-[var(--text-primary)]'
+              }`}
+            >
               {activeUnscheduledCount}
             </span>
           </button>
 
-          {/* New Task Button (no slot selected: does not silently assign a date or time) */}
           <button
             type="button"
             onClick={() => {
               setCreateTaskInitialStart(null);
               setCreateTaskInitialEnd(null);
-              setIsCreateTaskOpen(true);
+              setIsCreateTaskModalOpen(true);
             }}
             data-testid="calendar-new-task-btn"
-            className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm"
+            className="btn-secondary px-4 py-2.5 text-xs font-semibold"
           >
             <CheckSquare className="w-3.5 h-3.5" />
             <span>New Task</span>
           </button>
 
-          {/* New Content Button (no slot selected: does not silently assign a date or time) */}
           <button
             type="button"
             onClick={() => {
-              setCreateContentInitialScheduledAt(null);
-              setCreateContentDefaultStatus('draft');
-              setIsCreateContentOpen(true);
+              setCreateDefaultStatus('draft');
+              setCreateInitialScheduledAt(null);
+              setIsCreateModalOpen(true);
             }}
             data-testid="calendar-new-content-btn"
-            className="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm"
+            className="btn-accent px-4 py-2.5 text-xs font-semibold"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>New Content</span>
           </button>
         </div>
-      </div>
+      </header>
 
-      {/* Navigation Error Alert & Retry */}
-      {error && (
-        <div className="p-4 rounded-xl bg-red-950/40 border border-red-800/80 flex items-center justify-between text-xs text-red-200">
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
-            <span>{error}</span>
+      {/* Navigation, View Switcher & Channel Filter Toolbar */}
+      <section
+        aria-label="Calendar controls"
+        className="surface-card p-3 sm:p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3.5"
+      >
+        {/* Left: Period Navigation Controls */}
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <div className="inline-flex items-center rounded-full bg-[var(--bg-subtle)] border border-[var(--border-subtle)] p-1">
+            <button
+              type="button"
+              onClick={handlePrev}
+              disabled={isLoading}
+              className="p-1.5 rounded-full text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface)] transition-colors disabled:opacity-50"
+              aria-label="Previous period"
+              data-testid="calendar-prev-btn"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={handleToday}
+              disabled={isLoading}
+              className="px-3 py-1 rounded-full text-xs font-semibold text-[var(--text-primary)] hover:bg-[var(--bg-surface)] transition-colors disabled:opacity-50"
+              data-testid="calendar-today-btn"
+            >
+              Today
+            </button>
+            <button
+              type="button"
+              onClick={handleNext}
+              disabled={isLoading}
+              className="p-1.5 rounded-full text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface)] transition-colors disabled:opacity-50"
+              aria-label="Next period"
+              data-testid="calendar-next-btn"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2 min-w-0">
+            <h2
+              className="heading-section text-base sm:text-lg text-[var(--text-primary)] tracking-tight truncate"
+              data-testid="calendar-period-label"
+            >
+              {activePeriodLabel}
+            </h2>
+            {isLoading && (
+              <RefreshCw
+                className="w-3.5 h-3.5 text-[var(--text-tertiary)] animate-spin shrink-0"
+                aria-label="Loading calendar items"
+              />
+            )}
+          </div>
+        </div>
+
+        {/* Right: Segmented View Switcher & Channel Filter */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* View Mode Switcher (Day / Week / Month) */}
+          <div
+            className="inline-flex items-center rounded-full bg-[var(--bg-subtle)] border border-[var(--border-subtle)] p-1"
+            role="tablist"
+            aria-label="Calendar view mode"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={viewMode === 'day'}
+              onClick={() => handleViewModeChange('day')}
+              data-testid="view-mode-day"
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                viewMode === 'day'
+                  ? 'bg-[var(--text-primary)] text-[var(--bg-canvas)] shadow-xs'
+                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+              }`}
+            >
+              <Clock className="w-3.5 h-3.5" />
+              <span>Day</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={viewMode === 'week'}
+              onClick={() => handleViewModeChange('week')}
+              data-testid="view-mode-week"
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                viewMode === 'week'
+                  ? 'bg-[var(--text-primary)] text-[var(--bg-canvas)] shadow-xs'
+                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+              }`}
+            >
+              <Columns className="w-3.5 h-3.5" />
+              <span>Week</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={viewMode === 'month'}
+              onClick={() => handleViewModeChange('month')}
+              data-testid="view-mode-month"
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                viewMode === 'month'
+                  ? 'bg-[var(--text-primary)] text-[var(--bg-canvas)] shadow-xs'
+                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+              }`}
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+              <span>Month</span>
+            </button>
+          </div>
+
+          {/* Channel / Platform Filter */}
+          <div className="flex items-center gap-1.5">
+            <div className="relative flex items-center">
+              <Filter className="w-3.5 h-3.5 text-[var(--text-tertiary)] absolute left-3 pointer-events-none" />
+              <select
+                value={platformFilter}
+                onChange={(e) => setPlatformFilter(e.target.value as SocialPlatform | '')}
+                aria-label="Filter channels"
+                data-testid="calendar-platform-filter"
+                className="pl-8 pr-7 py-1.5 bg-[var(--bg-subtle)] hover:bg-[var(--bg-hover)] border border-[var(--border-subtle)] rounded-full text-xs font-medium text-[var(--text-primary)] focus:outline-none focus:border-[var(--border-strong)] transition-colors"
+              >
+                <option value="">All Channels</option>
+                <option value="x">X (Twitter)</option>
+                <option value="linkedin">LinkedIn</option>
+                <option value="reddit">Reddit</option>
+                <option value="threads">Threads</option>
+              </select>
+            </div>
+
+            {platformFilter && (
+              <button
+                type="button"
+                onClick={() => setPlatformFilter('')}
+                className="px-2.5 py-1.5 rounded-full text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] bg-[var(--bg-subtle)] hover:bg-[var(--bg-hover)] border border-[var(--border-subtle)] transition-colors"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        </div>
+      </section>
+
+      {/* Error Banner */}
+      {errorMessage && (
+        <div
+          role="alert"
+          className="p-4 rounded-2xl badge-danger border flex items-center justify-between gap-3 text-xs sm:text-sm"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span className="font-medium break-words">{errorMessage}</span>
           </div>
           <button
             type="button"
-            onClick={() => fetchContentAndTasks(referenceDate, viewMode, true)}
-            className="px-2.5 py-1 rounded-md bg-red-900/60 hover:bg-red-900 text-white font-medium flex items-center gap-1 transition-colors"
+            onClick={() => setErrorMessage(null)}
+            className="px-2.5 py-1 rounded-full text-xs font-semibold bg-[var(--bg-surface)] text-[var(--text-primary)] border border-[var(--border-subtle)] shrink-0"
           >
-            <RefreshCw className="w-3 h-3" />
-            <span>Retry</span>
+            Dismiss
           </button>
         </div>
       )}
 
-      <div className={viewMode === 'day' ? '' : 'grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)]'}>
-      {viewMode !== 'day' && <aside aria-label="Assigned tasks and content" className="max-h-[750px] overflow-y-auto rounded-xl border border-neutral-800 bg-neutral-950 p-4">
-        <h2 className="mb-1 text-sm font-semibold text-white">Assigned tasks & content</h2>
-        <p className="mb-4 text-xs text-neutral-500">{currentPeriodLabel}</p>
-        {[
-          ...scheduledTasks.filter((task) => task.created_from !== 'calendar' && task.scheduled_start).map((task) => ({ id: `task-${task.id}`, title: task.title, date: task.scheduled_start!, kind: 'Task', select: () => handleSelectTask(task) })),
-          ...displayedScheduledItems.filter((item) => item.created_from !== 'calendar' && item.scheduled_at).map((item) => ({ id: `content-${item.id}`, title: item.title || item.body || 'Untitled content', date: item.scheduled_at!, kind: 'Content', select: () => handleSelectContent(item) })),
-        ].filter((item) => (viewMode === 'week' ? currentWeek.days : currentMonthGrid.cells).some((day) => day.dateKey === getCalendarDateKey(item.date, userTimeZone)))
-          .sort((a, b) => Date.parse(a.date) - Date.parse(b.date))
-          .map((item) => <button key={item.id} type="button" onClick={item.select} className="mb-2 block w-full rounded-lg border border-neutral-800 p-3 text-left hover:bg-neutral-900">
-            <p className="break-words text-xs font-medium text-neutral-200">{item.title}</p>
-            <p className="mt-1 text-[10px] text-neutral-500">{item.kind} · {toLocalDatetimeString(item.date, userTimeZone).replace('T', ' ')}</p>
-          </button>)}
-      </aside>}
-      <div className="min-w-0">
-      {/* Main View: Day Timeline, Week Grid, or Month Grid */}
-      {viewMode === 'day' ? (
-        <CalendarDayView
-          dayRange={currentDayRange}
-          contentItems={displayedScheduledItems}
-          taskItems={scheduledTasks}
-          userTimeZone={userTimeZone}
-          onSelectContent={handleSelectContent}
-          onSelectTask={handleSelectTask}
-          onNewAtHour={(dateKey, hour) => handleOpenSlot(dateKey, hour)}
-          isLoading={isLoading}
-        />
-      ) : viewMode === 'week' ? (
-        <CalendarWeekView
-          weekRange={currentWeek}
-          items={displayedScheduledItems.filter((item) => item.created_from === 'calendar')}
-          taskItems={scheduledTasks.filter((task) => task.created_from === 'calendar')}
-          userTimeZone={userTimeZone}
-          onSelectItem={handleSelectContent}
-          onSelectTask={handleSelectTask}
-          onNewForDay={(dateKey) => handleOpenSlot(dateKey, null)}
-          onSelectDay={handleSelectDayFromWeek}
-          isLoading={isLoading}
-        />
-      ) : (
-        <CalendarMonthView
-          monthGrid={currentMonthGrid}
-          items={displayedScheduledItems.filter((item) => item.created_from === 'calendar')}
-          taskItems={scheduledTasks.filter((task) => task.created_from === 'calendar')}
-          userTimeZone={userTimeZone}
-          onSelectItem={handleSelectContent}
-          onSelectTask={handleSelectTask}
-          onSelectDate={handleSelectDateFromMonth}
-          onNewForDate={(dateKey) => handleOpenSlot(dateKey, null)}
-          isLoading={isLoading}
-        />
-      )}
+      {/* Main Content Area: Full-Width Active Calendar View */}
+      <div className="w-full min-w-0">
+        {viewMode === 'day' && (
+          <CalendarDayView
+            dayRange={currentDayRange}
+            contentItems={visibleScheduledItems}
+            taskItems={visibleScheduledTasks}
+            userTimeZone={userTimeZone}
+            itemColorMap={itemColorMap}
+            onSelectContent={(item) => setSelectedItem(item)}
+            onSelectTask={handleOpenTaskDetail}
+            onScheduleAtHour={handleScheduleAtHour}
+            onScheduleAtTime={handleScheduleAtTime}
+          />
+        )}
 
-      </div>
-      </div>
+        {viewMode !== 'day' && (
+          <div className="space-y-5">
+            {/* Full-Width Calendar Grid Header Bar */}
+            <div className="flex flex-wrap items-center justify-between gap-3 px-1">
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--text-primary)]">
+                  <CalendarIcon className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
+                  <span>Calendar time blocks ({calendarTotalForView})</span>
+                </span>
+                <span className="text-[var(--text-tertiary)]" aria-hidden="true">·</span>
+                <span className="text-xs text-[var(--text-secondary)]">
+                  Select any day heading for the daily agenda, or click `+` to schedule a time block
+                </span>
+              </div>
 
-      {/* Unscheduled Content Backlog Drawer */}
-      <UnscheduledContentDrawer
-        isOpen={isDrawerOpen}
-        onClose={() => setIsDrawerOpen(false)}
-        items={unscheduledItems}
-        userTimeZone={userTimeZone}
-        onSelectItem={handleSelectContent}
-        onScheduleItem={handleScheduleFromDrawer}
-        onCaptureNewIdea={() => {
-          setIsDrawerOpen(false);
-          setCreateContentInitialScheduledAt(null);
-          setCreateContentDefaultStatus('idea');
-          setIsCreateContentOpen(true);
-        }}
-      />
-
-      {/* Slot Type Picker Modal (Schedule Content or Add Task) */}
-      {isSlotPickerOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-neutral-900 border border-neutral-800 rounded-2xl max-w-sm w-full p-6 text-neutral-100 shadow-2xl space-y-4">
-            <div>
-              <h3 className="text-base font-semibold text-white">Schedule on Calendar</h3>
-              <p className="text-xs text-neutral-400 mt-1">
-                Selected date: <span className="font-mono text-neutral-200">{pendingSlotDateKey}</span>
-              </p>
+              <button
+                type="button"
+                onClick={() => setIsAssignedPanelOpen((prev) => !prev)}
+                aria-expanded={isAssignedPanelOpen}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                  isAssignedPanelOpen
+                    ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] border-[var(--border-default)]'
+                    : 'bg-[var(--bg-subtle)] text-[var(--text-secondary)] border-[var(--border-subtle)] hover:text-[var(--text-primary)]'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span>Assigned from Tasks &amp; Content ({assignedTotalForView})</span>
+              </button>
             </div>
 
-            {slotPickerError && (
-              <div className="p-2.5 rounded-lg bg-red-950/40 border border-red-800 text-red-300 text-xs">
-                {slotPickerError}
-              </div>
+            {/* Separate Area for Tasks & Content Added from the Tasks / Content Tabs */}
+            {isAssignedPanelOpen && (
+              <section
+                aria-label="Workspace-assigned tasks and content"
+                className="w-full surface-card overflow-hidden"
+              >
+                <div className="px-5 py-3.5 border-b border-[var(--border-subtle)] bg-[var(--bg-subtle)]/50 flex flex-wrap items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--text-primary)] flex items-center gap-1.5">
+                      <Layers className="w-3.5 h-3.5 text-[var(--text-secondary)] shrink-0" />
+                      <span>Assigned from Tasks &amp; Content Workspaces</span>
+                    </h3>
+                    <p className="text-[11px] text-[var(--text-tertiary)] mt-0.5">
+                      Items added in the Tasks or Content tabs during this {viewMode} (shown separately from calendar time blocks)
+                    </p>
+                  </div>
+                  <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-semibold bg-[var(--bg-surface)] text-[var(--text-primary)] border border-[var(--border-subtle)] shrink-0">
+                    {assignedTotalForView}
+                  </span>
+                </div>
+
+                <div className="p-4 sm:p-5">
+                  {assignedTotalForView === 0 ? (
+                    <div className="py-6 px-4 text-center rounded-2xl border border-dashed border-[var(--border-default)] bg-[var(--bg-subtle)]/35">
+                      <p className="text-xs font-medium text-[var(--text-secondary)]">
+                        No workspace-assigned items in this {viewMode}.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                      {assignedTasksForView.map((task) => {
+                        const priorityInfo =
+                          PRIORITY_BADGE_MAP[task.priority] || PRIORITY_BADGE_MAP.medium;
+                        const colorToken = resolveCalendarItemColor('task', task, itemColorMap);
+                        const effectiveTimestamp = getTaskEffectiveTimestamp(task);
+                        const dateKey = effectiveTimestamp
+                          ? getCalendarDateKey(effectiveTimestamp, userTimeZone)
+                          : null;
+                        return (
+                          <button
+                            key={task.id}
+                            type="button"
+                            onClick={() => handleOpenTaskDetail(task)}
+                            data-testid={`assigned-task-${task.id}`}
+                            data-cal-color={colorToken.name}
+                            className={`w-full text-left p-3.5 rounded-2xl border border-l-4 transition-all space-y-1.5 group focus:outline-none focus:ring-2 focus:ring-[var(--text-primary)] ${colorToken.colorClass} cal-card-surface`}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+                                <span
+                                  className="w-2 h-2 rounded-full shrink-0 cal-swatch-dot"
+                                  aria-hidden="true"
+                                />
+                                <CheckSquare className="w-3 h-3 shrink-0" />
+                                <span>Task</span>
+                              </span>
+                              <span
+                                className={`px-2 py-0.2 rounded-full text-[10px] font-semibold border ${priorityInfo.badgeClass}`}
+                              >
+                                {priorityInfo.label}
+                              </span>
+                            </div>
+                            <p
+                              className={`text-xs sm:text-sm font-semibold leading-snug line-clamp-2 break-words ${
+                                task.status === 'done'
+                                  ? 'line-through text-[var(--text-tertiary)]'
+                                  : 'text-[var(--text-primary)] group-hover:underline'
+                              }`}
+                            >
+                              {task.title}
+                            </p>
+                            {effectiveTimestamp && (
+                              <p className="text-[11px] font-mono text-[var(--text-secondary)]">
+                                {dateKey ? `${dateKey} · ` : ''}
+                                {task.is_all_day
+                                  ? 'All day'
+                                  : task.scheduled_start
+                                    ? (() => {
+                                        const { hour, minute } = getItemHourInTimeZone(
+                                          task.scheduled_start,
+                                          userTimeZone
+                                        );
+                                        return formatTime12h(hour, minute);
+                                      })()
+                                    : task.due_date
+                                      ? (() => {
+                                          const { hour, minute } = getItemHourInTimeZone(
+                                            task.due_date,
+                                            userTimeZone
+                                          );
+                                          return `Due ${formatTime12h(hour, minute)}`;
+                                        })()
+                                      : ''}
+                              </p>
+                            )}
+                          </button>
+                        );
+                      })}
+
+                      {assignedContentForView.map((item) => {
+                        const colorToken = resolveCalendarItemColor('content', item, itemColorMap);
+                        return (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => setSelectedItem(item)}
+                            data-testid={`assigned-content-${item.id}`}
+                            data-cal-color={colorToken.name}
+                            className={`w-full text-left p-3.5 rounded-2xl border border-l-4 transition-all space-y-1.5 group focus:outline-none focus:ring-2 focus:ring-[var(--text-primary)] ${colorToken.colorClass} cal-card-surface`}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+                                <span
+                                  className="w-2 h-2 rounded-full shrink-0 cal-swatch-dot"
+                                  aria-hidden="true"
+                                />
+                                <Share2 className="w-3 h-3 shrink-0" />
+                                <span>{item.platform}</span>
+                              </span>
+                              {item.scheduled_at && (
+                                <span className="text-[11px] font-mono text-[var(--text-secondary)]">
+                                  {(() => {
+                                    const { hour, minute } = getItemHourInTimeZone(
+                                      item.scheduled_at,
+                                      userTimeZone
+                                    );
+                                    return formatTime12h(hour, minute);
+                                  })()}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs sm:text-sm font-semibold text-[var(--text-primary)] leading-snug line-clamp-2 break-words group-hover:underline">
+                              {item.title || item.body || 'Untitled post'}
+                            </p>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </section>
             )}
 
-            <div>
-              <label htmlFor="slot-picker-time" className="block text-xs font-medium text-neutral-300 mb-1">
-                Schedule Time {pendingSlotHour === null ? <span className="text-amber-400 font-normal">(Please choose a time)</span> : ''}
+            {/* Full-Width Week / Month Grid (Never squeezed by a side panel) */}
+            <div className="w-full min-w-0">
+              {viewMode === 'week' && (
+                <CalendarWeekView
+                  weekDays={currentWeekRange.days}
+                  items={calendarContentForView}
+                  tasks={calendarTasksForView}
+                  userTimeZone={userTimeZone}
+                  itemColorMap={itemColorMap}
+                  onOpenDetail={(item) => setSelectedItem(item)}
+                  onOpenTaskDetail={handleOpenTaskDetail}
+                  onSelectDay={handleSelectDate}
+                  onScheduleOnDate={handleScheduleOnDate}
+                />
+              )}
+              {viewMode === 'month' && (
+                <CalendarMonthView
+                  monthGrid={currentMonthGrid}
+                  items={calendarContentForView}
+                  tasks={calendarTasksForView}
+                  userTimeZone={userTimeZone}
+                  itemColorMap={itemColorMap}
+                  onOpenDetail={(item) => setSelectedItem(item)}
+                  onOpenTaskDetail={handleOpenTaskDetail}
+                  onSelectDate={handleSelectDate}
+                  onScheduleOnDate={handleScheduleOnDate}
+                />
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Unscheduled Backlog Slide-Over Drawer */}
+      <UnscheduledContentDrawer
+        items={unscheduledItems}
+        isOpen={isUnscheduledDrawerOpen}
+        itemColorMap={itemColorMap}
+        onClose={() => setIsUnscheduledDrawerOpen(false)}
+        onScheduleItem={handleScheduleFromDrawer}
+        onOpenDetail={(item) => setSelectedItem(item)}
+      />
+
+      {/* Slot Type Picker Modal (When clicking a calendar slot/date) */}
+      {slotPickerContext && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 dark:bg-black/75 backdrop-blur-xs p-4"
+          onClick={closeSlotPicker}
+          data-testid="calendar-slot-picker-backdrop"
+        >
+          <div
+            ref={slotPickerDialogRef}
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="slot-picker-title"
+            tabIndex={-1}
+            data-testid="calendar-slot-picker-modal"
+            className="w-full max-w-md surface-elevated bg-[var(--bg-surface-elevated)] border border-[var(--border-strong)] text-[var(--text-primary)] rounded-3xl p-6 space-y-5 shadow-[var(--shadow-elevated)] focus:outline-none"
+          >
+            <div className="flex items-start justify-between gap-3 pb-4 border-b border-[var(--border-subtle)]">
+              <div className="space-y-1 min-w-0">
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-tertiary)]">
+                  <Clock className="w-3 h-3 text-[var(--text-secondary)] shrink-0" />
+                  <span>Time Block</span>
+                </span>
+                <h3
+                  id="slot-picker-title"
+                  className="heading-section text-lg sm:text-xl text-[var(--text-primary)]"
+                >
+                  Schedule on Calendar
+                </h3>
+                <p className="text-xs text-[var(--text-secondary)] break-words">
+                  Target slot:{' '}
+                  <span className="font-mono font-semibold text-[var(--text-primary)]">
+                    {slotPickerContext.label}
+                  </span>{' '}
+                  <span className="text-[var(--text-tertiary)]">({userTimeZone})</span>
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeSlotPicker}
+                aria-label="Close slot picker"
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-muted)] transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-2.5 p-4 rounded-2xl bg-[var(--bg-surface-muted)] border border-[var(--border-subtle)]">
+              <label
+                htmlFor="slot-picker-time"
+                className="block text-xs font-semibold text-[var(--text-primary)]"
+              >
+                Scheduled Time ({userTimeZone}){' '}
+                <span className="text-[var(--status-danger-text)]">*</span>
               </label>
-              <input
-                id="slot-picker-time"
-                type="time"
-                value={pendingSlotTime}
-                onChange={(e) => {
-                  setPendingSlotTime(e.target.value);
-                  setSlotPickerError(null);
-                }}
-                className="w-full px-3 py-1.5 text-xs rounded-lg border border-neutral-700 bg-neutral-800 text-neutral-200 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
-              />
+
+              <div className="relative flex items-center">
+                <Clock className="w-4 h-4 text-[var(--text-secondary)] absolute left-3.5 pointer-events-none" />
+                <input
+                  id="slot-picker-time"
+                  type="time"
+                  value={pendingSlotTime}
+                  onChange={(e) => {
+                    setPendingSlotTime(e.target.value);
+                    if (slotTimeError) setSlotTimeError(null);
+                  }}
+                  data-testid="slot-picker-time-input"
+                  className="w-full pl-10 pr-3.5 py-2.5 bg-[var(--bg-surface)] border border-[var(--border-strong)] rounded-xl text-sm font-mono font-semibold text-[var(--text-primary)] shadow-2xs focus:outline-none focus:ring-2 focus:ring-[var(--text-primary)] transition-colors"
+                />
+              </div>
+
+              {/* Quick Time Presets */}
+              <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                {[
+                  { time: '09:00', label: '9:00 AM' },
+                  { time: '12:00', label: '12:00 PM' },
+                  { time: '15:00', label: '3:00 PM' },
+                  { time: '18:00', label: '6:00 PM' },
+                ].map((preset) => {
+                  const isActive = pendingSlotTime === preset.time;
+                  return (
+                    <button
+                      key={preset.time}
+                      type="button"
+                      onClick={() => {
+                        setPendingSlotTime(preset.time);
+                        if (slotTimeError) setSlotTimeError(null);
+                      }}
+                      className={`px-2.5 py-1 rounded-full text-[11px] font-mono font-semibold border transition-colors ${
+                        isActive
+                          ? 'bg-[var(--accent)] text-[var(--accent-ink)] border-[var(--accent)] shadow-2xs'
+                          : 'bg-[var(--bg-surface)] text-[var(--text-secondary)] border-[var(--border-subtle)] hover:text-[var(--text-primary)] hover:border-[var(--border-strong)]'
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {slotTimeError && (
+                <p role="alert" className="text-xs font-medium text-[var(--status-danger-text)]">
+                  {slotTimeError}
+                </p>
+              )}
             </div>
 
-            <div className="grid grid-cols-2 gap-3 pt-2">
-              <button
-                type="button"
-                onClick={handleStartScheduleContentFromSlot}
-                className="p-3.5 rounded-xl border border-blue-500/30 bg-blue-500/10 hover:bg-blue-500/20 text-blue-300 text-xs font-semibold flex flex-col items-center gap-2 transition-all hover:scale-[1.02]"
-              >
-                <Share2 className="w-5 h-5 text-blue-400" />
-                <span>Schedule Content</span>
-              </button>
+            <div className="space-y-2">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--text-tertiary)]">
+                Choose what to schedule
+              </p>
 
-              <button
-                type="button"
-                onClick={handleStartScheduleTaskFromSlot}
-                className="p-3.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 text-xs font-semibold flex flex-col items-center gap-2 transition-all hover:scale-[1.02]"
-              >
-                <CheckSquare className="w-5 h-5 text-emerald-400" />
-                <span>Schedule Task</span>
-              </button>
-            </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={handleChooseSlotTask}
+                  data-testid="slot-picker-task-btn"
+                  className="flex flex-col items-start gap-2.5 p-4 rounded-2xl bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-muted)] border border-[var(--border-strong)] hover:border-[var(--text-primary)] shadow-2xs transition-all text-left group focus:outline-none focus:ring-2 focus:ring-[var(--text-primary)]"
+                >
+                  <div className="p-2.5 rounded-xl bg-[var(--bg-surface-muted)] border border-[var(--border-subtle)] text-[var(--text-primary)] group-hover:bg-[var(--accent)] group-hover:text-[var(--accent-ink)] group-hover:border-transparent transition-colors">
+                    <CheckSquare className="w-5 h-5" />
+                  </div>
+                  <div className="space-y-0.5">
+                    <div className="text-sm font-semibold text-[var(--text-primary)]">
+                      Schedule Task
+                    </div>
+                    <div className="text-xs text-[var(--text-secondary)] leading-snug">
+                      Block focus time for an action item
+                    </div>
+                  </div>
+                </button>
 
-            <div className="pt-2 text-right">
-              <button
-                type="button"
-                onClick={() => setIsSlotPickerOpen(false)}
-                className="text-xs text-neutral-400 hover:text-white px-3 py-1.5 rounded-lg transition-colors"
-              >
-                Cancel
-              </button>
+                <button
+                  type="button"
+                  onClick={handleChooseSlotContent}
+                  data-testid="slot-picker-content-btn"
+                  className="flex flex-col items-start gap-2.5 p-4 rounded-2xl bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-muted)] border border-[var(--border-strong)] hover:border-[var(--text-primary)] shadow-2xs transition-all text-left group focus:outline-none focus:ring-2 focus:ring-[var(--text-primary)]"
+                >
+                  <div className="p-2.5 rounded-xl bg-[var(--bg-surface-muted)] border border-[var(--border-subtle)] text-[var(--text-primary)] group-hover:bg-[var(--accent)] group-hover:text-[var(--accent-ink)] group-hover:border-transparent transition-colors">
+                    <Share2 className="w-5 h-5" />
+                  </div>
+                  <div className="space-y-0.5">
+                    <div className="text-sm font-semibold text-[var(--text-primary)]">
+                      Schedule Content
+                    </div>
+                    <div className="text-xs text-[var(--text-secondary)] leading-snug">
+                      Plan a social post, thread, or reply
+                    </div>
+                  </div>
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Content Detail & Edit Modal */}
-      {selectedContent && (
+      {/* Create Content Modal */}
+      <CreateContentModal
+        workspaceId={workspaceId}
+        socialAccounts={socialAccounts}
+        projects={projects}
+        userTimeZone={userTimeZone}
+        defaultStatus={createDefaultStatus}
+        initialScheduledAt={createInitialScheduledAt}
+        createdFrom="calendar"
+        isOpen={isCreateModalOpen}
+        onClose={() => {
+          setIsCreateModalOpen(false);
+          setCreateInitialScheduledAt(null);
+        }}
+        onContentCreated={handleContentCreated}
+      />
+
+      {/* Create Task Modal */}
+      <CreateTaskModal
+        workspaceId={workspaceId}
+        projects={projects}
+        userTimeZone={userTimeZone}
+        initialScheduledStart={createTaskInitialStart}
+        initialScheduledEnd={createTaskInitialEnd}
+        createdFrom="calendar"
+        isOpen={isCreateTaskModalOpen}
+        onClose={() => {
+          setIsCreateTaskModalOpen(false);
+          setCreateTaskInitialStart(null);
+          setCreateTaskInitialEnd(null);
+        }}
+        onTaskCreated={handleTaskCreated}
+      />
+
+      {/* Content Detail & Rescheduling Modal */}
+      {selectedItem && (
         <ContentDetailModal
-          item={selectedContent}
+          item={selectedItem}
           workspaceId={workspaceId}
-          isOpen={isContentDetailOpen}
-          onClose={() => {
-            setIsContentDetailOpen(false);
-            setSelectedContent(null);
-          }}
+          socialAccounts={socialAccounts}
+          projects={projects}
+          userTimeZone={userTimeZone}
+          isOpen={Boolean(selectedItem)}
+          onClose={() => setSelectedItem(null)}
           onContentUpdated={handleContentUpdated}
           onContentDeleted={handleContentDeleted}
-          socialAccounts={socialAccounts}
-          projects={projects}
-          userTimeZone={userTimeZone}
-        />
-      )}
-
-      {/* Content Creation Modal */}
-      {isCreateContentOpen && (
-        <CreateContentModal
-          createdFrom="calendar"
-          workspaceId={workspaceId}
-          isOpen={isCreateContentOpen}
-          onClose={() => {
-            setIsCreateContentOpen(false);
-            setCreateContentInitialScheduledAt(null);
-          }}
-          onContentCreated={handleContentCreated}
-          defaultStatus={createContentDefaultStatus}
-          initialScheduledAt={createContentInitialScheduledAt}
-          userTimeZone={userTimeZone}
-          socialAccounts={socialAccounts}
-          projects={projects}
-        />
-      )}
-
-      {/* Task Creation Modal */}
-      {isCreateTaskOpen && (
-        <CreateTaskModal
-          createdFrom="calendar"
-          workspaceId={workspaceId}
-          projects={projects}
-          isOpen={isCreateTaskOpen}
-          onClose={() => {
-            setIsCreateTaskOpen(false);
-            setCreateTaskInitialStart(null);
-            setCreateTaskInitialEnd(null);
-          }}
-          onTaskCreated={handleTaskCreated}
-          initialScheduledStart={createTaskInitialStart}
-          initialScheduledEnd={createTaskInitialEnd}
-          userTimeZone={userTimeZone}
         />
       )}
 
       {/* Task Detail Modal */}
-      {selectedTaskDetail && (
+      {selectedTask && (
         <TaskDetailModal
-          task={selectedTaskDetail}
-          allTasks={scheduledTasks}
+          task={selectedTask}
           workspaceId={workspaceId}
-          isOpen={isTaskDetailOpen}
-          onClose={() => {
-            setIsTaskDetailOpen(false);
-            setSelectedTaskDetail(null);
-          }}
+          allTasks={scheduledTasks}
+          isOpen={Boolean(selectedTask)}
+          onClose={() => setSelectedTask(null)}
           onTaskUpdated={handleTaskUpdated}
+          onOpenTask={handleOpenTaskDetail}
         />
       )}
     </div>

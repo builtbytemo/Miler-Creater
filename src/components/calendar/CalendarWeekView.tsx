@@ -1,429 +1,448 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
-  Calendar as CalendarIcon,
+  AtSign,
+  CheckCircle2,
+  CheckSquare,
+  ChevronDown,
+  ChevronUp,
   Clock,
   Plus,
-  ChevronRight,
-  AlertCircle,
-  Tag,
-  AtSign,
-  CheckSquare,
   Share2,
-  Folder,
 } from 'lucide-react';
 import type { ContentItemWithMeta } from '@/lib/services/content-service';
 import type { TaskWithMeta } from '@/lib/services/task-service';
-import type { WeekRange, CalendarDayInfo } from '@/lib/temporal/calendar';
-import { getCalendarDateKey } from '@/lib/temporal/calendar';
-import { formatInTimeZone, DEFAULT_TIMEZONE } from '@/lib/temporal/timezone';
-import { PLATFORM_CONFIG, STATUS_CONFIG, ACTION_CONFIG } from '@/components/content/ContentCard';
-import clsx from 'clsx';
+import { getCalendarDateKey, type CalendarDayInfo } from '@/lib/temporal/calendar';
+import { formatInTimeZone } from '@/lib/temporal/timezone';
+import { ACTION_CONFIG } from '@/components/content/ContentCard';
+import {
+  buildCalendarItemColorMap,
+  resolveCalendarItemColor,
+  type CalendarItemColorMap,
+} from '@/lib/calendar/item-colors';
+import type { TaskPriority, SocialPlatform } from '@/types/database';
 
 interface CalendarWeekViewProps {
-  weekRange: WeekRange;
+  weekDays: CalendarDayInfo[];
   items: ContentItemWithMeta[];
-  taskItems?: TaskWithMeta[];
-  userTimeZone?: string;
-  onSelectItem: (item: ContentItemWithMeta) => void;
-  onSelectTask?: (task: TaskWithMeta) => void;
-  onNewForDay?: (dateKey: string) => void;
-  onSelectDay?: (dateKey: string) => void;
-  isLoading?: boolean;
+  tasks?: TaskWithMeta[];
+  userTimeZone: string;
+  itemColorMap?: CalendarItemColorMap;
+  onOpenDetail: (item: ContentItemWithMeta) => void;
+  onOpenTaskDetail?: (task: TaskWithMeta) => void;
+  onSelectDay?: (date: Date) => void;
+  onScheduleOnDate?: (dateKey: string) => void;
 }
 
-const TASK_PRIORITY_STYLES: Record<string, string> = {
-  urgent: 'bg-red-500/20 text-red-300 border-red-500/40',
-  high: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
-  medium: 'bg-blue-500/20 text-blue-300 border-blue-500/40',
-  low: 'bg-neutral-800 text-neutral-400 border-neutral-700',
+const VISIBLE_ITEMS_PER_DAY = 4;
+
+const SHORT_MONTHS = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+];
+
+const PRIORITY_BADGE_MAP: Record<TaskPriority, { label: string; badgeClass: string }> = {
+  urgent: { label: 'Urgent', badgeClass: 'badge-danger' },
+  high: { label: 'High', badgeClass: 'badge-warning' },
+  medium: { label: 'Med', badgeClass: 'badge-info' },
+  low: { label: 'Low', badgeClass: 'badge-neutral' },
 };
 
-const TASK_STATUS_STYLES: Record<string, string> = {
-  todo: 'text-neutral-400 bg-neutral-800/80 border-neutral-700',
-  in_progress: 'text-blue-300 bg-blue-500/10 border-blue-500/30',
-  blocked: 'text-red-300 bg-red-500/10 border-red-500/30',
-  done: 'text-emerald-300 bg-emerald-500/10 border-emerald-500/30 line-through opacity-70',
-  cancelled: 'text-neutral-500 bg-neutral-900 border-neutral-800 line-through opacity-50',
+const PLATFORM_SHORT_MAP: Record<SocialPlatform, { label: string; badgeClass: string }> = {
+  x: {
+    label: 'X',
+    badgeClass: 'bg-[var(--bg-elevated)] text-[var(--text-primary)] border-[var(--border-strong)]',
+  },
+  linkedin: {
+    label: 'LinkedIn',
+    badgeClass: 'badge-info',
+  },
+  reddit: {
+    label: 'Reddit',
+    badgeClass: 'badge-warning',
+  },
+  threads: {
+    label: 'Threads',
+    badgeClass: 'badge-neutral',
+  },
 };
 
 export function CalendarWeekView({
-  weekRange,
+  weekDays,
   items,
-  taskItems = [],
-  userTimeZone = DEFAULT_TIMEZONE,
-  onSelectItem,
-  onSelectTask,
-  onNewForDay,
+  tasks = [],
+  userTimeZone,
+  itemColorMap,
+  onOpenDetail,
+  onOpenTaskDetail,
   onSelectDay,
-  isLoading = false,
+  onScheduleOnDate,
 }: CalendarWeekViewProps) {
-  // Mobile day selection: defaults to today's dateKey if in the active week, or 'all'
-  const todayKey = getCalendarDateKey(new Date(), userTimeZone);
-  const [mobileSelectedKey, setMobileSelectedKey] = useState<string>('all');
+  const [expandedDayKeys, setExpandedDayKeys] = useState<Record<string, boolean>>({});
 
-  // Bucket content items by local dateKey in the user's timezone
-  const contentByDateKey: Record<string, ContentItemWithMeta[]> = {};
-  const tasksByDateKey: Record<string, TaskWithMeta[]> = {};
+  const todayDateKey = useMemo(
+    () => getCalendarDateKey(new Date(), userTimeZone),
+    [userTimeZone]
+  );
 
-  for (const day of weekRange.days) {
-    contentByDateKey[day.dateKey] = [];
-    tasksByDateKey[day.dateKey] = [];
-  }
+  const resolvedColorMap = useMemo(
+    () => itemColorMap || buildCalendarItemColorMap(tasks, items, userTimeZone),
+    [itemColorMap, tasks, items, userTimeZone]
+  );
 
-  for (const item of items) {
-    if (!item.scheduled_at) continue;
-    const dateKey = getCalendarDateKey(item.scheduled_at, userTimeZone);
-    if (contentByDateKey[dateKey]) {
-      contentByDateKey[dateKey].push(item);
+  // Group scheduled items by their local YYYY-MM-DD dateKey in the user's timezone
+  const itemsByDateKey = useMemo(() => {
+    const map: Record<string, ContentItemWithMeta[]> = {};
+    for (const day of weekDays) {
+      map[day.dateKey] = [];
     }
-  }
 
-  for (const task of taskItems) {
-    if (!task.scheduled_start) continue;
-    const dateKey = getCalendarDateKey(task.scheduled_start, userTimeZone);
-    if (tasksByDateKey[dateKey]) {
-      tasksByDateKey[dateKey].push(task);
+    for (const item of items) {
+      if (!item.scheduled_at) continue;
+      const key = getCalendarDateKey(item.scheduled_at, userTimeZone);
+      if (map[key]) {
+        map[key].push(item);
+      }
     }
-  }
 
-  // Sort each day's items chronologically by UTC timestamp
-  for (const dateKey of Object.keys(contentByDateKey)) {
-    contentByDateKey[dateKey].sort((a, b) => {
-      const timeA = a.scheduled_at ? new Date(a.scheduled_at).getTime() : 0;
-      const timeB = b.scheduled_at ? new Date(b.scheduled_at).getTime() : 0;
-      return timeA - timeB;
-    });
+    for (const key of Object.keys(map)) {
+      map[key].sort((a, b) => {
+        const timeA = a.scheduled_at ? new Date(a.scheduled_at).getTime() : 0;
+        const timeB = b.scheduled_at ? new Date(b.scheduled_at).getTime() : 0;
+        return timeA - timeB;
+      });
+    }
 
-    tasksByDateKey[dateKey].sort((a, b) => {
-      const timeA = a.scheduled_start ? new Date(a.scheduled_start).getTime() : 0;
-      const timeB = b.scheduled_start ? new Date(b.scheduled_start).getTime() : 0;
-      return timeA - timeB;
-    });
-  }
+    return map;
+  }, [weekDays, items, userTimeZone]);
 
-  // Determine which days to display on mobile
-  const daysToDisplay =
-    mobileSelectedKey === 'all'
-      ? weekRange.days
-      : weekRange.days.filter((d) => d.dateKey === mobileSelectedKey);
+  // Group scheduled tasks by their local YYYY-MM-DD dateKey in the user's timezone
+  const tasksByDateKey = useMemo(() => {
+    const map: Record<string, TaskWithMeta[]> = {};
+    for (const day of weekDays) {
+      map[day.dateKey] = [];
+    }
+
+    for (const task of tasks) {
+      if (!task.scheduled_start) continue;
+      const key = getCalendarDateKey(task.scheduled_start, userTimeZone);
+      if (map[key]) {
+        map[key].push(task);
+      }
+    }
+
+    for (const key of Object.keys(map)) {
+      map[key].sort((a, b) => {
+        if (a.is_all_day && !b.is_all_day) return -1;
+        if (!a.is_all_day && b.is_all_day) return 1;
+        const timeA = a.scheduled_start ? new Date(a.scheduled_start).getTime() : 0;
+        const timeB = b.scheduled_start ? new Date(b.scheduled_start).getTime() : 0;
+        return timeA - timeB;
+      });
+    }
+
+    return map;
+  }, [weekDays, tasks, userTimeZone]);
+
+  const toggleExpandDay = (dateKey: string) => {
+    setExpandedDayKeys((prev) => ({
+      ...prev,
+      [dateKey]: !prev[dateKey],
+    }));
+  };
 
   return (
-    <div className="space-y-4">
-      {/* Mobile Day Selector Tabs */}
-      <div className="flex md:hidden items-center gap-1.5 overflow-x-auto pb-2 scrollbar-none text-xs">
-        <button
-          type="button"
-          onClick={() => setMobileSelectedKey('all')}
-          className={clsx(
-            'px-3 py-1.5 rounded-lg font-medium whitespace-nowrap transition-colors shrink-0',
-            mobileSelectedKey === 'all'
-              ? 'bg-blue-600 text-white'
-              : 'bg-neutral-800 text-neutral-400 hover:text-neutral-200'
-          )}
-        >
-          All 7 Days
-        </button>
+    <div
+      className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-px rounded-2xl bg-[var(--border-subtle)] border border-[var(--border-subtle)] overflow-hidden shadow-xs"
+      data-testid="calendar-week-grid"
+    >
+      {weekDays.map((day) => {
+        const dayItems = itemsByDateKey[day.dateKey] || [];
+        const dayTasks = tasksByDateKey[day.dateKey] || [];
+        const totalCount = dayItems.length + dayTasks.length;
+        const isToday = day.dateKey === todayDateKey;
+        const monthShort = SHORT_MONTHS[day.month - 1] || '';
+        const isExpanded = Boolean(expandedDayKeys[day.dateKey]);
 
-        {weekRange.days.map((day) => {
-          const isSelected = mobileSelectedKey === day.dateKey;
-          const count =
-            (contentByDateKey[day.dateKey]?.length || 0) +
-            (tasksByDateKey[day.dateKey]?.length || 0);
+        type CombinedEntry =
+          | { kind: 'task'; task: TaskWithMeta }
+          | { kind: 'content'; item: ContentItemWithMeta };
 
-          return (
-            <button
-              key={day.dateKey}
-              type="button"
-              onClick={() => setMobileSelectedKey(day.dateKey)}
-              className={clsx(
-                'px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 whitespace-nowrap transition-colors shrink-0 font-mono text-[11px]',
-                isSelected
-                  ? 'bg-blue-600 text-white font-semibold'
-                  : 'bg-neutral-900 border border-neutral-800 text-neutral-300 hover:border-neutral-700'
-              )}
-            >
-              <span>{day.weekdayName}</span>
-              <span>{day.day}</span>
-              {count > 0 && (
-                <span
-                  className={clsx(
-                    'px-1.5 py-0.2 rounded-full text-[10px]',
-                    isSelected ? 'bg-blue-800 text-white' : 'bg-neutral-800 text-neutral-300'
-                  )}
-                >
-                  {count}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
+        const combinedEntries: CombinedEntry[] = [
+          ...dayTasks.map((task): CombinedEntry => ({ kind: 'task', task })),
+          ...dayItems.map((item): CombinedEntry => ({ kind: 'content', item })),
+        ];
 
-      {/* Loading Overlay */}
-      {isLoading && (
-        <div className="flex items-center justify-center p-3 rounded-lg bg-blue-500/10 border border-blue-500/20 text-xs text-blue-400">
-          <Clock className="w-4 h-4 mr-2 animate-spin" />
-          <span>Loading scheduled content for {weekRange.label}...</span>
-        </div>
-      )}
+        const visibleEntries = isExpanded
+          ? combinedEntries
+          : combinedEntries.slice(0, VISIBLE_ITEMS_PER_DAY);
+        const hiddenCount =
+          combinedEntries.length > VISIBLE_ITEMS_PER_DAY
+            ? combinedEntries.length - VISIBLE_ITEMS_PER_DAY
+            : 0;
 
-      {/* Desktop 7-Column Grid / Mobile Filtered Column List */}
-      <div className="grid grid-cols-1 md:grid-cols-7 gap-3">
-        {daysToDisplay.map((day) => {
-          const dayContent = contentByDateKey[day.dateKey] || [];
-          const dayTasks = tasksByDateKey[day.dateKey] || [];
-          const totalDayCount = dayContent.length + dayTasks.length;
-          const isToday = day.dateKey === todayKey;
-
-          return (
+        return (
+          <div
+            key={day.dateKey}
+            data-testid={`week-day-column-${day.dateKey}`}
+            className={`flex flex-col min-h-[260px] xl:min-h-[420px] min-w-0 transition-colors ${
+              isToday ? 'bg-[var(--bg-surface)]' : 'bg-[var(--bg-surface)]/95'
+            }`}
+          >
+            {/* Uncluttered Day Column Header — No redundant date repetition */}
             <div
-              key={day.dateKey}
-              data-testid={`calendar-day-${day.dateKey}`}
-              className={clsx(
-                'flex flex-col rounded-xl border bg-neutral-950/80 transition-colors min-h-[240px]',
+              className={`px-3 py-2.5 border-b flex items-center justify-between gap-2 ${
                 isToday
-                  ? 'border-blue-500/50 shadow-sm shadow-blue-500/5'
-                  : 'border-neutral-800 hover:border-neutral-700'
-              )}
+                  ? 'bg-[var(--accent-subtle)]/70 border-[var(--border-default)]'
+                  : 'bg-[var(--bg-subtle)]/55 border-[var(--border-subtle)]'
+              }`}
             >
-              {/* Day Header */}
-              <div
-                className={clsx(
-                  'px-3 py-2.5 border-b flex items-center justify-between',
-                  isToday
-                    ? 'border-blue-500/30 bg-blue-500/5 text-blue-300'
-                    : 'border-neutral-800 text-neutral-300'
-                )}
+              <button
+                type="button"
+                onClick={() => onSelectDay?.(day.startOfDay)}
+                data-testid={`week-day-header-${day.dateKey}`}
+                className="inline-flex items-center gap-1.5 text-left group focus:outline-none focus:ring-2 focus:ring-[var(--text-primary)] rounded-full pr-1 min-w-0"
+                title={`Open Day view for ${day.weekdayName}, ${monthShort} ${day.day}`}
               >
-                <div
-                  className="flex items-center gap-1.5 cursor-pointer hover:opacity-80 transition-opacity"
-                  onClick={() => onSelectDay?.(day.dateKey)}
-                  title={`View ${day.weekdayName}, ${day.day} in Day timeline`}
+                <span
+                  className={`text-[11px] font-bold uppercase tracking-wider ${
+                    isToday ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'
+                  }`}
                 >
-                  <span className="text-xs font-semibold uppercase tracking-wider">
-                    {day.weekdayName}
-                  </span>
+                  {day.weekdayName}
+                </span>
+                <span
+                  className={`inline-flex items-center justify-center min-w-[24px] h-6 px-1.5 rounded-full text-xs font-bold transition-transform group-hover:scale-105 shrink-0 ${
+                    isToday
+                      ? 'bg-[var(--accent)] text-[var(--accent-ink)] shadow-2xs'
+                      : 'bg-[var(--bg-surface)] text-[var(--text-primary)] border border-[var(--border-subtle)] group-hover:border-[var(--border-strong)]'
+                  }`}
+                >
+                  {day.day === 1 ? `${monthShort} 1` : day.day}
+                </span>
+              </button>
+
+              <div className="flex items-center gap-1 shrink-0">
+                {totalCount > 0 && (
                   <span
-                    className={clsx(
-                      'text-xs font-bold font-mono px-1.5 py-0.5 rounded',
-                      isToday ? 'bg-blue-600 text-white' : 'text-neutral-400'
-                    )}
+                    className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded-full bg-[var(--bg-surface)] text-[var(--text-secondary)] border border-[var(--border-subtle)]"
+                    title={`${totalCount} scheduled ${totalCount === 1 ? 'item' : 'items'}`}
                   >
-                    {day.day}
+                    {totalCount}
                   </span>
-                </div>
-
-                <div className="flex items-center gap-1">
-                  {onNewForDay && (
-                    <button
-                      type="button"
-                      onClick={() => onNewForDay(day.dateKey)}
-                      className="p-1 rounded text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors"
-                      title={`Schedule for ${day.weekdayName} ${day.day}`}
-                      data-testid={`week-schedule-${day.dateKey}`}
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                  {isToday && (
-                    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">
-                      Today
-                    </span>
-                  )}
-                  {totalDayCount > 0 && (
-                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-400">
-                      {totalDayCount}
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* Day Items List (Content + Tasks) */}
-              <div className="flex-1 p-2 space-y-2 overflow-y-auto max-h-[520px]">
-                {totalDayCount === 0 ? (
-                  <div className="h-full flex flex-col items-center justify-center p-4 text-center">
-                    <p className="text-[11px] text-neutral-600 dark:text-neutral-500">
-                      No planned items
-                    </p>
-                    {onNewForDay && (
-                      <button
-                        type="button"
-                        onClick={() => onNewForDay(day.dateKey)}
-                        className="mt-2 text-[10px] text-neutral-500 hover:text-neutral-300 inline-flex items-center gap-1 px-2 py-1 rounded bg-neutral-900 border border-neutral-800 transition-colors"
-                        title={`Plan items for ${day.weekdayName} ${day.day}`}
-                      >
-                        <Plus className="w-3 h-3" />
-                        <span>Schedule</span>
-                      </button>
-                    )}
-                  </div>
-                ) : (
-                  <>
-                    {/* Content Items */}
-                    {dayContent.map((item) => {
-                      const platformInfo = PLATFORM_CONFIG[item.platform];
-                      const statusInfo = STATUS_CONFIG[item.status];
-                      const actionInfo = ACTION_CONFIG[item.action_type];
-
-                      const displayTime = item.scheduled_at
-                        ? formatInTimeZone(item.scheduled_at, userTimeZone, {
-                            hour: 'numeric',
-                            minute: '2-digit',
-                            hour12: true,
-                          })
-                        : '';
-
-                      return (
-                        <div
-                          key={item.id}
-                          role="button"
-                          tabIndex={0}
-                          onClick={() => onSelectItem(item)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              e.preventDefault();
-                              onSelectItem(item);
-                            }
-                          }}
-                          data-testid={`calendar-item-${item.id}`}
-                          className={clsx(
-                            'p-2.5 rounded-lg border bg-neutral-900/90 text-left cursor-pointer transition-all',
-                            'hover:border-neutral-600 hover:bg-neutral-900 hover:shadow-md',
-                            'focus:outline-none focus:ring-1 focus:ring-blue-500',
-                            platformInfo?.borderClass || 'border-neutral-800'
-                          )}
-                        >
-                          {/* Time & Platform Header */}
-                          <div className="flex items-center justify-between gap-1 mb-1.5">
-                            <span className="text-[11px] font-mono font-medium text-blue-400 flex items-center gap-1">
-                              <Clock className="w-3 h-3 text-blue-400 shrink-0" />
-                              {displayTime}
-                            </span>
-
-                            <span
-                              className={clsx(
-                                'px-1.5 py-0.5 rounded text-[10px] font-medium border truncate max-w-[80px]',
-                                platformInfo?.badgeClass || 'bg-neutral-800 text-neutral-300'
-                              )}
-                            >
-                              {platformInfo?.label.split(' ')[0] || item.platform}
-                            </span>
-                          </div>
-
-                          {/* Title or Body Preview */}
-                          <p className="text-xs font-semibold text-neutral-200 line-clamp-2 leading-snug mb-2">
-                            {item.title || item.body || 'Untitled Content'}
-                          </p>
-
-                          {/* Metadata Badges Footer */}
-                          <div className="flex flex-wrap items-center gap-1 text-[10px]">
-                            <span className="px-1.5 py-0.2 rounded bg-neutral-800 text-neutral-400 font-mono">
-                              {actionInfo?.label || item.action_type}
-                            </span>
-
-                            <span
-                              className={clsx(
-                                'px-1.5 py-0.2 rounded border font-mono',
-                                statusInfo?.badgeClass || 'bg-neutral-800 text-neutral-300'
-                              )}
-                            >
-                              {statusInfo?.label || item.status}
-                            </span>
-
-                            {item.social_account && (
-                              <span className="px-1.5 py-0.2 rounded bg-neutral-800/80 text-neutral-400 flex items-center gap-0.5 truncate max-w-[90px]">
-                                <AtSign className="w-2.5 h-2.5" />
-                                <span className="truncate">{item.social_account.account_handle}</span>
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-
-                    {/* Task Items */}
-                    {dayTasks.map((task) => {
-                      const displayTime = task.scheduled_start
-                        ? formatInTimeZone(task.scheduled_start, userTimeZone, {
-                            hour: 'numeric',
-                            minute: '2-digit',
-                            hour12: true,
-                          })
-                        : task.is_all_day
-                          ? 'All Day'
-                          : '';
-
-                      return (
-                        <div
-                          key={task.id}
-                          role="button"
-                          tabIndex={0}
-                          onClick={() => onSelectTask?.(task)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              e.preventDefault();
-                              onSelectTask?.(task);
-                            }
-                          }}
-                          data-testid={`calendar-task-${task.id}`}
-                          className={clsx(
-                            'p-2.5 rounded-lg border bg-neutral-900/90 text-left cursor-pointer transition-all',
-                            'hover:border-emerald-500/60 hover:bg-neutral-900 hover:shadow-md',
-                            'focus:outline-none focus:ring-1 focus:ring-emerald-500 border-neutral-800'
-                          )}
-                        >
-                          {/* Time & Task Header */}
-                          <div className="flex items-center justify-between gap-1 mb-1.5">
-                            <span className="text-[11px] font-mono font-medium text-emerald-400 flex items-center gap-1">
-                              <CheckSquare className="w-3 h-3 text-emerald-400 shrink-0" />
-                              {displayTime}
-                            </span>
-
-                            <span
-                              className={clsx(
-                                'px-1.5 py-0.5 rounded text-[10px] font-medium border capitalize',
-                                TASK_PRIORITY_STYLES[task.priority] || 'bg-neutral-800 text-neutral-400'
-                              )}
-                            >
-                              {task.priority}
-                            </span>
-                          </div>
-
-                          {/* Task Title */}
-                          <p className="text-xs font-semibold text-neutral-200 line-clamp-2 leading-snug mb-1.5">
-                            {task.title}
-                          </p>
-
-                          {/* Task Footer */}
-                          <div className="flex flex-wrap items-center gap-1 text-[10px] font-mono">
-                            <span
-                              className={clsx(
-                                'px-1.5 py-0.2 rounded border uppercase text-[9px]',
-                                TASK_STATUS_STYLES[task.status] || 'text-neutral-400'
-                              )}
-                            >
-                              {task.status.replace('_', ' ')}
-                            </span>
-
-                            {task.project && (
-                              <span className="px-1.5 py-0.2 rounded bg-neutral-800/80 text-neutral-300 flex items-center gap-1 truncate max-w-[90px]">
-                                <Folder className="w-2.5 h-2.5 text-neutral-400" />
-                                <span className="truncate">{task.project.name}</span>
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </>
+                )}
+                {onScheduleOnDate && (
+                  <button
+                    type="button"
+                    onClick={() => onScheduleOnDate(day.dateKey)}
+                    className="w-6 h-6 inline-flex items-center justify-center rounded-full text-[var(--text-secondary)] hover:text-[var(--accent-ink)] hover:bg-[var(--accent)] transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--text-primary)]"
+                    title={`Schedule on ${day.weekdayName}, ${monthShort} ${day.day}`}
+                    aria-label={`Schedule on ${day.weekdayName}, ${monthShort} ${day.day}`}
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </button>
                 )}
               </div>
             </div>
-          );
-        })}
-      </div>
+
+            {/* Day Items & Tasks Stack */}
+            <div className="flex-1 p-2.5 space-y-2">
+              {totalCount === 0 ? (
+                <div className="h-full min-h-[150px] flex flex-col items-center justify-center text-center p-3 rounded-xl border border-dashed border-[var(--border-subtle)]/80 bg-[var(--bg-subtle)]/20">
+                  <p className="text-[11px] text-[var(--text-tertiary)] mb-2">Open day</p>
+                  {onScheduleOnDate && (
+                    <button
+                      type="button"
+                      onClick={() => onScheduleOnDate(day.dateKey)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium text-[var(--text-secondary)] hover:text-[var(--accent-ink)] bg-[var(--bg-surface)] hover:bg-[var(--accent)] border border-[var(--border-subtle)] hover:border-transparent transition-colors"
+                    >
+                      <Plus className="w-3 h-3" />
+                      <span>Schedule</span>
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <>
+                  {visibleEntries.map((entry) => {
+                    if (entry.kind === 'task') {
+                      const { task } = entry;
+                      const colorToken = resolveCalendarItemColor('task', task, resolvedColorMap);
+                      const timeStr =
+                        !task.is_all_day && task.scheduled_start
+                          ? formatInTimeZone(task.scheduled_start, userTimeZone, {
+                              hour: 'numeric',
+                              minute: '2-digit',
+                              hour12: true,
+                            })
+                          : 'All day';
+
+                      const priorityInfo =
+                        PRIORITY_BADGE_MAP[task.priority] || PRIORITY_BADGE_MAP.medium;
+
+                      return (
+                        <button
+                          key={`task-${task.id}`}
+                          type="button"
+                          onClick={() => onOpenTaskDetail?.(task)}
+                          data-testid={`week-task-${task.id}`}
+                          data-cal-color={colorToken.name}
+                          title={task.title}
+                          className={`w-full text-left p-2.5 rounded-xl border border-l-3 transition-all space-y-1.5 group focus:outline-none focus:ring-2 focus:ring-[var(--text-primary)] ${colorToken.colorClass} cal-card-surface`}
+                        >
+                          <div className="flex items-center justify-between gap-1.5">
+                            <span className="inline-flex items-center gap-1 text-[10px] font-mono font-semibold text-[var(--text-secondary)] truncate">
+                              <span
+                                className="w-1.5 h-1.5 rounded-full shrink-0 cal-swatch-dot"
+                                aria-hidden="true"
+                              />
+                              <CheckSquare className="w-3 h-3 shrink-0 text-[var(--text-primary)]" />
+                              <span>{timeStr}</span>
+                            </span>
+                            <span
+                              className={`px-1.5 py-0 rounded-full text-[9px] font-semibold border shrink-0 ${priorityInfo.badgeClass}`}
+                            >
+                              {priorityInfo.label}
+                            </span>
+                          </div>
+
+                          <p
+                            className={`text-xs font-semibold leading-snug line-clamp-2 break-words ${
+                              task.status === 'done'
+                                ? 'line-through text-[var(--text-tertiary)]'
+                                : 'text-[var(--text-primary)] group-hover:underline'
+                            }`}
+                          >
+                            {task.title}
+                          </p>
+
+                          {(task.project || task.status === 'done') && (
+                            <div className="flex items-center justify-between gap-1 pt-1 border-t border-[var(--border-subtle)] text-[10px] text-[var(--text-tertiary)]">
+                              {task.project ? (
+                                <span className="inline-flex items-center gap-1 truncate">
+                                  <span
+                                    className="w-1.5 h-1.5 rounded-full shrink-0"
+                                    style={{ backgroundColor: task.project.color || '#E2F925' }}
+                                  />
+                                  <span className="truncate">{task.project.name}</span>
+                                </span>
+                              ) : (
+                                <span>Task</span>
+                              )}
+                              {task.status === 'done' && (
+                                <CheckCircle2 className="w-3 h-3 text-[var(--status-success-text)] shrink-0" />
+                              )}
+                            </div>
+                          )}
+                        </button>
+                      );
+                    }
+
+                    const { item } = entry;
+                    const colorToken = resolveCalendarItemColor('content', item, resolvedColorMap);
+                    const platformInfo = PLATFORM_SHORT_MAP[item.platform] || {
+                      label: item.platform,
+                      badgeClass: 'badge-neutral',
+                    };
+                    const actionInfo = ACTION_CONFIG[item.action_type] || {
+                      label: item.action_type,
+                    };
+
+                    const timeStr = item.scheduled_at
+                      ? formatInTimeZone(item.scheduled_at, userTimeZone, {
+                          hour: 'numeric',
+                          minute: '2-digit',
+                          hour12: true,
+                        })
+                      : '';
+
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => onOpenDetail(item)}
+                        data-testid={`week-content-${item.id}`}
+                        data-cal-color={colorToken.name}
+                        title={item.title || item.body || 'Untitled post'}
+                        className={`w-full text-left p-2.5 rounded-xl border border-l-3 transition-all space-y-1.5 group focus:outline-none focus:ring-2 focus:ring-[var(--text-primary)] ${colorToken.colorClass} cal-card-surface`}
+                      >
+                        {/* Top row: Time & Platform Badge */}
+                        <div className="flex items-center justify-between gap-1.5">
+                          <span className="inline-flex items-center gap-1 text-[10px] font-mono font-semibold text-[var(--text-secondary)] truncate">
+                            <span
+                              className="w-1.5 h-1.5 rounded-full shrink-0 cal-swatch-dot"
+                              aria-hidden="true"
+                            />
+                            <Clock className="w-2.5 h-2.5 shrink-0" />
+                            <span>{timeStr || 'Scheduled'}</span>
+                          </span>
+
+                          <span
+                            className={`inline-flex items-center gap-1 px-1.5 py-0.2 rounded-full text-[9px] font-semibold border shrink-0 ${platformInfo.badgeClass}`}
+                          >
+                            <Share2 className="w-2.5 h-2.5 shrink-0" />
+                            {platformInfo.label}
+                          </span>
+                        </div>
+
+                        {/* Title or Body Snippet */}
+                        <p className="text-xs font-semibold text-[var(--text-primary)] line-clamp-2 leading-snug break-words group-hover:underline">
+                          {item.title || item.body || 'Untitled post'}
+                        </p>
+
+                        {/* Bottom row: Action type & account */}
+                        <div className="flex items-center justify-between gap-1 pt-1 border-t border-[var(--border-subtle)] text-[10px] text-[var(--text-tertiary)]">
+                          <span>{actionInfo.label}</span>
+                          {item.social_account && (
+                            <span className="flex items-center gap-0.5 truncate max-w-[90px] font-mono">
+                              <AtSign className="w-2.5 h-2.5 shrink-0" />
+                              <span className="truncate">
+                                {item.social_account.account_handle.replace(/^@/, '')}
+                              </span>
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+
+                  {/* Accessible Overflow Control when a day has > 4 items */}
+                  {hiddenCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => toggleExpandDay(day.dateKey)}
+                      data-testid={`week-day-more-${day.dateKey}`}
+                      aria-expanded={isExpanded}
+                      className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl text-[11px] font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] bg-[var(--bg-subtle)]/70 hover:bg-[var(--bg-hover)] border border-[var(--border-subtle)] transition-colors"
+                    >
+                      <span>
+                        {isExpanded
+                          ? 'Show fewer'
+                          : `+${hiddenCount} more ${hiddenCount === 1 ? 'item' : 'items'}`}
+                      </span>
+                      {isExpanded ? (
+                        <ChevronUp className="w-3.5 h-3.5 shrink-0" />
+                      ) : (
+                        <ChevronDown className="w-3.5 h-3.5 shrink-0" />
+                      )}
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

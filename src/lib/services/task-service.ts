@@ -108,12 +108,25 @@ export async function getTasks(
     query = query.lte('due_date', filters.due_date_to);
   }
 
-  // Filter: Scheduled range
-  if (filters.scheduled_from) {
-    query = query.gte('scheduled_start', filters.scheduled_from);
-  }
-  if (filters.scheduled_to) {
-    query = query.lte('scheduled_start', filters.scheduled_to);
+  // Filter: Scheduled range (includes tasks whose due_date falls in range when querying for Calendar)
+  if (
+    filters.scheduled_from &&
+    filters.scheduled_to &&
+    !filters.due_date_from &&
+    !filters.due_date_to &&
+    filters.is_scheduled === undefined &&
+    typeof query.or === 'function'
+  ) {
+    query = query.or(
+      `and(scheduled_start.gte.${filters.scheduled_from},scheduled_start.lte.${filters.scheduled_to}),and(due_date.gte.${filters.scheduled_from},due_date.lte.${filters.scheduled_to})`
+    );
+  } else {
+    if (filters.scheduled_from) {
+      query = query.gte('scheduled_start', filters.scheduled_from);
+    }
+    if (filters.scheduled_to) {
+      query = query.lte('scheduled_start', filters.scheduled_to);
+    }
   }
   if (filters.is_scheduled === true) {
     query = query.not('scheduled_start', 'is', null);

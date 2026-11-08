@@ -1,286 +1,332 @@
 'use client';
 
-import { Calendar as CalendarIcon, Clock, Plus, AlertCircle, CheckSquare, Share2 } from 'lucide-react';
+import { useMemo } from 'react';
+import { CheckSquare, Plus, Share2 } from 'lucide-react';
 import type { ContentItemWithMeta } from '@/lib/services/content-service';
 import type { TaskWithMeta } from '@/lib/services/task-service';
-import type { MonthGrid, CalendarGridCell } from '@/lib/temporal/calendar';
-import { getCalendarDateKey } from '@/lib/temporal/calendar';
-import { formatInTimeZone, DEFAULT_TIMEZONE } from '@/lib/temporal/timezone';
-import { PLATFORM_CONFIG } from '@/components/content/ContentCard';
-import clsx from 'clsx';
+import { getCalendarDateKey, type MonthGrid } from '@/lib/temporal/calendar';
+import { formatInTimeZone } from '@/lib/temporal/timezone';
+import {
+  buildCalendarItemColorMap,
+  resolveCalendarItemColor,
+  type CalendarItemColorMap,
+} from '@/lib/calendar/item-colors';
 
 interface CalendarMonthViewProps {
   monthGrid: MonthGrid;
   items: ContentItemWithMeta[];
-  taskItems?: TaskWithMeta[];
-  userTimeZone?: string;
-  onSelectItem: (item: ContentItemWithMeta) => void;
-  onSelectTask?: (task: TaskWithMeta) => void;
+  tasks?: TaskWithMeta[];
+  userTimeZone: string;
+  itemColorMap?: CalendarItemColorMap;
+  onOpenDetail: (item: ContentItemWithMeta) => void;
+  onOpenTaskDetail?: (task: TaskWithMeta) => void;
   onSelectDate: (date: Date) => void;
-  onNewForDate?: (dateKey: string) => void;
-  isLoading?: boolean;
+  onScheduleOnDate?: (dateKey: string) => void;
 }
 
 const WEEKDAY_HEADERS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
+const SHORT_MONTHS = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+];
+
 export function CalendarMonthView({
   monthGrid,
   items,
-  taskItems = [],
-  userTimeZone = DEFAULT_TIMEZONE,
-  onSelectItem,
-  onSelectTask,
+  tasks = [],
+  userTimeZone,
+  itemColorMap,
+  onOpenDetail,
+  onOpenTaskDetail,
   onSelectDate,
-  onNewForDate,
-  isLoading = false,
+  onScheduleOnDate,
 }: CalendarMonthViewProps) {
-  const todayKey = getCalendarDateKey(new Date(), userTimeZone);
+  const todayDateKey = useMemo(
+    () => getCalendarDateKey(new Date(), userTimeZone),
+    [userTimeZone]
+  );
 
-  // Bucket scheduled content items by local dateKey
-  const contentByDateKey: Record<string, ContentItemWithMeta[]> = {};
-  const tasksByDateKey: Record<string, TaskWithMeta[]> = {};
+  const resolvedColorMap = useMemo(
+    () => itemColorMap || buildCalendarItemColorMap(tasks, items, userTimeZone),
+    [itemColorMap, tasks, items, userTimeZone]
+  );
 
-  for (const cell of monthGrid.cells) {
-    contentByDateKey[cell.dateKey] = [];
-    tasksByDateKey[cell.dateKey] = [];
-  }
-
-  for (const item of items) {
-    if (!item.scheduled_at) continue;
-    const key = getCalendarDateKey(item.scheduled_at, userTimeZone);
-    if (contentByDateKey[key]) {
-      contentByDateKey[key].push(item);
+  // Group scheduled items by their local YYYY-MM-DD dateKey in the user's timezone
+  const itemsByDateKey = useMemo(() => {
+    const map: Record<string, ContentItemWithMeta[]> = {};
+    for (const cell of monthGrid.cells) {
+      map[cell.dateKey] = [];
     }
-  }
 
-  for (const task of taskItems) {
-    if (!task.scheduled_start) continue;
-    const key = getCalendarDateKey(task.scheduled_start, userTimeZone);
-    if (tasksByDateKey[key]) {
-      tasksByDateKey[key].push(task);
+    for (const item of items) {
+      if (!item.scheduled_at) continue;
+      const key = getCalendarDateKey(item.scheduled_at, userTimeZone);
+      if (map[key]) {
+        map[key].push(item);
+      }
     }
-  }
 
-  // Sort each cell's items chronologically
-  for (const key of Object.keys(contentByDateKey)) {
-    contentByDateKey[key].sort((a, b) => {
-      const timeA = a.scheduled_at ? new Date(a.scheduled_at).getTime() : 0;
-      const timeB = b.scheduled_at ? new Date(b.scheduled_at).getTime() : 0;
-      return timeA - timeB;
-    });
+    for (const key of Object.keys(map)) {
+      map[key].sort((a, b) => {
+        const timeA = a.scheduled_at ? new Date(a.scheduled_at).getTime() : 0;
+        const timeB = b.scheduled_at ? new Date(b.scheduled_at).getTime() : 0;
+        return timeA - timeB;
+      });
+    }
 
-    tasksByDateKey[key].sort((a, b) => {
-      const timeA = a.scheduled_start ? new Date(a.scheduled_start).getTime() : 0;
-      const timeB = b.scheduled_start ? new Date(b.scheduled_start).getTime() : 0;
-      return timeA - timeB;
-    });
-  }
+    return map;
+  }, [monthGrid.cells, items, userTimeZone]);
+
+  // Group scheduled tasks by their local YYYY-MM-DD dateKey in the user's timezone
+  const tasksByDateKey = useMemo(() => {
+    const map: Record<string, TaskWithMeta[]> = {};
+    for (const cell of monthGrid.cells) {
+      map[cell.dateKey] = [];
+    }
+
+    for (const task of tasks) {
+      if (!task.scheduled_start) continue;
+      const key = getCalendarDateKey(task.scheduled_start, userTimeZone);
+      if (map[key]) {
+        map[key].push(task);
+      }
+    }
+
+    for (const key of Object.keys(map)) {
+      map[key].sort((a, b) => {
+        if (a.is_all_day && !b.is_all_day) return -1;
+        if (!a.is_all_day && b.is_all_day) return 1;
+        const timeA = a.scheduled_start ? new Date(a.scheduled_start).getTime() : 0;
+        const timeB = b.scheduled_start ? new Date(b.scheduled_start).getTime() : 0;
+        return timeA - timeB;
+      });
+    }
+
+    return map;
+  }, [monthGrid.cells, tasks, userTimeZone]);
 
   return (
-    <div className="space-y-4">
-      {/* Loading Overlay */}
-      {isLoading && (
-        <div className="flex items-center justify-center p-3 rounded-lg bg-blue-500/10 border border-blue-500/20 text-xs text-blue-400">
-          <Clock className="w-4 h-4 mr-2 animate-spin" />
-          <span>Loading scheduled items for {monthGrid.label}...</span>
-        </div>
-      )}
-
-      {/* Main Month Grid Container */}
-      <div className="rounded-xl border border-neutral-800 bg-neutral-950 overflow-hidden shadow-xs">
-        {/* Weekday Column Headers (Mon - Sun) */}
-        <div className="grid grid-cols-7 border-b border-neutral-800 bg-neutral-900/60 text-center">
-          {WEEKDAY_HEADERS.map((weekday, idx) => (
-            <div
-              key={weekday}
-              className={clsx(
-                'py-2.5 text-xs font-mono font-semibold tracking-wider uppercase',
-                idx === 5 || idx === 6 ? 'text-neutral-500' : 'text-neutral-400',
-                idx > 0 && 'border-l border-neutral-800/80'
-              )}
-            >
-              <span className="hidden sm:inline">{weekday}</span>
-              <span className="sm:hidden">{weekday.charAt(0)}</span>
-            </div>
-          ))}
-        </div>
-
-        {/* Month Day Cells */}
-        <div className="grid grid-cols-7 divide-y divide-neutral-800/80">
-          {monthGrid.cells.map((cell, idx) => {
-            const isToday = cell.dateKey === todayKey;
-            const isWeekend = cell.weekday === 6 || cell.weekday === 7;
-            const dayContent = contentByDateKey[cell.dateKey] || [];
-            const dayTasks = tasksByDateKey[cell.dateKey] || [];
-            const totalCount = dayContent.length + dayTasks.length;
-
-            // Combine items up to 3 previews, with overflow indicator
-            const visibleContent = dayContent.slice(0, 2);
-            const visibleTasks = dayTasks.slice(0, 2);
-            const overflowCount = Math.max(0, totalCount - (visibleContent.length + visibleTasks.length));
-
-            return (
+    <div
+      className="surface-card overflow-hidden"
+      data-testid="calendar-month-grid"
+    >
+      <div className="overflow-x-auto">
+        <div className="min-w-[680px]">
+          {/* Weekday Column Headers */}
+          <div className="grid grid-cols-7 bg-[var(--bg-subtle)]/70 border-b border-[var(--border-subtle)]">
+            {WEEKDAY_HEADERS.map((weekday) => (
               <div
-                key={cell.dateKey}
-                data-testid={`month-cell-${cell.dateKey}`}
-                onClick={() => onSelectDate(cell.startOfDay)}
-                className={clsx(
-                  'group min-h-[100px] sm:min-h-[120px] p-1.5 sm:p-2 flex flex-col transition-colors cursor-pointer select-none',
-                  idx % 7 > 0 && 'border-l border-neutral-800/80',
-                  cell.isCurrentMonth
-                    ? isWeekend
-                      ? 'bg-neutral-950/40 hover:bg-neutral-900/60'
-                      : 'bg-neutral-950 hover:bg-neutral-900/60'
-                    : 'bg-neutral-900/30 opacity-45 hover:opacity-75',
-                  isToday && 'ring-1 ring-inset ring-blue-500/60 bg-blue-500/5'
-                )}
-                title={`Click to view week of ${cell.weekdayName}, ${cell.month}/${cell.day}`}
+                key={weekday}
+                className="py-2.5 px-3 text-center text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-tertiary)]"
               >
-                {/* Cell Header: Day Number & Today Highlight */}
-                <div className="flex items-center justify-between mb-1">
-                  <span
-                    className={clsx(
-                      'text-xs font-mono font-semibold px-1.5 py-0.5 rounded transition-colors',
-                      isToday
-                        ? 'bg-blue-600 text-white font-bold'
-                        : cell.isCurrentMonth
-                          ? 'text-neutral-300 group-hover:text-white'
-                          : 'text-neutral-600'
-                    )}
-                  >
-                    {cell.day}
-                  </span>
+                {weekday}
+              </div>
+            ))}
+          </div>
 
-                  <div className="flex items-center gap-1">
-                    {onNewForDate && cell.isCurrentMonth && (
+          {/* Month Calendar Cells (5 or 6 rows x 7 columns) */}
+          <div className="grid grid-cols-7 gap-px bg-[var(--border-subtle)]">
+            {monthGrid.cells.map((cell) => {
+              const cellItems = itemsByDateKey[cell.dateKey] || [];
+              const cellTasks = tasksByDateKey[cell.dateKey] || [];
+              const totalCount = cellItems.length + cellTasks.length;
+              const isToday = cell.dateKey === todayDateKey;
+              const monthShort = SHORT_MONTHS[cell.month - 1] || '';
+
+              type CombinedEntry =
+                | { kind: 'task'; task: TaskWithMeta }
+                | { kind: 'content'; item: ContentItemWithMeta };
+
+              const combined: CombinedEntry[] = [
+                ...cellTasks.map((task): CombinedEntry => ({ kind: 'task', task })),
+                ...cellItems.map((item): CombinedEntry => ({ kind: 'content', item })),
+              ];
+
+              const visibleEntries = combined.slice(0, 3);
+              const overflowCount = combined.length > 3 ? combined.length - 3 : 0;
+
+              return (
+                <div
+                  key={cell.dateKey}
+                  data-testid={`month-cell-${cell.dateKey}`}
+                  onClick={() => {
+                    if (onScheduleOnDate) {
+                      onScheduleOnDate(cell.dateKey);
+                    } else {
+                      onSelectDate(cell.startOfDay);
+                    }
+                  }}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      if (onScheduleOnDate) {
+                        onScheduleOnDate(cell.dateKey);
+                      } else {
+                        onSelectDate(cell.startOfDay);
+                      }
+                    }
+                  }}
+                  className={`group min-h-[118px] sm:min-h-[132px] p-2 sm:p-2.5 flex flex-col justify-between transition-colors cursor-pointer text-left focus:outline-none focus:bg-[var(--bg-hover)] ${
+                    cell.isCurrentMonth
+                      ? isToday
+                        ? 'bg-[var(--accent-subtle)]/35 hover:bg-[var(--accent-subtle)]/55'
+                        : 'bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)]/60'
+                      : 'bg-[var(--bg-subtle)]/45 hover:bg-[var(--bg-hover)]/50 opacity-65'
+                  }`}
+                >
+                  {/* Top Row: Day Number + Quick Schedule Indicator */}
+                  <div className="flex items-center justify-between gap-1 mb-1.5">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelectDate(cell.startOfDay);
+                      }}
+                      data-testid={`month-cell-date-${cell.dateKey}`}
+                      title={`View ${monthShort} ${cell.day} in Day view`}
+                      className={`inline-flex items-center justify-center min-w-[26px] h-[26px] px-1.5 rounded-full text-xs font-bold transition-transform hover:scale-105 ${
+                        isToday
+                          ? 'bg-[var(--accent)] text-[var(--accent-ink)] shadow-xs'
+                          : cell.isCurrentMonth
+                            ? 'text-[var(--text-primary)] hover:bg-[var(--bg-subtle)]'
+                            : 'text-[var(--text-tertiary)]'
+                      }`}
+                    >
+                      {cell.day === 1 ? `${monthShort} 1` : cell.day}
+                    </button>
+
+                    <div className="flex items-center gap-1">
+                      <span className="opacity-0 group-hover:opacity-100 inline-flex items-center justify-center w-5 h-5 rounded-full bg-[var(--bg-subtle)] text-[var(--text-secondary)] border border-[var(--border-subtle)] transition-opacity">
+                        <Plus className="w-3 h-3" />
+                      </span>
+                      {totalCount > 0 && (
+                        <span className="text-[10px] font-mono font-semibold text-[var(--text-secondary)] px-1.5 py-0.2 rounded-full bg-[var(--bg-subtle)] border border-[var(--border-subtle)]">
+                          {totalCount}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Compact Pills List */}
+                  <div className="flex-1 space-y-1 overflow-hidden">
+                    {visibleEntries.map((entry) => {
+                      if (entry.kind === 'task') {
+                        const { task } = entry;
+                        const colorToken = resolveCalendarItemColor('task', task, resolvedColorMap);
+                        const timeStr =
+                          !task.is_all_day && task.scheduled_start
+                            ? formatInTimeZone(task.scheduled_start, userTimeZone, {
+                                hour: 'numeric',
+                                minute: '2-digit',
+                                hour12: true,
+                              })
+                            : '';
+
+                        return (
+                          <button
+                            key={`task-${task.id}`}
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onOpenTaskDetail?.(task);
+                            }}
+                            data-testid={`month-task-${task.id}`}
+                            data-cal-color={colorToken.name}
+                            className={`w-full text-left px-2 py-1 rounded-lg border border-l-2 flex items-center gap-1.5 transition-colors group/pill ${colorToken.colorClass} cal-card-surface`}
+                          >
+                            <CheckSquare className="w-2.5 h-2.5 text-[var(--text-secondary)] shrink-0" />
+                            <span
+                              className="w-1.5 h-1.5 rounded-full shrink-0 cal-swatch-dot"
+                              aria-hidden="true"
+                            />
+                            {timeStr && (
+                              <span className="text-[9px] font-mono text-[var(--text-secondary)] shrink-0">
+                                {timeStr.replace(':00 ', '').replace(' AM', 'a').replace(' PM', 'p')}
+                              </span>
+                            )}
+                            <span
+                              className={`text-[11px] font-medium truncate ${
+                                task.status === 'done'
+                                  ? 'line-through text-[var(--text-tertiary)]'
+                                  : 'text-[var(--text-primary)]'
+                              }`}
+                            >
+                              {task.title}
+                            </span>
+                          </button>
+                        );
+                      }
+
+                      const { item } = entry;
+                      const colorToken = resolveCalendarItemColor('content', item, resolvedColorMap);
+                      const timeStr = item.scheduled_at
+                        ? formatInTimeZone(item.scheduled_at, userTimeZone, {
+                            hour: 'numeric',
+                            minute: '2-digit',
+                            hour12: true,
+                          })
+                        : '';
+
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onOpenDetail(item);
+                          }}
+                          data-testid={`month-content-${item.id}`}
+                          data-cal-color={colorToken.name}
+                          className={`w-full text-left px-2 py-1 rounded-lg border border-l-2 flex items-center gap-1.5 transition-colors group/pill ${colorToken.colorClass} cal-card-surface`}
+                        >
+                          <Share2 className="w-2.5 h-2.5 text-[var(--text-secondary)] shrink-0" />
+                          <span
+                            className="w-1.5 h-1.5 rounded-full shrink-0 cal-swatch-dot"
+                            aria-hidden="true"
+                          />
+                          {timeStr && (
+                            <span className="text-[9px] font-mono text-[var(--text-secondary)] shrink-0">
+                              {timeStr.replace(':00 ', '').replace(' AM', 'a').replace(' PM', 'p')}
+                            </span>
+                          )}
+                          <span className="text-[11px] font-medium text-[var(--text-primary)] truncate">
+                            {item.title || item.body || 'Untitled'}
+                          </span>
+                        </button>
+                      );
+                    })}
+
+                    {overflowCount > 0 && (
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          onNewForDate(cell.dateKey);
+                          onSelectDate(cell.startOfDay);
                         }}
-                        className="opacity-0 group-hover:opacity-100 p-0.5 text-neutral-400 hover:text-white hover:bg-neutral-800 rounded transition-opacity"
-                        title={`Schedule for ${cell.dateKey}`}
-                        data-testid={`month-schedule-${cell.dateKey}`}
+                        className="w-full text-left text-[10px] font-mono font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] px-2 py-0.5 rounded hover:bg-[var(--bg-subtle)] transition-colors"
+                        data-testid={`month-cell-more-${cell.dateKey}`}
                       >
-                        <Plus className="w-3 h-3" />
+                        +{overflowCount} more · View all
                       </button>
-                    )}
-                    {totalCount > 0 && (
-                      <span className="hidden sm:inline-block text-[10px] font-mono px-1 rounded bg-neutral-800/80 text-neutral-400">
-                        {totalCount}
-                      </span>
                     )}
                   </div>
                 </div>
-
-                {/* Scheduled Items List for Day (Content + Tasks) */}
-                <div className="flex-1 space-y-1 overflow-hidden">
-                  {/* Content Item Pills */}
-                  {visibleContent.map((item) => {
-                    const platformInfo = PLATFORM_CONFIG[item.platform];
-                    const displayTime = item.scheduled_at
-                      ? formatInTimeZone(item.scheduled_at, userTimeZone, {
-                          hour: 'numeric',
-                          minute: '2-digit',
-                          hour12: true,
-                        })
-                      : '';
-
-                    return (
-                      <div
-                        key={item.id}
-                        role="button"
-                        tabIndex={0}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onSelectItem(item);
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.stopPropagation();
-                            e.preventDefault();
-                            onSelectItem(item);
-                          }
-                        }}
-                        data-testid={`month-item-${item.id}`}
-                        className={clsx(
-                          'p-1 sm:p-1.5 rounded-md border text-left cursor-pointer transition-all truncate text-[10px] sm:text-[11px] leading-tight',
-                          'hover:border-neutral-500 hover:shadow-xs focus:outline-none focus:ring-1 focus:ring-blue-500',
-                          platformInfo?.badgeClass || 'bg-neutral-800 text-neutral-300 border-neutral-700'
-                        )}
-                        title={`Content: ${displayTime} - ${item.title || item.body}`}
-                      >
-                        <div className="flex items-center gap-1 truncate">
-                          <span className="font-mono text-[9px] shrink-0 opacity-80">
-                            {displayTime}
-                          </span>
-                          <span className="font-semibold truncate">
-                            {item.title || item.body || 'Untitled'}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
-
-                  {/* Task Item Pills */}
-                  {visibleTasks.map((task) => {
-                    const displayTime = task.scheduled_start
-                      ? formatInTimeZone(task.scheduled_start, userTimeZone, {
-                          hour: 'numeric',
-                          minute: '2-digit',
-                          hour12: true,
-                        })
-                      : task.is_all_day
-                        ? 'All Day'
-                        : '';
-
-                    return (
-                      <div
-                        key={task.id}
-                        role="button"
-                        tabIndex={0}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onSelectTask?.(task);
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.stopPropagation();
-                            e.preventDefault();
-                            onSelectTask?.(task);
-                          }
-                        }}
-                        data-testid={`month-task-${task.id}`}
-                        className={clsx(
-                          'p-1 sm:p-1.5 rounded-md border text-left cursor-pointer transition-all truncate text-[10px] sm:text-[11px] leading-tight',
-                          'bg-neutral-900 border-neutral-800 text-neutral-300 hover:border-emerald-500/60 hover:shadow-xs focus:outline-none focus:ring-1 focus:ring-emerald-500'
-                        )}
-                        title={`Task: ${displayTime} - ${task.title}`}
-                      >
-                        <div className="flex items-center gap-1 truncate">
-                          <CheckSquare className="w-2.5 h-2.5 text-emerald-400 shrink-0" />
-                          <span className="font-mono text-[9px] shrink-0 text-emerald-400">
-                            {displayTime}
-                          </span>
-                          <span className="font-medium truncate text-neutral-200">
-                            {task.title}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
-
-                  {/* Overflow Badge */}
-                  {overflowCount > 0 && (
-                    <div className="text-[10px] font-mono font-medium text-neutral-400 px-1 hover:text-neutral-200">
-                      +{overflowCount} more
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>

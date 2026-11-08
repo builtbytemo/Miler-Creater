@@ -46,13 +46,13 @@ export function NotificationItem({
   const getEntityIcon = () => {
     switch (notification.entity_type) {
       case 'task':
-        return <CheckSquare className="w-4 h-4 text-emerald-400 shrink-0" aria-hidden="true" />;
+        return <CheckSquare className="w-4 h-4 text-[var(--status-success-text)] shrink-0" aria-hidden="true" />;
       case 'content_item':
-        return <Share2 className="w-4 h-4 text-purple-400 shrink-0" aria-hidden="true" />;
+        return <Share2 className="w-4 h-4 text-[var(--status-editorial-text)] shrink-0" aria-hidden="true" />;
       case 'ai_request':
-        return <Sparkles className="w-4 h-4 text-amber-400 shrink-0" aria-hidden="true" />;
+        return <Sparkles className="w-4 h-4 text-[var(--status-warning-text)] shrink-0" aria-hidden="true" />;
       default:
-        return <Bell className="w-4 h-4 text-blue-400 shrink-0" aria-hidden="true" />;
+        return <Bell className="w-4 h-4 text-[var(--status-info-text)] shrink-0" aria-hidden="true" />;
     }
   };
 
@@ -62,7 +62,7 @@ export function NotificationItem({
       return (
         <Link
           href="/tasks"
-          className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-400 hover:text-emerald-300 hover:underline mt-1"
+          className="inline-flex items-center gap-1 text-[11px] font-semibold text-[var(--status-success-text)] hover:underline mt-1"
         >
           <span>View Task</span>
           <ExternalLink className="w-3 h-3" aria-hidden="true" />
@@ -73,7 +73,7 @@ export function NotificationItem({
       return (
         <Link
           href="/content"
-          className="inline-flex items-center gap-1 text-[11px] font-medium text-purple-400 hover:text-purple-300 hover:underline mt-1"
+          className="inline-flex items-center gap-1 text-[11px] font-semibold text-[var(--status-editorial-text)] hover:underline mt-1"
         >
           <span>View Content</span>
           <ExternalLink className="w-3 h-3" aria-hidden="true" />
@@ -87,16 +87,16 @@ export function NotificationItem({
     <div
       data-testid={`notification-item-${notification.id}`}
       className={clsx(
-        'group relative p-3.5 rounded-lg border transition-all text-xs flex gap-3',
+        'group relative p-3.5 rounded-xl border transition-all text-xs flex gap-3',
         isUnread
-          ? 'bg-neutral-900 border-neutral-700/80 shadow-xs'
-          : 'bg-neutral-950/60 border-neutral-800/60 opacity-85 hover:opacity-100'
+          ? 'bg-[var(--bg-surface)] border-[var(--border-strong)] shadow-2xs'
+          : 'bg-[var(--bg-surface-muted)]/60 border-[var(--border-subtle)] opacity-85 hover:opacity-100'
       )}
     >
       {/* Unread dot indicator */}
       {isUnread && (
         <span
-          className="w-2 h-2 rounded-full bg-blue-500 shrink-0 mt-1 shadow-xs shadow-blue-500/50"
+          className="w-2 h-2 rounded-full bg-[var(--accent)] ring-1 ring-[var(--accent-border)] shrink-0 mt-1"
           title="Unread notification"
           aria-label="Unread"
         />
@@ -111,17 +111,19 @@ export function NotificationItem({
           <h4
             className={clsx(
               'leading-snug truncate',
-              isUnread ? 'font-semibold text-neutral-100' : 'font-medium text-neutral-300'
+              isUnread
+                ? 'font-semibold text-[var(--text-primary)]'
+                : 'font-medium text-[var(--text-secondary)]'
             )}
           >
             {notification.title}
           </h4>
-          <span className="text-[10px] text-neutral-400 font-mono shrink-0 whitespace-nowrap">
+          <span className="text-[10px] text-[var(--text-muted)] font-mono shrink-0 whitespace-nowrap">
             {formattedTime}
           </span>
         </div>
 
-        <p className="text-neutral-400 mt-1 line-clamp-2 leading-relaxed break-words">
+        <p className="text-[var(--text-secondary)] mt-1 line-clamp-2 leading-relaxed break-words">
           {notification.message}
         </p>
 
@@ -131,7 +133,7 @@ export function NotificationItem({
       {/* Action buttons */}
       <div className="flex items-center gap-1 self-start shrink-0 ml-1">
         {isProcessing ? (
-          <div className="p-1 text-neutral-500">
+          <div className="p-1 text-[var(--text-muted)]">
             <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
           </div>
         ) : (
@@ -140,28 +142,28 @@ export function NotificationItem({
               <button
                 type="button"
                 onClick={() => onMarkRead(notification.id)}
-                className="p-1 rounded text-neutral-400 hover:text-neutral-100 hover:bg-neutral-800 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500"
+                className="p-1 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-muted)] transition-colors"
                 title="Mark as read"
                 aria-label={`Mark "${notification.title}" as read`}
               >
-                <Check className="w-3.5 h-3.5 text-neutral-300 hover:text-white" />
+                <Check className="w-3.5 h-3.5" />
               </button>
             ) : (
               <button
                 type="button"
                 onClick={() => onMarkUnread(notification.id)}
-                className="p-1 rounded text-neutral-400 hover:text-neutral-100 hover:bg-neutral-800 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500"
+                className="p-1 rounded-md text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-muted)] transition-colors"
                 title="Mark as unread"
                 aria-label={`Mark "${notification.title}" as unread`}
               >
-                <RotateCcw className="w-3.5 h-3.5 text-neutral-400 hover:text-white" />
+                <RotateCcw className="w-3.5 h-3.5" />
               </button>
             )}
 
             <button
               type="button"
               onClick={() => onDismiss(notification.id)}
-              className="p-1 rounded text-neutral-400 hover:text-rose-400 hover:bg-neutral-800 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-rose-500"
+              className="p-1 rounded-md text-[var(--text-muted)] hover:text-[var(--status-danger-text)] hover:bg-[var(--bg-surface-muted)] transition-colors"
               title="Dismiss notification"
               aria-label={`Dismiss "${notification.title}"`}
             >

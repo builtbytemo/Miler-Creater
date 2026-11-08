@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useId } from 'react';
+import { useState, useId } from 'react';
 import { useDialog } from '@/lib/hooks/use-dialog';
 import { X, Calendar, Clock, AlertCircle } from 'lucide-react';
 import { createTaskAction } from '@/lib/actions/task-actions';
@@ -53,8 +53,11 @@ export function CreateTaskModal({
     initialScheduledEnd ? toLocalDatetimeString(initialScheduledEnd, userTimeZone) : ''
   );
 
-  // Sync state whenever modal opens or props change
-  useEffect(() => {
+  // Sync state whenever modal opens or scheduling props change
+  const syncKey = `${isOpen}:${initialScheduledStart ?? ''}:${initialScheduledEnd ?? ''}:${userTimeZone}`;
+  const [prevSyncKey, setPrevSyncKey] = useState(syncKey);
+  if (prevSyncKey !== syncKey) {
+    setPrevSyncKey(syncKey);
     if (isOpen) {
       setIsScheduled(Boolean(initialScheduledStart));
       setScheduledStart(
@@ -67,7 +70,7 @@ export function CreateTaskModal({
       setRecurrenceFreq('none');
       setError(null);
     }
-  }, [isOpen, initialScheduledStart, initialScheduledEnd, userTimeZone]);
+  }
 
   const dialogRef = useDialog(isOpen, onClose, isPending);
   const titleId = useId();
@@ -82,7 +85,7 @@ export function CreateTaskModal({
     const formData = new FormData(form);
     if (createdFrom === 'calendar') formData.set('created_from', createdFrom);
 
-    const title = (formData.get('title') as string || '').trim();
+    const title = ((formData.get('title') as string) || '').trim();
     if (!title) {
       setError('Task title is required');
       return;
@@ -91,7 +94,9 @@ export function CreateTaskModal({
     // Validate scheduling choice
     if (isScheduled) {
       if (!scheduledStart.trim()) {
-        setError('Please specify a scheduled start date & time, or uncheck "Schedule on Calendar" to leave unscheduled.');
+        setError(
+          'Please specify a scheduled start date & time, or uncheck "Schedule on Calendar" to leave unscheduled.'
+        );
         return;
       }
 
@@ -119,6 +124,15 @@ export function CreateTaskModal({
       formData.delete('scheduled_end');
     }
 
+    // Normalize due_date using the workspace timezone when entered as a local datetime
+    const rawDueDate = ((formData.get('due_date') as string) || '').trim();
+    if (rawDueDate && !isAllDay) {
+      const parsedDue = parseLocalDatetimeString(rawDueDate, userTimeZone);
+      if (parsedDue) {
+        formData.set('due_date', parsedDue.toISOString());
+      }
+    }
+
     try {
       setIsPending(true);
       setError(null);
@@ -141,16 +155,29 @@ export function CreateTaskModal({
     }
   };
 
+  const inputBaseClass =
+    'w-full px-3.5 py-2 text-xs sm:text-sm rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] hover:border-[var(--border-strong)] transition-colors';
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
-      <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} className="bg-neutral-900 border border-neutral-800 rounded-xl max-w-xl w-full p-6 text-neutral-100 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between border-b border-neutral-800 pb-3">
-          <div>
-            <h2 id={titleId} className="text-base font-semibold text-neutral-100">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/45 dark:bg-black/70 backdrop-blur-xs animate-in fade-in duration-150">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        className="surface-card bg-[var(--bg-surface-elevated)] max-w-xl w-full max-h-[90vh] flex flex-col overflow-hidden text-[var(--text-primary)] shadow-[var(--shadow-elevated)]"
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3 border-b border-[var(--border-subtle)] px-5 sm:px-6 py-4 shrink-0">
+          <div className="space-y-0.5 min-w-0">
+            <h2 id={titleId} className="heading-section text-base sm:text-lg">
               {parentTaskId ? 'Add Subtask' : 'Create New Task'}
             </h2>
-            <p className="text-xs text-neutral-400">
-              {parentTaskId ? 'Attach a child deliverable' : 'Define actionable work with scheduling & dependencies'}
+            <p className="text-xs text-[var(--text-muted)]">
+              {parentTaskId
+                ? 'Attach a child deliverable to this task.'
+                : 'Define actionable work with optional scheduling and recurrence.'}
             </p>
           </div>
           <button
@@ -158,27 +185,34 @@ export function CreateTaskModal({
             onClick={onClose}
             disabled={isPending}
             aria-label="Close dialog"
-            className="p-1.5 rounded-lg text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800 transition-colors"
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-muted)] transition-colors"
           >
-            <X className="w-4 h-4" />
+            <X className="w-4 h-4" aria-hidden="true" />
           </button>
         </div>
 
-        {error && (
-          <div role="alert" className="flex items-start gap-2 p-3 rounded-lg bg-red-950/40 border border-red-800 text-red-300 text-xs">
-            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-            <span>{error}</span>
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Scrollable Form Body */}
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-5 sm:px-6 py-5 space-y-5">
           <input type="hidden" name="workspace_id" value={workspaceId} />
           {parentTaskId && <input type="hidden" name="parent_task_id" value={parentTaskId} />}
 
+          {error && (
+            <div
+              role="alert"
+              className="flex items-start gap-2.5 p-3.5 rounded-2xl border badge-danger text-xs"
+            >
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
+              <span className="min-w-0 break-words">{error}</span>
+            </div>
+          )}
+
           {/* Title */}
-          <div>
-            <label htmlFor="task-title" className="block text-xs font-medium text-neutral-300 mb-1">
-              Title <span className="text-red-400">*</span>
+          <div className="space-y-1.5">
+            <label
+              htmlFor="task-title"
+              className="block text-xs font-medium text-[var(--text-secondary)]"
+            >
+              Title <span className="text-[var(--status-danger-text)]">*</span>
             </label>
             <input
               id="task-title"
@@ -186,13 +220,16 @@ export function CreateTaskModal({
               type="text"
               required
               placeholder="e.g. Draft Q4 architecture proposal"
-              className="w-full px-3 py-2 text-sm rounded-lg border border-neutral-700 bg-neutral-800 text-neutral-100 placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className={inputBaseClass}
             />
           </div>
 
           {/* Description */}
-          <div>
-            <label htmlFor="task-desc" className="block text-xs font-medium text-neutral-300 mb-1">
+          <div className="space-y-1.5">
+            <label
+              htmlFor="task-desc"
+              className="block text-xs font-medium text-[var(--text-secondary)]"
+            >
               Description / Notes
             </label>
             <textarea
@@ -200,21 +237,28 @@ export function CreateTaskModal({
               name="description"
               rows={3}
               placeholder="Details, acceptance criteria, or links..."
-              className="w-full px-3 py-2 text-sm rounded-lg border border-neutral-700 bg-neutral-800 text-neutral-100 placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className={inputBaseClass}
             />
           </div>
 
-          {/* Priority & Status Grid */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="task-priority" className="block text-xs font-medium text-neutral-300 mb-1">
+          {/* Priority, Status & Project Grid */}
+          <div
+            className={`grid grid-cols-1 gap-3.5 ${
+              projects.length > 0 ? 'sm:grid-cols-3' : 'sm:grid-cols-2'
+            }`}
+          >
+            <div className="space-y-1.5">
+              <label
+                htmlFor="task-priority"
+                className="block text-xs font-medium text-[var(--text-secondary)]"
+              >
                 Priority
               </label>
               <select
                 id="task-priority"
                 name="priority"
                 defaultValue="medium"
-                className="w-full px-3 py-2 text-xs rounded-lg border border-neutral-700 bg-neutral-800 text-neutral-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full h-9.5 px-3 text-xs rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] hover:border-[var(--border-strong)] transition-colors"
               >
                 <option value="low">Low</option>
                 <option value="medium">Medium</option>
@@ -223,70 +267,78 @@ export function CreateTaskModal({
               </select>
             </div>
 
-            <div>
-              <label htmlFor="task-status" className="block text-xs font-medium text-neutral-300 mb-1">
+            <div className="space-y-1.5">
+              <label
+                htmlFor="task-status"
+                className="block text-xs font-medium text-[var(--text-secondary)]"
+              >
                 Initial Status
               </label>
               <select
                 id="task-status"
                 name="status"
                 defaultValue="todo"
-                className="w-full px-3 py-2 text-xs rounded-lg border border-neutral-700 bg-neutral-800 text-neutral-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full h-9.5 px-3 text-xs rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] hover:border-[var(--border-strong)] transition-colors"
               >
                 <option value="todo">To Do</option>
                 <option value="in_progress">In Progress</option>
                 <option value="blocked">Blocked</option>
               </select>
             </div>
+
+            {projects.length > 0 && (
+              <div className="space-y-1.5">
+                <label
+                  htmlFor="task-project"
+                  className="block text-xs font-medium text-[var(--text-secondary)]"
+                >
+                  Project
+                </label>
+                <select
+                  id="task-project"
+                  name="project_id"
+                  defaultValue=""
+                  className="w-full h-9.5 px-3 text-xs rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] hover:border-[var(--border-strong)] transition-colors"
+                >
+                  <option value="">No Project</option>
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
 
-          {/* Project Association */}
-          {projects.length > 0 && (
-            <div>
-              <label htmlFor="task-project" className="block text-xs font-medium text-neutral-300 mb-1">
-                Project
-              </label>
-              <select
-                id="task-project"
-                name="project_id"
-                defaultValue=""
-                className="w-full px-3 py-2 text-xs rounded-lg border border-neutral-700 bg-neutral-800 text-neutral-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">No Project</option>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
           {/* Timing & Dates Section */}
-          <div className="p-3.5 rounded-lg bg-neutral-950 border border-neutral-800 space-y-3">
-            <div className="flex items-center justify-between">
-              <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-neutral-200">
+          <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface-muted)]/55 p-4 space-y-3.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <label className="inline-flex items-center gap-2 cursor-pointer text-xs font-semibold text-[var(--text-primary)]">
                 <input
                   type="checkbox"
                   checked={isScheduled}
                   onChange={(e) => setIsScheduled(e.target.checked)}
-                  className="rounded border-neutral-700 bg-neutral-800 text-emerald-500 focus:ring-emerald-500"
+                  className="h-4 w-4 rounded border-[var(--border-strong)] accent-[var(--text-primary)]"
                 />
-                <span className="flex items-center gap-1.5">
-                  <Calendar className="w-3.5 h-3.5 text-emerald-400" />
-                  Schedule on Calendar
+                <span className="inline-flex items-center gap-1.5">
+                  <Calendar
+                    className="w-3.5 h-3.5 text-[var(--text-secondary)]"
+                    aria-hidden="true"
+                  />
+                  <span>Schedule on Calendar</span>
                 </span>
               </label>
 
               {isScheduled && (
-                <label className="flex items-center gap-2 cursor-pointer text-xs text-neutral-400">
+                <label className="inline-flex items-center gap-2 cursor-pointer text-xs text-[var(--text-secondary)]">
                   <input
                     type="checkbox"
                     name="is_all_day"
                     value="true"
                     checked={isAllDay}
                     onChange={(e) => setIsAllDay(e.target.checked)}
-                    className="rounded border-neutral-700 bg-neutral-800 text-blue-500 focus:ring-blue-500"
+                    className="h-4 w-4 rounded border-[var(--border-strong)] accent-[var(--text-primary)]"
                   />
                   <span>All Day Task</span>
                 </label>
@@ -294,10 +346,13 @@ export function CreateTaskModal({
             </div>
 
             {isScheduled ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                <div>
-                  <label htmlFor="scheduled-start" className="block text-[11px] text-neutral-400 mb-1">
-                    Scheduled Start <span className="text-red-400">*</span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-0.5">
+                <div className="space-y-1">
+                  <label
+                    htmlFor="scheduled-start"
+                    className="block text-[11px] font-medium text-[var(--text-secondary)]"
+                  >
+                    Scheduled Start <span className="text-[var(--status-danger-text)]">*</span>
                   </label>
                   <input
                     id="scheduled-start"
@@ -306,13 +361,16 @@ export function CreateTaskModal({
                     value={scheduledStart}
                     onChange={(e) => setScheduledStart(e.target.value)}
                     required={isScheduled}
-                    className="w-full px-2.5 py-1.5 text-xs rounded-md border border-neutral-700 bg-neutral-800 text-neutral-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+                    className="w-full px-3 py-1.5 text-xs rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] font-mono"
                   />
                 </div>
 
-                <div>
-                  <label htmlFor="scheduled-end" className="block text-[11px] text-neutral-400 mb-1">
-                    Scheduled End <span className="text-neutral-500">(Optional)</span>
+                <div className="space-y-1">
+                  <label
+                    htmlFor="scheduled-end"
+                    className="block text-[11px] font-medium text-[var(--text-secondary)]"
+                  >
+                    Scheduled End <span className="text-[var(--text-muted)]">(Optional)</span>
                   </label>
                   <input
                     id="scheduled-end"
@@ -320,31 +378,37 @@ export function CreateTaskModal({
                     type={isAllDay ? 'date' : 'datetime-local'}
                     value={scheduledEnd}
                     onChange={(e) => setScheduledEnd(e.target.value)}
-                    className="w-full px-2.5 py-1.5 text-xs rounded-md border border-neutral-700 bg-neutral-800 text-neutral-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+                    className="w-full px-3 py-1.5 text-xs rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] font-mono"
                   />
                 </div>
               </div>
             ) : (
-              <p className="text-[11px] text-neutral-500">
+              <p className="text-xs text-[var(--text-muted)] leading-relaxed">
                 Task will be saved to your backlog unscheduled. You can set an optional deadline or duration below.
               </p>
             )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-neutral-800/80">
-              <div>
-                <label htmlFor="due-date" className="block text-[11px] text-neutral-400 mb-1">
-                  Due Date / Deadline <span className="text-neutral-500">(Optional)</span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-[var(--border-subtle)]">
+              <div className="space-y-1">
+                <label
+                  htmlFor="due-date"
+                  className="block text-[11px] font-medium text-[var(--text-secondary)]"
+                >
+                  Due Date / Deadline <span className="text-[var(--text-muted)]">(Optional)</span>
                 </label>
                 <input
                   id="due-date"
                   name="due_date"
                   type={isAllDay ? 'date' : 'datetime-local'}
-                  className="w-full px-2.5 py-1.5 text-xs rounded-md border border-neutral-700 bg-neutral-800 text-neutral-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-1.5 text-xs rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] font-mono"
                 />
               </div>
 
-              <div>
-                <label htmlFor="duration-min" className="block text-[11px] text-neutral-400 mb-1">
+              <div className="space-y-1">
+                <label
+                  htmlFor="duration-min"
+                  className="block text-[11px] font-medium text-[var(--text-secondary)]"
+                >
                   Estimated Duration (Minutes)
                 </label>
                 <input
@@ -354,7 +418,7 @@ export function CreateTaskModal({
                   min="5"
                   step="5"
                   placeholder="e.g. 60"
-                  className="w-full px-2.5 py-1.5 text-xs rounded-md border border-neutral-700 bg-neutral-800 text-neutral-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-1.5 text-xs rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] font-mono"
                 />
               </div>
             </div>
@@ -362,15 +426,18 @@ export function CreateTaskModal({
 
           {/* Recurrence Rule Section (top-level tasks only) */}
           {!parentTaskId && (
-            <div className="p-3.5 rounded-lg bg-neutral-950 border border-neutral-800 space-y-3">
-              <span className="text-xs font-semibold text-neutral-300 flex items-center gap-1.5">
-                <Clock className="w-3.5 h-3.5 text-purple-400" />
-                Recurrence Rule
+            <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface-muted)]/55 p-4 space-y-3">
+              <span className="text-xs font-semibold text-[var(--text-primary)] inline-flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-[var(--text-secondary)]" aria-hidden="true" />
+                <span>Recurrence Rule</span>
               </span>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label htmlFor="recurrence-freq" className="block text-[11px] text-neutral-400 mb-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label
+                    htmlFor="recurrence-freq"
+                    className="block text-[11px] font-medium text-[var(--text-secondary)]"
+                  >
                     Frequency
                   </label>
                   <select
@@ -378,7 +445,7 @@ export function CreateTaskModal({
                     name="recurrence_frequency"
                     value={recurrenceFreq}
                     onChange={(e) => setRecurrenceFreq(e.target.value)}
-                    className="w-full px-2.5 py-1.5 text-xs rounded-md border border-neutral-700 bg-neutral-800 text-neutral-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full h-9 px-3 text-xs rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)]"
                   >
                     <option value="none">One-time Task</option>
                     <option value="daily">Daily</option>
@@ -388,9 +455,18 @@ export function CreateTaskModal({
                 </div>
 
                 {recurrenceFreq !== 'none' && (
-                  <div>
-                    <label htmlFor="recurrence-interval" className="block text-[11px] text-neutral-400 mb-1">
-                      Interval (Every N {recurrenceFreq === 'daily' ? 'days' : recurrenceFreq === 'weekly' ? 'weeks' : 'months'})
+                  <div className="space-y-1">
+                    <label
+                      htmlFor="recurrence-interval"
+                      className="block text-[11px] font-medium text-[var(--text-secondary)]"
+                    >
+                      Interval (Every N{' '}
+                      {recurrenceFreq === 'daily'
+                        ? 'days'
+                        : recurrenceFreq === 'weekly'
+                          ? 'weeks'
+                          : 'months'}
+                      )
                     </label>
                     <input
                       id="recurrence-interval"
@@ -398,7 +474,7 @@ export function CreateTaskModal({
                       type="number"
                       min="1"
                       defaultValue="1"
-                      className="w-full px-2.5 py-1.5 text-xs rounded-md border border-neutral-700 bg-neutral-800 text-neutral-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full h-9 px-3 text-xs rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] font-mono"
                     />
                   </div>
                 )}
@@ -406,19 +482,19 @@ export function CreateTaskModal({
             </div>
           )}
 
-          {/* Buttons */}
-          <div className="flex items-center justify-end gap-3 pt-2">
+          {/* Footer Actions */}
+          <div className="flex flex-wrap items-center justify-end gap-2.5 pt-2 border-t border-[var(--border-subtle)]">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-medium text-neutral-300 hover:text-white rounded-lg hover:bg-neutral-800 transition-colors"
+              className="btn-secondary px-4 py-2 text-xs"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isPending}
-              className="px-4 py-2 text-xs font-medium bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors disabled:opacity-50 shadow-sm"
+              className="btn-accent px-5 py-2 text-xs disabled:opacity-50"
             >
               {isPending ? 'Saving Task...' : 'Save Task'}
             </button>

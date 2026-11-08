@@ -1,0 +1,127 @@
+#!/usr/bin/env node
+import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
+import { pathToFileURL } from 'node:url';
+import { realpathSync } from 'node:fs';
+import { parseFriendlyCommand } from './commands.mjs';
+import { createClient as createSupabaseClient } from '@supabase/supabase-js';
+
+const help = `Miller Creator CLI
+
+Usage:
+  miler tasks list [--search TEXT] [--status STATUS] [--priority PRIORITY] [--limit N]
+  miler tasks show ID | create TITLE [--priority PRIORITY] [--due ISO_DATE]
+  miler tasks update ID [--title TITLE] [--description TEXT] [--due ISO_DATE]
+  miler tasks status ID STATUS | delete ID --confirm-title TITLE
+  miler content list [--search TEXT] [--status STATUS] [--platform PLATFORM]
+  miler content show ID | create --platform PLATFORM --title TITLE [--body TEXT]
+  miler content update ID [--title TITLE] [--body TEXT] [--status STATUS]
+  miler content delete ID --confirm-delete
+  miler calendar list --from ISO_DATE --to ISO_DATE
+  miler calendar create TITLE --start ISO_DATE [--end ISO_DATE]
+  miler notifications list [--unread] | read ID | unread ID | dismiss ID | read-all
+  miler projects list | accounts list | workspace summary
+  npm run cli -- tools
+  npm run cli -- describe <tool-name>
+  npm run cli -- call <tool-name> [JSON-object]
+  npm run cli -- tokens <list|create|revoke> [JSON-object]
+  npm run --silent cli -- auth login
+
+Set MILLER_URL to your deployment's base URL or /api/mcp URL and
+MILLER_TOKEN to an API token from the website's API Tokens settings.
+HTTPS is required except for localhost. Output is JSON for scripting.
+Examples:
+  npm run cli -- tools
+  npm run cli -- describe search_tasks
+  npm run cli -- call search_tasks '{}'
+`;
+
+export function parseEndpoint(value) {
+  if (!value) throw new Error('Set MILLER_URL to your Miller Creator deployment URL.');
+  let url;
+  try { url = new URL(value); } catch { throw new Error('MILLER_URL must be a valid URL.'); }
+  const local = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
+  if ((url.protocol !== 'https:' && !(url.protocol === 'http:' && local)) || url.username || url.password || url.search || url.hash) {
+    throw new Error('MILLER_URL must use HTTPS (HTTP is allowed only on localhost), with no credentials, query, or fragment.');
+  }
+  if (url.pathname === '/' || url.pathname === '') url.pathname = '/api/mcp';
+  else if (url.pathname !== '/api/mcp' && url.pathname !== '/api/mcp/') throw new Error('MILLER_URL must be a deployment origin or end in /api/mcp.');
+  return url;
+}
+
+export async function run(args, env = process.env, output = console) {
+  const [command, name, rawArgs, ...extra] = args;
+  if (!command || command === '--help' || command === '-h' || command === 'help') { output.log(help); return 0; }
+  const friendly = parseFriendlyCommand(args);
+  if (friendly) return run(['call', friendly.name, JSON.stringify(friendly.arguments)], env, output);
+  if (command === 'auth') {
+    if (name !== 'login' || rawArgs || extra.length) throw new Error('Usage: auth login');
+    const supabaseUrl = parseEndpoint(env.MILLER_SUPABASE_URL);
+    if (new URL(env.MILLER_SUPABASE_URL).pathname !== '/') throw new Error('MILLER_SUPABASE_URL must be a Supabase origin.');
+    supabaseUrl.pathname = '/';
+    if (!env.MILLER_SUPABASE_ANON_KEY || !env.MILLER_EMAIL || !env.MILLER_PASSWORD) throw new Error('Set MILLER_SUPABASE_ANON_KEY, MILLER_EMAIL, and MILLER_PASSWORD.');
+    const authClient = createSupabaseClient(supabaseUrl.href, env.MILLER_SUPABASE_ANON_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+      global: { fetch: (input, init) => fetch(input, { ...init, redirect: 'error' }) },
+    });
+    const { data, error } = await authClient.auth.signInWithPassword({ email: env.MILLER_EMAIL, password: env.MILLER_PASSWORD });
+    if (error || !data.session) throw new Error('Sign-in failed. Check your credentials and account status.');
+    output.log(data.session.access_token);
+    return 0;
+  }
+  if (command === 'tokens') {
+    if (!['list', 'create', 'revoke'].includes(name) || extra.length) throw new Error('Usage: tokens <list|create|revoke> [JSON-object]');
+    let params = {};
+    try { params = rawArgs ? JSON.parse(rawArgs) : {}; } catch { throw new Error('Token arguments must be a JSON object.'); }
+    if (!params || typeof params !== 'object' || Array.isArray(params) || 'action' in params) throw new Error('Token arguments must be a JSON object without an action field.');
+    const endpoint = parseEndpoint(env.MILLER_URL);
+    endpoint.pathname = '/api/cli/tokens';
+    if (!env.MILLER_USER_ACCESS_TOKEN || /[\r\n]/.test(env.MILLER_USER_ACCESS_TOKEN)) throw new Error('Set MILLER_USER_ACCESS_TOKEN to a signed-in user access token.');
+    const result = await fetch(endpoint, { method: 'POST', redirect: 'error', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${env.MILLER_USER_ACCESS_TOKEN}` }, body: JSON.stringify({ ...params, action: name }) });
+    const payload = await result.json();
+    output.log(JSON.stringify(payload, null, 2));
+    return result.ok ? 0 : 1;
+  }
+  if (!['tools', 'describe', 'call'].includes(command) || (command === 'tools' && (name || rawArgs || extra.length)) || (command === 'describe' && (!name || rawArgs || extra.length)) || (command === 'call' && (!name || extra.length))) {
+    throw new Error('Invalid command or arguments. Run with --help for usage.');
+  }
+  let toolArgs = {};
+  if (command === 'call' && rawArgs !== undefined) {
+    try { toolArgs = JSON.parse(rawArgs); } catch { throw new Error('Tool arguments must be a JSON object.'); }
+    if (!toolArgs || typeof toolArgs !== 'object' || Array.isArray(toolArgs)) throw new Error('Tool arguments must be a JSON object.');
+  }
+  const url = parseEndpoint(env.MILLER_URL);
+  if (!env.MILLER_TOKEN || /[\r\n]/.test(env.MILLER_TOKEN)) throw new Error('Set MILLER_TOKEN to an API token from the website.');
+  const transport = new StreamableHTTPClientTransport(url, {
+    requestInit: { headers: { Authorization: `Bearer ${env.MILLER_TOKEN}` }, redirect: 'error' },
+  });
+  const client = new Client({ name: 'miller-creator-cli', version: '0.1.0' }, { versionNegotiation: { mode: 'auto' } });
+  try {
+    await client.connect(transport);
+    if (command === 'call') {
+      const result = await client.callTool({ name, arguments: toolArgs });
+      output.log(JSON.stringify(result, null, 2));
+      return result.isError ? 1 : 0;
+    }
+    const tools = [];
+    let cursor;
+    do {
+      const page = await client.listTools(cursor ? { cursor } : undefined);
+      tools.push(...page.tools);
+      cursor = page.nextCursor;
+    } while (cursor);
+    if (command === 'describe') {
+      const tool = tools.find(item => item.name === name);
+      if (!tool) throw new Error(`Unknown tool: ${name}`);
+      output.log(JSON.stringify(tool, null, 2));
+    } else output.log(JSON.stringify(tools, null, 2));
+    return 0;
+  } finally { await client.close(); }
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
+  run(process.argv.slice(2)).then(code => { process.exitCode = code; }).catch(error => {
+    const message = String(error.message || error);
+    console.error(`Error: ${[process.env.MILLER_TOKEN, process.env.MILLER_USER_ACCESS_TOKEN, process.env.MILLER_PASSWORD].filter(Boolean).reduce((text, secret) => text.replaceAll(secret, '[REDACTED]'), message)}`);
+    process.exitCode = 1;
+  });
+}

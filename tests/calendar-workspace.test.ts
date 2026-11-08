@@ -1,6 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { AppNavigation } from '../src/components/layout/AppNavigation';
+import { CalendarWorkspace } from '../src/components/calendar/CalendarWorkspace';
 import {
   getWeekRange,
   getNextWeekRange,
@@ -1050,6 +1052,57 @@ describe('Interactive Calendar & Monthly Overview (Phase 4, Step 4)', () => {
 
       handleTaskUpdated();
       expect(fetchCalledWithForce).toBe(true);
+    });
+
+    it('renders CalendarWorkspace in Week view with workspace-assigned tasks using getCalendarDateKey without ReferenceError', () => {
+      const assignedTask: TaskWithMeta = {
+        id: 'task-assigned-week-1',
+        title: 'Assigned Task from Tasks Tab',
+        status: 'todo',
+        priority: 'high',
+        created_from: 'tasks',
+        scheduled_start: null,
+        scheduled_end: null,
+        due_date: '2026-10-28T14:00:00Z',
+        estimated_duration_minutes: 45,
+        is_all_day: false,
+        parent_task_id: null,
+        project_id: null,
+        milestone_id: null,
+        description: null,
+        completed_at: null,
+        tags: [],
+        assigned_to: null,
+        subtask_count: 0,
+        completed_subtask_count: 0,
+        is_blocked: false,
+        blocking_tasks: [],
+        recurrence_rule_id: null,
+        workspace_id: 'ws-111',
+        created_by: 'usr-1',
+        created_at: '2026-10-25T10:00:00Z',
+        updated_at: '2026-10-25T10:00:00Z',
+      };
+
+      const html = renderToStaticMarkup(
+        React.createElement(CalendarWorkspace, {
+          workspaceId: 'ws-111',
+          workspaceName: 'Test Workspace',
+          userTimeZone: 'Africa/Cairo',
+          initialWeekRange: baseWeek,
+          initialScheduledItems: [],
+          initialScheduledTasks: [assignedTask],
+          initialUnscheduledItems: [],
+          socialAccounts: [],
+          projects: [],
+        })
+      );
+
+      expect(html).toContain('Assigned from Tasks &amp; Content Workspaces');
+      expect(html).toContain('data-testid="assigned-task-task-assigned-week-1"');
+      expect(html).toContain('Assigned Task from Tasks Tab');
+      expect(html).toContain('2026-10-28');
+      expect(html).toContain('Due 5:00 PM');
     });
   });
 });

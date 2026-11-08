@@ -399,4 +399,100 @@ describe('DashboardPage Server Component (Operational Command Center)', () => {
     expect(html).not.toContain('Overdue Tasks');
     expect(html).not.toContain('Action Needed');
   });
+
+  it('renders redesigned navigation shell (desktop sidebar, mobile navigation, and theme controls) and workspace loading/error states', async () => {
+    const { AppNavigation: RealAppNavigation } = await vi.importActual<
+      typeof import('@/components/layout/AppNavigation')
+    >('@/components/layout/AppNavigation');
+    const { ThemeToggle } = await import('@/components/layout/ThemeToggle');
+    const { WorkspaceLoading } = await import('@/components/layout/WorkspaceLoading');
+    const { WorkspaceError } = await import('@/components/layout/WorkspaceError');
+
+    const navHtml = renderToStaticMarkup(React.createElement(RealAppNavigation));
+    expect(navHtml).toContain('aria-label="Workspace sidebar"');
+    expect(navHtml).toContain('aria-label="Quick destinations"');
+    expect(navHtml).toContain('href="/dashboard"');
+    expect(navHtml).toContain('href="/tasks"');
+    expect(navHtml).toContain('href="/calendar"');
+    expect(navHtml).toContain('href="/content"');
+    expect(navHtml).toContain('href="/notifications"');
+    expect(navHtml).toContain('href="/settings/tokens"');
+    expect(navHtml).toContain('Skip to content');
+
+    const segmentedThemeHtml = renderToStaticMarkup(React.createElement(ThemeToggle));
+    expect(segmentedThemeHtml).toContain('role="group"');
+    expect(segmentedThemeHtml).toContain('aria-label="Color theme"');
+    expect(segmentedThemeHtml).toContain('Light');
+    expect(segmentedThemeHtml).toContain('Dark');
+    expect(segmentedThemeHtml).toContain('Auto');
+
+    const compactThemeHtml = renderToStaticMarkup(
+      React.createElement(ThemeToggle, { variant: 'compact' })
+    );
+    expect(compactThemeHtml).toContain('data-testid="theme-toggle-compact"');
+
+    const loadingHtml = renderToStaticMarkup(React.createElement(WorkspaceLoading));
+    expect(loadingHtml).toContain('aria-label="Loading workspace"');
+    expect(loadingHtml).toContain('Loading your workspace…');
+
+    const errorHtml = renderToStaticMarkup(
+      React.createElement(WorkspaceError, {
+        error: new Error('Test failure'),
+        reset: () => {},
+      })
+    );
+    expect(errorHtml).toContain('This page couldn’t load');
+    expect(errorHtml).toContain('Try again');
+    expect(errorHtml).toContain('Go to overview');
+  });
+
+  it('keeps ThemeToggle initial SSR/hydration markup consistent while resolving saved Light, Dark, and Auto preferences on the client', async () => {
+    const {
+      ThemeToggle,
+      getSavedThemePreference,
+      getClientResolvedTheme,
+    } = await import('@/components/layout/ThemeToggle');
+
+    const ssrHtml = renderToStaticMarkup(React.createElement(ThemeToggle));
+    // Initial SSR markup always marks Auto (system) as aria-pressed="true" and Light/Dark as "false"
+    expect(ssrHtml).toContain('aria-pressed="false" aria-label="Light theme"');
+    expect(ssrHtml).toContain('aria-pressed="false" aria-label="Dark theme"');
+    expect(ssrHtml).toContain('aria-pressed="true" aria-label="Auto theme"');
+    // Uses 3-column grid so the 3 pills fit within the sidebar without overflowing
+    expect(ssrHtml).toContain('grid-cols-3');
+
+    // Simulate client storage with saved 'light', 'dark', and 'system' preferences
+    const store = new Map<string, string>();
+    vi.stubGlobal('window', {
+      localStorage: {
+        getItem: (k: string) => store.get(k) ?? null,
+        setItem: (k: string, v: string) => store.set(k, v),
+        removeItem: (k: string) => store.delete(k),
+      },
+      matchMedia: (query: string) => ({
+        matches: query.includes('dark'),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      }),
+    });
+
+    try {
+      store.set('theme', 'light');
+      expect(getSavedThemePreference()).toBe('light');
+      expect(getClientResolvedTheme()).toBe('light');
+      // Server snapshot used during SSR/hydration still matches ssrHtml even when localStorage has 'light'
+      expect(renderToStaticMarkup(React.createElement(ThemeToggle))).toBe(ssrHtml);
+
+      store.set('theme', 'dark');
+      expect(getSavedThemePreference()).toBe('dark');
+      expect(getClientResolvedTheme()).toBe('dark');
+      expect(renderToStaticMarkup(React.createElement(ThemeToggle))).toBe(ssrHtml);
+
+      store.delete('theme');
+      expect(getSavedThemePreference()).toBe('system');
+      expect(getClientResolvedTheme()).toBe('dark'); // matchMedia stub matches dark
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });

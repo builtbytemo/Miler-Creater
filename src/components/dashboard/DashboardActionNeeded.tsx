@@ -1,12 +1,5 @@
 import Link from 'next/link';
-import {
-  AlertCircle,
-  Clock,
-  CheckCircle2,
-  Share2,
-  CheckSquare,
-  ArrowRight,
-} from 'lucide-react';
+import { ArrowUpRight } from 'lucide-react';
 import type { UrgentTaskItem, UpcomingContentItem } from '@/lib/services/dashboard-service';
 import { formatInTimeZone } from '@/lib/temporal/timezone';
 import { clsx } from 'clsx';
@@ -37,84 +30,95 @@ export function DashboardActionNeeded({
   const totalItems = urgentTasks.length + urgentContent.length;
 
   return (
-    <section className="space-y-3" aria-labelledby="action-needed-heading">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center justify-center">
-            <AlertCircle className="w-3.5 h-3.5" />
-          </div>
-          <h3 id="action-needed-heading" className="text-sm font-semibold text-neutral-100">
+    <section className="space-y-4 min-w-0" aria-labelledby="action-needed-heading">
+      <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-[var(--border-subtle)] pb-3">
+        <div className="flex flex-wrap items-baseline gap-2 min-w-0">
+          <h3 id="action-needed-heading" className="heading-section text-lg">
             Action Needed
           </h3>
-          <span className="text-[11px] text-neutral-500">
-            (Priority tasks & posts in next 24h)
+          <span className="text-xs text-[var(--text-muted)]">
+            (Priority tasks &amp; posts in next 24h)
           </span>
         </div>
         {totalItems > 0 && (
-          <span className="text-[11px] text-neutral-500 font-mono">
+          <span className="text-xs text-[var(--text-muted)] font-mono shrink-0">
             Showing top {totalItems} items
           </span>
         )}
       </div>
 
       {totalItems === 0 ? (
-        <div className="p-6 rounded-xl bg-neutral-950 border border-neutral-800 text-center space-y-2">
-          <div className="w-8 h-8 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center mx-auto">
-            <CheckCircle2 className="w-4 h-4" />
-          </div>
-          <p className="text-xs font-medium text-neutral-200">All clear</p>
-          <p className="text-[11px] text-neutral-500 max-w-sm mx-auto">
+        <div className="py-10 px-6 rounded-2xl border border-dashed border-[var(--border-subtle)] text-center space-y-1.5">
+          <p className="text-sm font-semibold text-[var(--text-primary)]">All clear</p>
+          <p className="text-xs text-[var(--text-muted)] max-w-sm mx-auto leading-relaxed">
             No overdue tasks, tasks due today, or content scheduled in the next 24 hours.
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="surface-card divide-y divide-[var(--border-subtle)] overflow-hidden">
           {/* Urgent Task Items */}
           {urgentTasks.map((task) => {
             const isOverdue = task.due_date && task.due_date < referenceTimeIso;
-            const priorityColors = {
-              urgent: 'bg-rose-500/10 text-rose-400 border-rose-500/20',
-              high: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
-              medium: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
-              low: 'bg-neutral-800 text-neutral-400 border-neutral-700',
+            const priorityStyles = {
+              urgent: 'badge-danger',
+              high: 'badge-warning',
+              medium: 'badge-info',
+              low: 'bg-[var(--bg-surface-muted)] text-[var(--text-secondary)] border-[var(--border-subtle)]',
             };
 
             return (
               <Link
                 key={`task-${task.id}`}
                 href="/tasks"
-                className="group p-3.5 rounded-xl bg-neutral-950 border border-neutral-800 hover:border-neutral-700 transition-all focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none flex items-start justify-between gap-3"
+                className="group flex items-center justify-between gap-3 sm:gap-4 px-4 sm:px-5 py-4 transition-colors hover:bg-[var(--bg-surface-hover)]"
               >
-                <div className="flex items-start gap-2.5 min-w-0">
-                  <div className="w-6 h-6 rounded-md bg-blue-500/10 text-blue-400 border border-blue-500/20 flex items-center justify-center shrink-0 mt-0.5">
-                    <CheckSquare className="w-3.5 h-3.5" />
-                  </div>
-                  <div className="min-w-0 space-y-1">
-                    <p className="text-xs font-medium text-neutral-200 group-hover:text-blue-400 transition-colors truncate">
+                <div className="min-w-0 flex-1 space-y-1.5">
+                  <div className="flex items-start gap-2.5 min-w-0">
+                    <span
+                      aria-hidden="true"
+                      className={clsx(
+                        'mt-1.5 h-2 w-2 rounded-full shrink-0',
+                        isOverdue ? 'bg-[var(--status-danger-text)]' : 'bg-[var(--accent)] ring-1 ring-[var(--accent-border)]'
+                      )}
+                    />
+                    <p className="text-sm font-medium text-[var(--text-primary)] group-hover:underline line-clamp-2 break-words min-w-0">
                       {task.title}
                     </p>
-                    <div className="flex items-center gap-2 text-[10px]">
-                      <span className={clsx('px-1.5 py-0.5 rounded border capitalize font-medium', priorityColors[task.priority])}>
-                        {task.priority}
-                      </span>
-                      {task.due_date ? (
-                        <span className={clsx('flex items-center gap-1 font-mono', isOverdue ? 'text-rose-400 font-semibold' : 'text-neutral-400')}>
-                          <Clock className="w-3 h-3" />
-                          {isOverdue ? 'Overdue: ' : 'Due: '}
-                          {formatInTimeZone(task.due_date, timeZone, {
-                            month: 'short',
-                            day: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
-                        </span>
-                      ) : (
-                        <span className="text-neutral-500">No due date</span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 pl-4.5 text-xs">
+                    <span
+                      className={clsx(
+                        'px-2 py-0.5 rounded-full border text-[11px] capitalize font-medium shrink-0',
+                        priorityStyles[task.priority]
                       )}
-                    </div>
+                    >
+                      {task.priority}
+                    </span>
+                    {task.due_date ? (
+                      <span
+                        className={clsx(
+                          'font-mono text-[11px]',
+                          isOverdue
+                            ? 'text-[var(--status-danger-text)] font-medium'
+                            : 'text-[var(--text-muted)]'
+                        )}
+                      >
+                        {isOverdue ? 'Overdue · ' : 'Due · '}
+                        {formatInTimeZone(task.due_date, timeZone, {
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </span>
+                    ) : (
+                      <span className="text-[11px] text-[var(--text-muted)]">No due date</span>
+                    )}
                   </div>
                 </div>
-                <ArrowRight className="w-3.5 h-3.5 text-neutral-600 group-hover:text-neutral-300 transition-colors shrink-0 mt-1" />
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[var(--text-muted)] group-hover:bg-[var(--accent)] group-hover:text-[var(--accent-ink)] transition-colors">
+                  <ArrowUpRight className="w-3.5 h-3.5" aria-hidden="true" />
+                </span>
               </Link>
             );
           })}
@@ -124,34 +128,36 @@ export function DashboardActionNeeded({
             <Link
               key={`content-${item.id}`}
               href="/content"
-              className="group p-3.5 rounded-xl bg-neutral-950 border border-neutral-800 hover:border-neutral-700 transition-all focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none flex items-start justify-between gap-3"
+              className="group flex items-center justify-between gap-3 sm:gap-4 px-4 sm:px-5 py-4 transition-colors hover:bg-[var(--bg-surface-hover)]"
             >
-              <div className="flex items-start gap-2.5 min-w-0">
-                <div className="w-6 h-6 rounded-md bg-purple-500/10 text-purple-400 border border-purple-500/20 flex items-center justify-center shrink-0 mt-0.5">
-                  <Share2 className="w-3.5 h-3.5" />
-                </div>
-                <div className="min-w-0 space-y-1">
-                  <p className="text-xs font-medium text-neutral-200 group-hover:text-purple-400 transition-colors truncate">
+              <div className="min-w-0 flex-1 space-y-1.5">
+                <div className="flex items-start gap-2.5 min-w-0">
+                  <span
+                    aria-hidden="true"
+                    className="mt-1.5 h-2 w-2 rounded-full bg-[var(--status-editorial-text)] shrink-0"
+                  />
+                  <p className="text-sm font-medium text-[var(--text-primary)] group-hover:underline line-clamp-2 break-words min-w-0">
                     {item.title || 'Untitled Post'}
                   </p>
-                  <div className="flex items-center gap-2 text-[10px]">
-                    <span className="px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-300 border border-neutral-700 capitalize font-medium">
-                      {item.platform}
-                    </span>
-                    <span className="flex items-center gap-1 text-amber-400 font-mono font-medium">
-                      <Clock className="w-3 h-3" />
-                      Publishing:{' '}
-                      {item.scheduled_at
-                        ? formatInTimeZone(item.scheduled_at, timeZone, {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })
-                        : 'Unscheduled'}
-                    </span>
-                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 pl-4.5 text-xs">
+                  <span className="px-2 py-0.5 rounded-full bg-[var(--bg-surface-muted)] text-[var(--text-secondary)] text-[11px] capitalize font-medium shrink-0">
+                    {item.platform}
+                  </span>
+                  <span className="text-[11px] text-[var(--text-muted)] font-mono">
+                    Publishing ·{' '}
+                    {item.scheduled_at
+                      ? formatInTimeZone(item.scheduled_at, timeZone, {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })
+                      : 'Unscheduled'}
+                  </span>
                 </div>
               </div>
-              <ArrowRight className="w-3.5 h-3.5 text-neutral-600 group-hover:text-neutral-300 transition-colors shrink-0 mt-1" />
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[var(--text-muted)] group-hover:bg-[var(--accent)] group-hover:text-[var(--accent-ink)] transition-colors">
+                <ArrowUpRight className="w-3.5 h-3.5" aria-hidden="true" />
+              </span>
             </Link>
           ))}
         </div>

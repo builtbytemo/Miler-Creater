@@ -11,12 +11,14 @@ export interface NotificationBellProps {
   workspaceId?: string;
   userTimeZone?: string;
   className?: string;
+  panelAlign?: 'left' | 'right' | 'responsive';
 }
 
 export function NotificationBell({
   workspaceId,
   userTimeZone,
   className,
+  panelAlign = 'responsive',
 }: NotificationBellProps) {
   const pathname = usePathname();
   const [unreadCount, setUnreadCount] = useState<number>(0);
@@ -37,14 +39,20 @@ export function NotificationBell({
     }
   }, [workspaceId, isPublicOrAuthPage]);
 
-  // Initial load
-  useEffect(() => {
-    fetchUnreadCount();
-  }, [fetchUnreadCount]);
-
-  // Event-driven refresh without aggressive polling
+  // Initial load & event-driven refresh without aggressive polling
   useEffect(() => {
     if (isPublicOrAuthPage) return;
+
+    let cancelled = false;
+    void getUnreadNotificationCountAction(workspaceId)
+      .then((res) => {
+        if (!cancelled && res.success && typeof res.data === 'number') {
+          setUnreadCount(Math.max(0, res.data));
+        }
+      })
+      .catch(() => {
+        // Non-blocking background fetch failure
+      });
 
     const handleNotificationsUpdated = () => {
       fetchUnreadCount();
@@ -58,10 +66,11 @@ export function NotificationBell({
     window.addEventListener('focus', handleWindowFocus);
 
     return () => {
+      cancelled = true;
       window.removeEventListener('cc:notifications-updated', handleNotificationsUpdated);
       window.removeEventListener('focus', handleWindowFocus);
     };
-  }, [fetchUnreadCount, isPublicOrAuthPage]);
+  }, [fetchUnreadCount, isPublicOrAuthPage, workspaceId]);
 
   if (isPublicOrAuthPage) {
     return null;
@@ -81,9 +90,10 @@ export function NotificationBell({
         aria-haspopup="dialog"
         title={ariaLabel}
         className={clsx(
-          'relative p-2 rounded-lg text-neutral-400 hover:text-neutral-100 hover:bg-neutral-900 transition-colors',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-neutral-950',
-          isOpen && 'bg-neutral-900 text-neutral-100'
+          'relative inline-flex h-9 w-9 items-center justify-center rounded-full border transition-colors',
+          'border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-secondary)]',
+          'hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]',
+          isOpen && 'border-[var(--border-strong)] bg-[var(--bg-surface-hover)] text-[var(--text-primary)]'
         )}
       >
         <Bell className="w-4 h-4" aria-hidden="true" />
@@ -95,7 +105,7 @@ export function NotificationBell({
             className={clsx(
               'absolute -top-1 -right-1 flex items-center justify-center',
               'min-w-4 h-4 px-1 rounded-full text-[10px] font-bold font-mono',
-              'bg-red-500 text-white shadow-xs ring-2 ring-neutral-950 animate-in zoom-in-75 duration-150'
+              'bg-[var(--accent)] text-[var(--accent-ink)] ring-2 ring-[var(--bg-sidebar)]'
             )}
           >
             {formattedBadgeCount}
@@ -109,6 +119,7 @@ export function NotificationBell({
         workspaceId={workspaceId}
         userTimeZone={userTimeZone}
         onNotificationsMutated={fetchUnreadCount}
+        align={panelAlign}
       />
     </div>
   );
