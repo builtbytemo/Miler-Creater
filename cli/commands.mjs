@@ -5,9 +5,13 @@ const definitions = {
   'tasks create': ['create_task', ['title'], { description: 'description', priority: 'priority', due: 'due_date', start: 'scheduled_start', end: 'scheduled_end', project: 'project_id' }],
   'tasks update': ['update_task', ['task_id'], { title: 'title', description: 'description', priority: 'priority', due: 'due_date', start: 'scheduled_start', end: 'scheduled_end', project: 'project_id' }],
   'tasks status': ['change_task_status', ['task_id', 'status'], {}],
+  'tasks overdue': ['list_overdue_tasks', [], {}],
+  'tasks depend': ['add_task_dependency', ['task_id', 'depends_on_task_id'], {}],
+  'tasks undepend': ['remove_task_dependency', ['dependency_id'], {}],
   'tasks delete': ['delete_task', ['task_id'], { 'confirm-title': 'confirm_title' }],
   'content list': ['search_content', [], { search: 'search', status: 'status', platform: 'platform', limit: ['limit', 'number'] }],
   'content show': ['get_content_details', ['content_id'], {}],
+  'content scheduled': ['list_scheduled_content', [], { from: 'start_date', to: 'end_date', limit: ['limit', 'number'] }],
   'content create': ['create_content_item', [], { platform: 'platform', title: 'title', body: 'body', status: 'status', at: 'scheduled_at', account: 'social_account_id' }],
   'content update': ['update_content_item', ['content_id'], { title: 'title', body: 'body', platform: 'platform', status: 'status', at: 'scheduled_at' }],
   'content delete': ['delete_content_item', ['content_id'], { 'confirm-delete': ['confirm_delete', 'boolean'] }],
@@ -18,14 +22,17 @@ const definitions = {
   'notifications unread': ['update_notification', ['notification_id'], {}, { action: 'unread' }],
   'notifications dismiss': ['update_notification', ['notification_id'], {}, { action: 'dismiss' }],
   'notifications read-all': ['mark_all_notifications_read', [], {}],
+  'reminders get': ['get_reminder_preferences', [], {}],
+  'reminders update': ['update_reminder_preferences', [], { 'lead-time': ['lead_time_minutes', 'number'], email: ['email_enabled', 'boolean'], 'in-app': ['in_app_enabled', 'boolean'] }],
   'projects list': ['list_projects', [], {}],
   'accounts list': ['list_social_accounts', [], {}],
+  'accounts create': ['create_social_account', [], { platform: 'platform', handle: 'account_handle', name: 'account_name' }],
   'workspace summary': ['get_workspace_summary', [], {}],
 };
 
 export function parseFriendlyCommand(argv) {
   const [group, action, ...tokens] = argv;
-  if (!['tasks', 'content', 'calendar', 'notifications', 'projects', 'accounts', 'workspace'].includes(group)) return null;
+  if (!['tasks', 'content', 'calendar', 'notifications', 'projects', 'accounts', 'workspace', 'reminders'].includes(group)) return null;
   const definition = definitions[`${group} ${action}`];
   if (!definition) throw new Error(`Unknown ${group} command. Run --help for usage.`);
   const [name, positional, options, defaults = {}] = definition;
@@ -59,5 +66,7 @@ export function parseFriendlyCommand(argv) {
   if (group === 'calendar' && action === 'list' && (!args.start_date || !args.end_date)) throw new Error('Calendar list requires --from and --to.');
   if (group === 'calendar' && action === 'create' && !args.scheduled_start) throw new Error('Calendar create requires --start.');
   if (group === 'content' && action === 'create' && (!args.platform || (!args.title && !args.body))) throw new Error('Content create requires --platform and --title or --body.');
+  if (group === 'accounts' && action === 'create' && (!args.platform || !args.account_handle)) throw new Error('Accounts create requires --platform and --handle.');
+  if (group === 'content' && action === 'scheduled' && (!args.start_date || !args.end_date)) throw new Error('Content scheduled requires --from and --to.');
   return { name, arguments: args };
 }

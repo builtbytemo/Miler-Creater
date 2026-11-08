@@ -82,6 +82,27 @@ it('maps convenient commands onto the existing tools', async () => {
   expect(mocks.callTool).toHaveBeenCalledWith({ name: 'create_task', arguments: { title: 'Plan launch', priority: 'high', due_date: '2026-11-09T12:00:00Z' } });
   await run(['notifications', 'list', '--unread', '--limit', '10'], env, output);
   expect(mocks.callTool).toHaveBeenLastCalledWith({ name: 'list_notifications', arguments: { unread_only: true, limit: 10 } });
+
+  await run(['tasks', 'overdue'], env, output);
+  expect(mocks.callTool).toHaveBeenLastCalledWith({ name: 'list_overdue_tasks', arguments: {} });
+
+  await run(['tasks', 'depend', 'task-1', 'task-2'], env, output);
+  expect(mocks.callTool).toHaveBeenLastCalledWith({ name: 'add_task_dependency', arguments: { task_id: 'task-1', depends_on_task_id: 'task-2' } });
+
+  await run(['tasks', 'undepend', 'dep-123'], env, output);
+  expect(mocks.callTool).toHaveBeenLastCalledWith({ name: 'remove_task_dependency', arguments: { dependency_id: 'dep-123' } });
+
+  await run(['content', 'scheduled', '--from', '2026-11-01T00:00:00Z', '--to', '2026-11-07T00:00:00Z'], env, output);
+  expect(mocks.callTool).toHaveBeenLastCalledWith({ name: 'list_scheduled_content', arguments: { start_date: '2026-11-01T00:00:00Z', end_date: '2026-11-07T00:00:00Z' } });
+
+  await run(['accounts', 'create', '--platform', 'x', '--handle', '@miler', '--name', 'Miler'], env, output);
+  expect(mocks.callTool).toHaveBeenLastCalledWith({ name: 'create_social_account', arguments: { platform: 'x', account_handle: '@miler', account_name: 'Miler' } });
+
+  await run(['reminders', 'get'], env, output);
+  expect(mocks.callTool).toHaveBeenLastCalledWith({ name: 'get_reminder_preferences', arguments: {} });
+
+  await run(['reminders', 'update', '--lead-time', '30', '--email', '--in-app'], env, output);
+  expect(mocks.callTool).toHaveBeenLastCalledWith({ name: 'update_reminder_preferences', arguments: { lead_time_minutes: 30, email_enabled: true, in_app_enabled: true } });
 });
 
 it('validates deletion and flags before connecting', async () => {
@@ -89,5 +110,13 @@ it('validates deletion and flags before connecting', async () => {
   await expect(run(['content', 'delete', 'abc'], env, output)).rejects.toThrow('--confirm-delete');
   await expect(run(['tasks', 'list', '--limit', 'bad'], env, output)).rejects.toThrow('whole number');
   await expect(run(['tasks', 'list', '--unknown'], env, output)).rejects.toThrow('Unknown option');
+  await expect(run(['accounts', 'create', '--platform', 'x'], env, output)).rejects.toThrow('--handle');
+  await expect(run(['content', 'scheduled', '--from', '2026-11-01Z'], env, output)).rejects.toThrow('--to');
   expect(mocks.connect).not.toHaveBeenCalled();
+});
+
+it('executes logout cleanly', async () => {
+  const code = await run(['logout'], env, output);
+  expect(code).toBe(0);
+  expect(output.log).toHaveBeenCalledWith('Signed out on this device.');
 });

@@ -14,13 +14,20 @@ The URL may also end in `/api/mcp`. HTTPS is required except on localhost; redir
 ## Common commands
 
 ```bash
+miler login
 miler tasks list --status todo
 miler tasks create "Plan launch" --priority high --due 2026-11-09T12:00:00Z
+miler tasks overdue
+miler tasks depend TASK_ID DEPENDS_ON_ID
 miler tasks status TASK_ID done
 miler content create --platform linkedin --title "Launch idea" --body "Draft copy"
+miler content scheduled --from 2026-11-09T00:00:00Z --to 2026-11-16T00:00:00Z
 miler calendar list --from 2026-11-09T00:00:00Z --to 2026-11-16T00:00:00Z
 miler notifications list --unread
+miler reminders get
+miler accounts create --platform x --handle @handle
 miler workspace summary
+miler logout
 ```
 
 Use `miler --help` for the available commands. Dates must be ISO 8601 UTC timestamps ending in `Z`. Commands print JSON. `miler tasks delete TASK_ID --confirm-title "Exact title"` and `miler content delete CONTENT_ID --confirm-delete` permanently delete records. Use `miler tools`, `miler describe TOOL_NAME`, and `miler call TOOL_NAME '{"key":"value"}'` for the full action catalog and advanced arguments.

@@ -16,14 +16,18 @@ Usage:
   miler tasks show ID | create TITLE [--priority PRIORITY] [--due ISO_DATE]
   miler tasks update ID [--title TITLE] [--description TEXT] [--due ISO_DATE]
   miler tasks status ID STATUS | delete ID --confirm-title TITLE
+  miler tasks overdue | depend ID DEPENDS_ON_ID | undepend DEP_ID
   miler content list [--search TEXT] [--status STATUS] [--platform PLATFORM]
-  miler content show ID | create --platform PLATFORM --title TITLE [--body TEXT]
+  miler content show ID | scheduled --from ISO_DATE --to ISO_DATE
+  miler content create --platform PLATFORM --title TITLE [--body TEXT]
   miler content update ID [--title TITLE] [--body TEXT] [--status STATUS]
   miler content delete ID --confirm-delete
   miler calendar list --from ISO_DATE --to ISO_DATE
   miler calendar create TITLE --start ISO_DATE [--end ISO_DATE]
   miler notifications list [--unread] | read ID | unread ID | dismiss ID | read-all
-  miler projects list | accounts list | workspace summary
+  miler reminders get | update [--lead-time MINUTES] [--email] [--in-app]
+  miler accounts list | accounts create --platform PLATFORM --handle HANDLE [--name NAME]
+  miler projects list | workspace summary
   npm run cli -- tools
   npm run cli -- describe <tool-name>
   npm run cli -- call <tool-name> [JSON-object]
