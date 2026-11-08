@@ -3,11 +3,15 @@ import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/cli
 import { pathToFileURL } from 'node:url';
 import { realpathSync } from 'node:fs';
 import { parseFriendlyCommand } from './commands.mjs';
+import { readCredentials, saveCredentials, deleteCredentials, promptSecret } from './credentials.mjs';
+
+const DEFAULT_URL = 'https://miler-creater.vercel.app';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 
 const help = `Miller Creator CLI
 
 Usage:
+  miler login | logout
   miler tasks list [--search TEXT] [--status STATUS] [--priority PRIORITY] [--limit N]
   miler tasks show ID | create TITLE [--priority PRIORITY] [--due ISO_DATE]
   miler tasks update ID [--title TITLE] [--description TEXT] [--due ISO_DATE]
@@ -26,9 +30,9 @@ Usage:
   npm run cli -- tokens <list|create|revoke> [JSON-object]
   npm run --silent cli -- auth login
 
-Set MILLER_URL to your deployment's base URL or /api/mcp URL and
-MILLER_TOKEN to an API token from the website's API Tokens settings.
-HTTPS is required except for localhost. Output is JSON for scripting.
+Use miler login to enter your private CLI username from the website.
+MILLER_URL can select a different deployment, and MILLER_TOKEN can override
+the stored credential. HTTPS is required except for localhost. Output is JSON.
 Examples:
   npm run cli -- tools
   npm run cli -- describe search_tasks
@@ -48,9 +52,35 @@ export function parseEndpoint(value) {
   return url;
 }
 
+export async function loginWithCredential(token, env = process.env) {
+  if (!/^ctc_live_[0-9a-f]{64}$/.test(token)) throw new Error('Invalid CLI username format.');
+  const url = parseEndpoint(env.MILLER_URL || DEFAULT_URL);
+  const transport = new StreamableHTTPClientTransport(url, { requestInit: { headers: { Authorization: `Bearer ${token}` }, redirect: 'error' } });
+  const client = new Client({ name: 'miler-cli', version: '0.2.0' }, { versionNegotiation: { mode: 'auto' } });
+  try {
+    await client.connect(transport);
+    await client.listTools();
+  } catch {
+    throw new Error('Login failed. Check your CLI username, deployment URL, and network connection.');
+  } finally { await client.close(); }
+  await saveCredentials({ url: url.href, token }, env);
+}
+
 export async function run(args, env = process.env, output = console) {
   const [command, name, rawArgs, ...extra] = args;
   if (!command || command === '--help' || command === '-h' || command === 'help') { output.log(help); return 0; }
+  if (command === 'login') {
+    if (name || rawArgs || extra.length) throw new Error('Usage: miler login');
+    await loginWithCredential(await promptSecret(), env);
+    output.log('Signed in.');
+    return 0;
+  }
+  if (command === 'logout') {
+    if (name || rawArgs || extra.length) throw new Error('Usage: miler logout');
+    await deleteCredentials(env);
+    output.log('Signed out on this device.');
+    return 0;
+  }
   const friendly = parseFriendlyCommand(args);
   if (friendly) return run(['call', friendly.name, JSON.stringify(friendly.arguments)], env, output);
   if (command === 'auth') {
@@ -89,10 +119,13 @@ export async function run(args, env = process.env, output = console) {
     try { toolArgs = JSON.parse(rawArgs); } catch { throw new Error('Tool arguments must be a JSON object.'); }
     if (!toolArgs || typeof toolArgs !== 'object' || Array.isArray(toolArgs)) throw new Error('Tool arguments must be a JSON object.');
   }
-  const url = parseEndpoint(env.MILLER_URL);
-  if (!env.MILLER_TOKEN || /[\r\n]/.test(env.MILLER_TOKEN)) throw new Error('Set MILLER_TOKEN to an API token from the website.');
+  const stored = env.MILLER_TOKEN ? null : await readCredentials(env);
+  const url = parseEndpoint(env.MILLER_URL || stored?.url || DEFAULT_URL);
+  if (stored && url.href !== stored.url) throw new Error('Stored CLI username belongs to a different deployment. Run miler login with this MILLER_URL.');
+  const token = env.MILLER_TOKEN || stored?.token;
+  if (!token || /[\r\n]/.test(token)) throw new Error('Set MILLER_TOKEN to an API token from the website, or run miler login.');
   const transport = new StreamableHTTPClientTransport(url, {
-    requestInit: { headers: { Authorization: `Bearer ${env.MILLER_TOKEN}` }, redirect: 'error' },
+    requestInit: { headers: { Authorization: `Bearer ${token}` }, redirect: 'error' },
   });
   const client = new Client({ name: 'miller-creator-cli', version: '0.1.0' }, { versionNegotiation: { mode: 'auto' } });
   try {
