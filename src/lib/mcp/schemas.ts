@@ -120,7 +120,7 @@ export const createTaskInputSchema = z
     created_from: z.enum(['tasks', 'calendar']).optional().describe('Use calendar to appear only on the calendar; omit or use tasks for the Tasks tab and calendar left panel.'),
     parent_task_id: z.string().uuid().optional().nullable(),
     milestone_id: z.string().uuid().optional().nullable(),
-    recurrence: recurrenceInputSchema.strict().optional().nullable(),
+    recurrence: recurrenceInputSchema.optional().nullable(),
     title: z.string().trim().min(1, 'Task title is required').max(255, 'Title is too long'),
     description: z.string().trim().max(5000).optional().nullable(),
     priority: taskPriorityEnum.default('medium'),
@@ -176,6 +176,8 @@ export const updateTaskInputSchema = z
     estimated_duration_minutes: z.number().int().min(1).max(10080).optional().nullable(),
     tags: z.array(z.string().trim().min(1).max(50)).optional(),
     project_id: z.string().uuid('project_id must be a valid UUID').optional().nullable(),
+    recurrence: recurrenceInputSchema.optional().nullable(),
+    stop_recurrence: z.boolean().optional(),
   })
   .strict()
   .refine(
@@ -251,7 +253,7 @@ export const createContentItemInputSchema = z
     external_links: z.array(externalLinkItemSchema).optional(),
     target_reference: targetReferenceSchema.optional().nullable(),
     created_from: z.enum(['content', 'calendar']).optional().describe('Use calendar for calendar-only placement; omit or use content for the Content tab and calendar left panel.'),
-    recurrence: recurrenceInputSchema.strict().optional().nullable(),
+    recurrence: recurrenceInputSchema.optional().nullable(),
     platform: socialPlatformEnum,
     action_type: contentActionTypeEnum.default('post'),
     status: z.enum(['idea', 'draft', 'scheduled']).default('idea'),

@@ -74,7 +74,10 @@ export async function createTaskAction(
       const rawWeekdays = formData.getAll('recurrence_by_weekday');
       let by_weekday: number[] | null = null;
       if (rawWeekdays.length > 0) {
-        by_weekday = rawWeekdays
+        const flattened = rawWeekdays.flatMap((w) =>
+          typeof w === 'string' && w.includes(',') ? w.split(',') : [w]
+        );
+        by_weekday = flattened
           .map((w) => parseInt(w as string, 10))
           .filter((w) => !isNaN(w) && w >= 1 && w <= 7);
         if (by_weekday.length === 0) by_weekday = null;

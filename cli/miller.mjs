@@ -15,7 +15,7 @@ Usage:
   miler login | logout
   miler tasks list [--search TEXT] [--status STATUS] [--priority PRIORITY] [--limit N]
   miler tasks show ID | create TITLE [--priority PRIORITY] [--due ISO_DATE]
-  miler tasks update ID [--title TITLE] [--description TEXT] [--due ISO_DATE]
+  miler tasks update ID [--title TITLE] [--description TEXT] [--due ISO_DATE] [--stop-recurrence]
   miler tasks status ID STATUS | delete ID --confirm-title TITLE
   miler tasks overdue | depend ID DEPENDS_ON_ID | undepend DEP_ID
   miler content list [--search TEXT] [--status STATUS] [--platform PLATFORM]

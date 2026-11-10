@@ -8,6 +8,7 @@ import {
   getContentDetailsInputSchema,
   listScheduledContentInputSchema,
   createTaskInputSchema,
+  createCalendarEntryInputSchema,
   updateTaskInputSchema,
   changeTaskStatusInputSchema,
   rescheduleTaskInputSchema,
@@ -182,6 +183,55 @@ describe('MCP Zod Schemas Validation (Phase 7.3)', () => {
         })
       ).toThrow();
     });
+
+    it('validates recurrence configurations strictly', () => {
+      const valid = createTaskInputSchema.parse({
+        title: 'Weekly sync',
+        recurrence: {
+          frequency: 'weekly',
+          interval: 2,
+          by_weekday: [1, 3],
+          timezone: 'Asia/Cairo',
+        },
+      });
+      expect(valid.recurrence?.frequency).toBe('weekly');
+      expect(valid.recurrence?.interval).toBe(2);
+      expect(valid.recurrence?.by_weekday).toEqual([1, 3]);
+
+      // Rejects unsupported 'custom' frequency
+      expect(() =>
+        createTaskInputSchema.parse({
+          title: 'Custom task',
+          recurrence: {
+            frequency: 'custom',
+            interval: 1,
+          },
+        })
+      ).toThrow("Unsupported recurrence frequency: 'custom'");
+
+      // Rejects conflicting until_date and count
+      expect(() =>
+        createTaskInputSchema.parse({
+          title: 'Conflicting termination',
+          recurrence: {
+            frequency: 'daily',
+            until_date: '2026-12-01T00:00:00.000Z',
+            count: 5,
+          },
+        })
+      ).toThrow('Cannot specify both until_date and count termination conditions');
+
+      // createCalendarEntryInputSchema validates recurrence consistently
+      expect(() =>
+        createCalendarEntryInputSchema.parse({
+          title: 'Calendar entry with bad recurrence',
+          scheduled_start: nowIso,
+          recurrence: {
+            frequency: 'custom',
+          },
+        })
+      ).toThrow("Unsupported recurrence frequency: 'custom'");
+    });
   });
 
   describe('9. updateTaskInputSchema', () => {
@@ -223,6 +273,35 @@ describe('MCP Zod Schemas Validation (Phase 7.3)', () => {
           workspace_id: validUuid,
         })
       ).toThrow();
+    });
+
+    it('accepts recurrence configuration and stop_recurrence', () => {
+      const parsedWithRecurrence = updateTaskInputSchema.parse({
+        task_id: validUuid,
+        recurrence: {
+          frequency: 'monthly',
+          interval: 1,
+          by_monthday: [15],
+        },
+      });
+      expect(parsedWithRecurrence.recurrence?.frequency).toBe('monthly');
+      expect(parsedWithRecurrence.recurrence?.by_monthday).toEqual([15]);
+
+      const parsedStop = updateTaskInputSchema.parse({
+        task_id: validUuid,
+        stop_recurrence: true,
+      });
+      expect(parsedStop.stop_recurrence).toBe(true);
+
+      // Rejects invalid recurrence in update_task
+      expect(() =>
+        updateTaskInputSchema.parse({
+          task_id: validUuid,
+          recurrence: {
+            frequency: 'custom',
+          },
+        })
+      ).toThrow("Unsupported recurrence frequency: 'custom'");
     });
   });
 

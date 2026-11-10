@@ -92,6 +92,9 @@ it('maps convenient commands onto the existing tools', async () => {
   await run(['tasks', 'undepend', 'dep-123'], env, output);
   expect(mocks.callTool).toHaveBeenLastCalledWith({ name: 'remove_task_dependency', arguments: { dependency_id: 'dep-123' } });
 
+  await run(['tasks', 'update', 'task-123', '--stop-recurrence'], env, output);
+  expect(mocks.callTool).toHaveBeenLastCalledWith({ name: 'update_task', arguments: { task_id: 'task-123', stop_recurrence: true } });
+
   await run(['content', 'scheduled', '--from', '2026-11-01T00:00:00Z', '--to', '2026-11-07T00:00:00Z'], env, output);
   expect(mocks.callTool).toHaveBeenLastCalledWith({ name: 'list_scheduled_content', arguments: { start_date: '2026-11-01T00:00:00Z', end_date: '2026-11-07T00:00:00Z' } });
 

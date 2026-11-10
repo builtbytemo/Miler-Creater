@@ -936,7 +936,7 @@ export async function completeTask(
   workspaceId: string,
   taskId: string,
   userId?: string
-): Promise<{ completedTask: TaskWithMeta; nextOccurrence: TaskWithMeta | null }> {
+): Promise<{ completedTask: TaskWithMeta; nextOccurrence: TaskWithMeta | null; nextTask?: TaskWithMeta | null }> {
   // 1. Fetch current task
   const { data: current, error: fetchErr } = await supabase
     .from('tasks')
@@ -1014,6 +1014,7 @@ export async function completeTask(
         project: (current as unknown as { projects?: { id: string; name: string; color: string | null } }).projects || null,
       },
       nextOccurrence: nextOcc,
+      nextTask: nextOcc,
     };
   }
 
@@ -1150,6 +1151,7 @@ export async function completeTask(
         project: null,
       },
       nextOccurrence,
+      nextTask: nextOccurrence,
     };
   }
 
@@ -1294,6 +1296,7 @@ export async function completeTask(
       project: (completed as unknown as { projects?: { id: string; name: string; color: string | null } }).projects || null,
     },
     nextOccurrence,
+    nextTask: nextOccurrence,
   };
 }
 
@@ -1307,7 +1310,7 @@ export async function skipTaskOccurrence(
   workspaceId: string,
   taskId: string,
   userId?: string
-): Promise<{ cancelledTask: TaskWithMeta; nextOccurrence: TaskWithMeta | null }> {
+): Promise<{ cancelledTask: TaskWithMeta; nextOccurrence: TaskWithMeta | null; nextTask: TaskWithMeta | null }> {
   // 1. Fetch current task
   const { data: current, error: fetchErr } = await supabase
     .from('tasks')
@@ -1483,6 +1486,7 @@ export async function skipTaskOccurrence(
       project: (cancelled as unknown as { projects?: { id: string; name: string; color: string | null } }).projects || null,
     },
     nextOccurrence,
+    nextTask: nextOccurrence,
   };
 }
 
@@ -1668,8 +1672,9 @@ export async function stopRecurrence(
   supabase: SupabaseClient<Database>,
   workspaceId: string,
   ruleId: string,
-  options?: { currentTaskId?: string }
+  options?: { currentTaskId?: string; targetTaskId?: string }
 ): Promise<{ success: boolean; stoppedRuleId: string }> {
+  const targetTaskId = options?.currentTaskId || options?.targetTaskId;
   // Authorize rule exists in workspace
   const { data: existing, error: fetchErr } = await supabase
     .from('recurrence_rules')
@@ -1700,14 +1705,14 @@ export async function stopRecurrence(
   }
 
   // 2. Detach active uncompleted task so it becomes a standalone task
-  if (options?.currentTaskId) {
+  if (targetTaskId) {
     await supabase
       .from('tasks')
       .update({
         recurrence_rule_id: null,
         updated_at: nowIso,
       })
-      .eq('id', options.currentTaskId)
+      .eq('id', targetTaskId)
       .eq('workspace_id', workspaceId);
   } else {
     await supabase

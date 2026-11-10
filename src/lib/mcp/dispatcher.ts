@@ -54,7 +54,6 @@ import {
   createContentItemInputSchema,
   updateContentItemInputSchema,
   rescheduleContentInputSchema,
-  type GetWorkspaceSummaryInput,
   type SearchTasksInput,
   type GetTaskDetailsInput,
   type ListOverdueTasksInput,
@@ -76,6 +75,9 @@ import {
   createTask,
   updateTask,
   completeTask,
+  updateRecurrenceRule,
+  stopRecurrence,
+  makeTaskRecurring,
 } from '@/lib/services/task-service';
 import {
   getContentItems,
@@ -98,7 +100,7 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
     category: 'read',
     requiredScopes: ['task:read', 'content:read'],
     schema: getWorkspaceSummaryInputSchema,
-    execute: async (context: AIExecutionContext, _input: GetWorkspaceSummaryInput) => {
+    execute: async (context: AIExecutionContext) => {
       return await getDashboardSummary(
         context.supabase,
         context.workspaceId,
@@ -218,13 +220,54 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
   update_task: {
     name: 'update_task',
     description:
-      'Update attributes of an existing task (title, description, priority, duration, tags, project).',
+      'Update attributes of an existing task (title, description, priority, duration, tags, project, recurrence).',
     category: 'write',
     requiredScopes: ['task:write'],
     schema: updateTaskInputSchema,
     execute: async (context: AIExecutionContext, input: UpdateTaskInput) => {
-      const { task_id, ...updates } = input;
-      return await updateTask(context.supabase, context.workspaceId, task_id, updates);
+      const { task_id, recurrence, stop_recurrence, ...updates } = input;
+
+      if (stop_recurrence === true || recurrence === null) {
+        const existingTask = await getTaskById(context.supabase, context.workspaceId, task_id);
+        if (!existingTask) {
+          throw new Error('Task not found');
+        }
+        if (existingTask.recurrence_rule_id) {
+          await stopRecurrence(context.supabase, context.workspaceId, existingTask.recurrence_rule_id, {
+            targetTaskId: task_id,
+          });
+        }
+      } else if (recurrence !== undefined) {
+        const existingTask = await getTaskById(context.supabase, context.workspaceId, task_id);
+        if (!existingTask) {
+          throw new Error('Task not found');
+        }
+        if (existingTask.recurrence_rule_id) {
+          await updateRecurrenceRule(
+            context.supabase,
+            context.workspaceId,
+            existingTask.recurrence_rule_id,
+            recurrence
+          );
+        } else {
+          await makeTaskRecurring(
+            context.supabase,
+            context.workspaceId,
+            task_id,
+            recurrence
+          );
+        }
+      }
+
+      if (Object.keys(updates).length > 0) {
+        return await updateTask(context.supabase, context.workspaceId, task_id, updates);
+      }
+
+      const refreshed = await getTaskById(context.supabase, context.workspaceId, task_id);
+      if (!refreshed) {
+        throw new Error('Task not found');
+      }
+      return refreshed;
     },
   },
 
@@ -239,7 +282,13 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
     execute: async (context: AIExecutionContext, input: ChangeTaskStatusInput) => {
       if (input.status === 'done') {
         const result = await completeTask(context.supabase, context.workspaceId, input.task_id);
-        return result.completedTask;
+        return {
+          ...result.completedTask,
+          next_occurrence: result.nextOccurrence,
+          next_task: result.nextOccurrence,
+          nextOccurrence: result.nextOccurrence,
+          nextTask: result.nextOccurrence,
+        };
       }
       return await updateTask(context.supabase, context.workspaceId, input.task_id, {
         status: input.status,

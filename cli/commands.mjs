@@ -3,7 +3,7 @@ const definitions = {
   'tasks list': ['search_tasks', [], { search: 'search', status: 'status', priority: 'priority', limit: ['limit', 'number'] }],
   'tasks show': ['get_task_details', ['task_id'], {}],
   'tasks create': ['create_task', ['title'], { description: 'description', priority: 'priority', due: 'due_date', start: 'scheduled_start', end: 'scheduled_end', project: 'project_id' }],
-  'tasks update': ['update_task', ['task_id'], { title: 'title', description: 'description', priority: 'priority', due: 'due_date', start: 'scheduled_start', end: 'scheduled_end', project: 'project_id' }],
+  'tasks update': ['update_task', ['task_id'], { title: 'title', description: 'description', priority: 'priority', due: 'due_date', start: 'scheduled_start', end: 'scheduled_end', project: 'project_id', 'stop-recurrence': ['stop_recurrence', 'boolean'] }],
   'tasks status': ['change_task_status', ['task_id', 'status'], {}],
   'tasks overdue': ['list_overdue_tasks', [], {}],
   'tasks depend': ['add_task_dependency', ['task_id', 'depends_on_task_id'], {}],
