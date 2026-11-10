@@ -74,6 +74,76 @@ describe('Task Engine Input Validation (Zod Schemas)', () => {
       });
       expect(result.success).toBe(true);
     });
+
+    it('rejects custom frequency and invalid recurrence constraints', () => {
+      // Rejects 'custom' frequency
+      const customRes = createTaskSchema.safeParse({
+        title: 'Custom Task',
+        recurrence: {
+          frequency: 'custom',
+          interval: 1,
+        },
+      });
+      expect(customRes.success).toBe(false);
+      expect(customRes.error?.issues[0]?.message).toMatch(/Unsupported recurrence frequency/);
+
+      // Rejects non-positive interval
+      const zeroInterval = createTaskSchema.safeParse({
+        title: 'Invalid Interval',
+        recurrence: {
+          frequency: 'daily',
+          interval: 0,
+        },
+      });
+      expect(zeroInterval.success).toBe(false);
+
+      // Rejects duplicate weekdays
+      const dupeWeekdays = createTaskSchema.safeParse({
+        title: 'Dupe Weekdays',
+        recurrence: {
+          frequency: 'weekly',
+          interval: 1,
+          by_weekday: [1, 1, 3],
+        },
+      });
+      expect(dupeWeekdays.success).toBe(false);
+      expect(dupeWeekdays.error?.issues[0]?.message).toMatch(/duplicate days/);
+
+      // Rejects invalid monthdays (> 31)
+      const invalidMonthday = createTaskSchema.safeParse({
+        title: 'Invalid Monthday',
+        recurrence: {
+          frequency: 'monthly',
+          interval: 1,
+          by_monthday: [32],
+        },
+      });
+      expect(invalidMonthday.success).toBe(false);
+
+      // Rejects mutual exclusivity violation (until_date + count)
+      const mutualTerm = createTaskSchema.safeParse({
+        title: 'Mutual Term',
+        recurrence: {
+          frequency: 'daily',
+          interval: 1,
+          until_date: '2026-12-31T00:00:00Z',
+          count: 5,
+        },
+      });
+      expect(mutualTerm.success).toBe(false);
+      expect(mutualTerm.error?.issues[0]?.message).toMatch(/Cannot specify both until_date and count/);
+
+      // Rejects invalid timezone identifier
+      const invalidTz = createTaskSchema.safeParse({
+        title: 'Invalid TZ',
+        recurrence: {
+          frequency: 'daily',
+          interval: 1,
+          timezone: 'Jupiter/Europa',
+        },
+      });
+      expect(invalidTz.success).toBe(false);
+    });
   });
 
   describe('updateTaskSchema', () => {

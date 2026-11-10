@@ -60,7 +60,7 @@ export async function createTaskAction(
     let recurrence = null;
     if (frequency && frequency !== 'none') {
       recurrence = {
-        frequency: frequency as 'daily' | 'weekly' | 'monthly' | 'yearly' | 'custom',
+        frequency: frequency as 'daily' | 'weekly' | 'monthly' | 'yearly',
         interval: intervalStr ? parseInt(intervalStr, 10) : 1,
         timezone: 'Asia/Cairo',
       };

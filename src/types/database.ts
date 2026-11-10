@@ -218,6 +218,8 @@ export interface Database {
           until_date: string | null;
           count: number | null;
           timezone: string;
+          dtstart: string | null;
+          total_occurrences_generated: number;
           created_at: string;
           updated_at: string;
         };
@@ -231,6 +233,8 @@ export interface Database {
           until_date?: string | null;
           count?: number | null;
           timezone?: string;
+          dtstart?: string | null;
+          total_occurrences_generated?: number;
           created_at?: string;
           updated_at?: string;
         };
@@ -244,6 +248,8 @@ export interface Database {
           until_date?: string | null;
           count?: number | null;
           timezone?: string;
+          dtstart?: string | null;
+          total_occurrences_generated?: number;
           created_at?: string;
           updated_at?: string;
         };        Relationships: [];
@@ -342,6 +348,7 @@ export interface Database {
           completed_at: string | null;
           tags: string[];
           recurrence_rule_id: string | null;
+          occurrence_index: number;
           created_by: string | null;
           assigned_to: string | null;
           created_at: string;
@@ -366,6 +373,7 @@ export interface Database {
           completed_at?: string | null;
           tags?: string[];
           recurrence_rule_id?: string | null;
+          occurrence_index?: number;
           created_by?: string | null;
           assigned_to?: string | null;
           created_at?: string;
@@ -390,6 +398,7 @@ export interface Database {
           completed_at?: string | null;
           tags?: string[];
           recurrence_rule_id?: string | null;
+          occurrence_index?: number;
           created_by?: string | null;
           assigned_to?: string | null;
           created_at?: string;
