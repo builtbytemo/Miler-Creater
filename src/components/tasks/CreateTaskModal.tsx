@@ -43,6 +43,12 @@ export function CreateTaskModal({
   const [error, setError] = useState<string | null>(null);
   const [isAllDay, setIsAllDay] = useState(false);
   const [recurrenceFreq, setRecurrenceFreq] = useState('none');
+  const [recurrenceInterval, setRecurrenceInterval] = useState(1);
+  const [recurrenceWeekdays, setRecurrenceWeekdays] = useState<number[]>([1]);
+  const [recurrenceMonthday, setRecurrenceMonthday] = useState(1);
+  const [recurrenceEndType, setRecurrenceEndType] = useState<'never' | 'until_date' | 'count'>('never');
+  const [recurrenceUntilDate, setRecurrenceUntilDate] = useState('');
+  const [recurrenceCount, setRecurrenceCount] = useState(10);
 
   // Explicit scheduling state
   const [isScheduled, setIsScheduled] = useState<boolean>(Boolean(initialScheduledStart));
@@ -60,14 +66,33 @@ export function CreateTaskModal({
     setPrevSyncKey(syncKey);
     if (isOpen) {
       setIsScheduled(Boolean(initialScheduledStart));
-      setScheduledStart(
-        initialScheduledStart ? toLocalDatetimeString(initialScheduledStart, userTimeZone) : ''
-      );
+      const initStartStr = initialScheduledStart
+        ? toLocalDatetimeString(initialScheduledStart, userTimeZone)
+        : '';
+      setScheduledStart(initStartStr);
       setScheduledEnd(
         initialScheduledEnd ? toLocalDatetimeString(initialScheduledEnd, userTimeZone) : ''
       );
       setIsAllDay(false);
       setRecurrenceFreq('none');
+      setRecurrenceInterval(1);
+
+      // Infer default weekday / monthday from start date if available
+      if (initStartStr) {
+        const d = new Date(initStartStr);
+        if (!isNaN(d.getTime())) {
+          const isoDay = d.getDay() === 0 ? 7 : d.getDay();
+          setRecurrenceWeekdays([isoDay]);
+          setRecurrenceMonthday(d.getDate());
+        }
+      } else {
+        setRecurrenceWeekdays([1]);
+        setRecurrenceMonthday(1);
+      }
+
+      setRecurrenceEndType('never');
+      setRecurrenceUntilDate('');
+      setRecurrenceCount(10);
       setError(null);
     }
   }
@@ -131,6 +156,62 @@ export function CreateTaskModal({
       if (parsedDue) {
         formData.set('due_date', parsedDue.toISOString());
       }
+    }
+
+    // Recurrence rule setup & validation (top-level tasks only)
+    if (!parentTaskId && recurrenceFreq !== 'none') {
+      formData.set('recurrence_frequency', recurrenceFreq);
+      formData.set('recurrence_interval', String(Math.max(1, recurrenceInterval)));
+      formData.set('recurrence_timezone', userTimeZone);
+
+      if (recurrenceFreq === 'weekly') {
+        if (recurrenceWeekdays.length === 0) {
+          setError('Please select at least one weekday for weekly recurrence.');
+          return;
+        }
+        formData.delete('recurrence_by_weekday');
+        for (const w of recurrenceWeekdays) {
+          formData.append('recurrence_by_weekday', String(w));
+        }
+      } else {
+        formData.delete('recurrence_by_weekday');
+      }
+
+      if (recurrenceFreq === 'monthly') {
+        if (recurrenceMonthday < 1 || recurrenceMonthday > 31) {
+          setError('Month day must be between 1 and 31.');
+          return;
+        }
+        formData.set('recurrence_by_monthday', String(recurrenceMonthday));
+      } else {
+        formData.delete('recurrence_by_monthday');
+      }
+
+      formData.set('recurrence_end_type', recurrenceEndType);
+      if (recurrenceEndType === 'until_date') {
+        if (!recurrenceUntilDate.trim()) {
+          setError('Please choose an end date for recurrence.');
+          return;
+        }
+        formData.set('recurrence_until_date', recurrenceUntilDate.trim());
+        formData.delete('recurrence_count');
+      } else if (recurrenceEndType === 'count') {
+        if (!recurrenceCount || recurrenceCount < 1) {
+          setError('Occurrence count must be a positive number >= 1.');
+          return;
+        }
+        formData.set('recurrence_count', String(recurrenceCount));
+        formData.delete('recurrence_until_date');
+      } else {
+        formData.delete('recurrence_until_date');
+        formData.delete('recurrence_count');
+      }
+    } else {
+      formData.set('recurrence_frequency', 'none');
+      formData.delete('recurrence_by_weekday');
+      formData.delete('recurrence_by_monthday');
+      formData.delete('recurrence_until_date');
+      formData.delete('recurrence_count');
     }
 
     try {
@@ -426,11 +507,16 @@ export function CreateTaskModal({
 
           {/* Recurrence Rule Section (top-level tasks only) */}
           {!parentTaskId && (
-            <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface-muted)]/55 p-4 space-y-3">
-              <span className="text-xs font-semibold text-[var(--text-primary)] inline-flex items-center gap-1.5">
-                <Clock className="w-3.5 h-3.5 text-[var(--text-secondary)]" aria-hidden="true" />
-                <span>Recurrence Rule</span>
-              </span>
+            <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface-muted)]/55 p-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-[var(--text-primary)] inline-flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-[var(--text-secondary)]" aria-hidden="true" />
+                  <span>Recurrence Rule</span>
+                </span>
+                <span className="text-[10.5px] font-mono text-[var(--text-muted)]">
+                  {userTimeZone}
+                </span>
+              </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
@@ -451,6 +537,7 @@ export function CreateTaskModal({
                     <option value="daily">Daily</option>
                     <option value="weekly">Weekly</option>
                     <option value="monthly">Monthly</option>
+                    <option value="yearly">Yearly</option>
                   </select>
                 </div>
 
@@ -465,7 +552,9 @@ export function CreateTaskModal({
                         ? 'days'
                         : recurrenceFreq === 'weekly'
                           ? 'weeks'
-                          : 'months'}
+                          : recurrenceFreq === 'monthly'
+                            ? 'months'
+                            : 'years'}
                       )
                     </label>
                     <input
@@ -473,12 +562,177 @@ export function CreateTaskModal({
                       name="recurrence_interval"
                       type="number"
                       min="1"
-                      defaultValue="1"
+                      value={recurrenceInterval}
+                      onChange={(e) =>
+                        setRecurrenceInterval(Math.max(1, parseInt(e.target.value, 10) || 1))
+                      }
                       className="w-full h-9 px-3 text-xs rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] font-mono"
                     />
                   </div>
                 )}
               </div>
+
+              {recurrenceFreq === 'weekly' && (
+                <div className="space-y-1.5 pt-1 border-t border-[var(--border-subtle)]">
+                  <label className="block text-[11px] font-medium text-[var(--text-secondary)]">
+                    Repeat on Weekdays <span className="text-[var(--status-danger-text)]">*</span>
+                  </label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      { day: 1, label: 'Mon' },
+                      { day: 2, label: 'Tue' },
+                      { day: 3, label: 'Wed' },
+                      { day: 4, label: 'Thu' },
+                      { day: 5, label: 'Fri' },
+                      { day: 6, label: 'Sat' },
+                      { day: 7, label: 'Sun' },
+                    ].map(({ day, label }) => {
+                      const isSelected = recurrenceWeekdays.includes(day);
+                      return (
+                        <button
+                          key={day}
+                          type="button"
+                          onClick={() => {
+                            setRecurrenceWeekdays((prev) =>
+                              isSelected
+                                ? prev.filter((d) => d !== day)
+                                : [...prev, day].sort((a, b) => a - b)
+                            );
+                          }}
+                          className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-colors ${
+                            isSelected
+                              ? 'bg-[var(--text-primary)] text-[var(--bg-canvas)] shadow-2xs font-semibold'
+                              : 'bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-surface-elevated)] border border-[var(--border-subtle)]'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {recurrenceFreq === 'monthly' && (
+                <div className="space-y-1.5 pt-1 border-t border-[var(--border-subtle)]">
+                  <label
+                    htmlFor="recurrence-monthday"
+                    className="block text-[11px] font-medium text-[var(--text-secondary)]"
+                  >
+                    Day of Month (1 - 31)
+                  </label>
+                  <input
+                    id="recurrence-monthday"
+                    type="number"
+                    min="1"
+                    max="31"
+                    value={recurrenceMonthday}
+                    onChange={(e) =>
+                      setRecurrenceMonthday(
+                        Math.min(31, Math.max(1, parseInt(e.target.value, 10) || 1))
+                      )
+                    }
+                    className="w-28 h-9 px-3 text-xs rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] font-mono"
+                  />
+                  <p className="text-[11px] text-[var(--text-muted)]">
+                    Months with fewer days safely clamp to month-end without drifting.
+                  </p>
+                </div>
+              )}
+
+              {recurrenceFreq === 'yearly' && (
+                <div className="pt-1 border-t border-[var(--border-subtle)]">
+                  <p className="text-[11px] text-[var(--text-muted)]">
+                    Repeats annually on the scheduled date. Leap-year dates (Feb 29) clamp safely to Feb 28 in non-leap years.
+                  </p>
+                </div>
+              )}
+
+              {recurrenceFreq !== 'none' && (
+                <div className="space-y-2 pt-2 border-t border-[var(--border-subtle)]">
+                  <label className="block text-[11px] font-medium text-[var(--text-secondary)]">
+                    Termination Condition
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <label className="flex items-center gap-2 p-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] cursor-pointer text-xs">
+                      <input
+                        type="radio"
+                        name="recurrence_end_option"
+                        value="never"
+                        checked={recurrenceEndType === 'never'}
+                        onChange={() => setRecurrenceEndType('never')}
+                        className="accent-[var(--text-primary)]"
+                      />
+                      <span>Never ends</span>
+                    </label>
+
+                    <label className="flex items-center gap-2 p-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] cursor-pointer text-xs">
+                      <input
+                        type="radio"
+                        name="recurrence_end_option"
+                        value="until_date"
+                        checked={recurrenceEndType === 'until_date'}
+                        onChange={() => setRecurrenceEndType('until_date')}
+                        className="accent-[var(--text-primary)]"
+                      />
+                      <span>On Date</span>
+                    </label>
+
+                    <label className="flex items-center gap-2 p-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] cursor-pointer text-xs">
+                      <input
+                        type="radio"
+                        name="recurrence_end_option"
+                        value="count"
+                        checked={recurrenceEndType === 'count'}
+                        onChange={() => setRecurrenceEndType('count')}
+                        className="accent-[var(--text-primary)]"
+                      />
+                      <span>After Occurrences</span>
+                    </label>
+                  </div>
+
+                  {recurrenceEndType === 'until_date' && (
+                    <div className="space-y-1 pt-1">
+                      <label
+                        htmlFor="recurrence-until-date"
+                        className="block text-[11px] font-medium text-[var(--text-secondary)]"
+                      >
+                        End Date <span className="text-[var(--status-danger-text)]">*</span>
+                      </label>
+                      <input
+                        id="recurrence-until-date"
+                        type="date"
+                        value={recurrenceUntilDate}
+                        onChange={(e) => setRecurrenceUntilDate(e.target.value)}
+                        required
+                        className="w-full sm:w-64 h-9 px-3 text-xs rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] font-mono"
+                      />
+                    </div>
+                  )}
+
+                  {recurrenceEndType === 'count' && (
+                    <div className="space-y-1 pt-1">
+                      <label
+                        htmlFor="recurrence-count"
+                        className="block text-[11px] font-medium text-[var(--text-secondary)]"
+                      >
+                        Total Occurrences <span className="text-[var(--status-danger-text)]">*</span>
+                      </label>
+                      <input
+                        id="recurrence-count"
+                        type="number"
+                        min="1"
+                        value={recurrenceCount}
+                        onChange={(e) =>
+                          setRecurrenceCount(Math.max(1, parseInt(e.target.value, 10) || 1))
+                        }
+                        required
+                        className="w-32 h-9 px-3 text-xs rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] font-mono"
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

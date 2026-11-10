@@ -12,10 +12,12 @@ import {
   Trash2,
   Link as LinkIcon,
   Loader2,
+  Repeat,
+  Edit3,
 } from 'lucide-react';
 import { clsx } from 'clsx';
-import type { TaskDetail, TaskWithMeta } from '@/lib/services/task-service';
-import type { TaskStatus } from '@/types/database';
+import type { TaskDetail, TaskWithMeta, RecurrenceRuleDetail } from '@/lib/services/task-service';
+import type { TaskStatus, TaskPriority } from '@/types/database';
 import {
   completeTaskAction,
   cancelTaskAction,
@@ -23,8 +25,14 @@ import {
   updateTaskAction,
   addTaskDependencyAction,
   removeTaskDependencyAction,
+  updateRecurrenceRuleAction,
+  stopRecurrenceAction,
+  makeTaskRecurringAction,
   type TaskActionResult,
 } from '@/lib/actions/task-actions';
+import { formatRecurrenceSummary } from '@/lib/temporal/recurrence';
+import { toLocalDatetimeString, parseLocalDatetimeString } from '@/lib/temporal/calendar';
+import { DEFAULT_TIMEZONE } from '@/lib/temporal/timezone';
 import { CreateTaskModal } from './CreateTaskModal';
 
 interface TaskDetailModalProps {
@@ -36,6 +44,7 @@ interface TaskDetailModalProps {
   onTaskUpdated?: (updatedStatus?: TaskStatus) => void;
   onSubtaskCreated?: (parentId: string, subtask: TaskWithMeta) => void;
   onOpenTask?: (task: TaskWithMeta) => void;
+  userTimeZone?: string;
 }
 
 export function TaskDetailModal({
@@ -47,6 +56,7 @@ export function TaskDetailModal({
   onTaskUpdated,
   onSubtaskCreated,
   onOpenTask,
+  userTimeZone = DEFAULT_TIMEZONE,
 }: TaskDetailModalProps) {
   const [currentTask, setCurrentTask] = useState<TaskDetail>(task);
   const [statusError, setStatusError] = useState<string | null>(null);
@@ -55,15 +65,91 @@ export function TaskDetailModal({
   const [depError, setDepError] = useState<string | null>(null);
   const [isActionPending, setIsActionPending] = useState(false);
 
+  // Edit Task (This Occurrence Only) State
+  const [isEditingTask, setIsEditingTask] = useState(false);
+  const [editTitle, setEditTitle] = useState(task.title);
+  const [editDescription, setEditDescription] = useState(task.description || '');
+  const [editPriority, setEditPriority] = useState<TaskPriority>(task.priority);
+  const [editScheduledStart, setEditScheduledStart] = useState(
+    task.scheduled_start ? toLocalDatetimeString(task.scheduled_start, userTimeZone) : ''
+  );
+  const [editScheduledEnd, setEditScheduledEnd] = useState(
+    task.scheduled_end ? toLocalDatetimeString(task.scheduled_end, userTimeZone) : ''
+  );
+  const [editDueDate, setEditDueDate] = useState(
+    task.due_date ? toLocalDatetimeString(task.due_date, userTimeZone) : ''
+  );
+  const [editDuration, setEditDuration] = useState<number | ''>(
+    task.estimated_duration_minutes ?? ''
+  );
+
+  // Recurrence Series Editing State
+  const [isEditingRecurrence, setIsEditingRecurrence] = useState(false);
+  const [ruleFreq, setRuleFreq] = useState<'daily' | 'weekly' | 'monthly' | 'yearly'>(
+    task.recurrence_rule?.frequency || 'weekly'
+  );
+  const [ruleInterval, setRuleInterval] = useState(task.recurrence_rule?.interval || 1);
+  const [ruleWeekdays, setRuleWeekdays] = useState<number[]>(
+    task.recurrence_rule?.by_weekday || [1]
+  );
+  const [ruleMonthday, setRuleMonthday] = useState(
+    task.recurrence_rule?.by_monthday?.[0] || 1
+  );
+  const [ruleEndType, setRuleEndType] = useState<'never' | 'until_date' | 'count'>(
+    task.recurrence_rule?.count
+      ? 'count'
+      : task.recurrence_rule?.until_date
+        ? 'until_date'
+        : 'never'
+  );
+  const [ruleUntilDate, setRuleUntilDate] = useState(
+    task.recurrence_rule?.until_date ? task.recurrence_rule.until_date.split('T')[0] : ''
+  );
+  const [ruleCount, setRuleCount] = useState(task.recurrence_rule?.count || 10);
+  const [isStopConfirmOpen, setIsStopConfirmOpen] = useState(false);
+  const [recurrenceError, setRecurrenceError] = useState<string | null>(null);
+
+  // Sync state when task prop changes
   const [prevTaskProp, setPrevTaskProp] = useState<TaskDetail>(task);
   if (prevTaskProp !== task) {
     setPrevTaskProp(task);
     setCurrentTask(task);
     setStatusError(null);
+    setRecurrenceError(null);
+    setIsEditingTask(false);
+    setIsEditingRecurrence(false);
+    setIsStopConfirmOpen(false);
+
+    setEditTitle(task.title);
+    setEditDescription(task.description || '');
+    setEditPriority(task.priority);
+    setEditScheduledStart(
+      task.scheduled_start ? toLocalDatetimeString(task.scheduled_start, userTimeZone) : ''
+    );
+    setEditScheduledEnd(
+      task.scheduled_end ? toLocalDatetimeString(task.scheduled_end, userTimeZone) : ''
+    );
+    setEditDueDate(task.due_date ? toLocalDatetimeString(task.due_date, userTimeZone) : '');
+    setEditDuration(task.estimated_duration_minutes ?? '');
+
+    setRuleFreq(task.recurrence_rule?.frequency || 'weekly');
+    setRuleInterval(task.recurrence_rule?.interval || 1);
+    setRuleWeekdays(task.recurrence_rule?.by_weekday || [1]);
+    setRuleMonthday(task.recurrence_rule?.by_monthday?.[0] || 1);
+    setRuleEndType(
+      task.recurrence_rule?.count
+        ? 'count'
+        : task.recurrence_rule?.until_date
+          ? 'until_date'
+          : 'never'
+    );
+    setRuleUntilDate(
+      task.recurrence_rule?.until_date ? task.recurrence_rule.until_date.split('T')[0] : ''
+    );
+    setRuleCount(task.recurrence_rule?.count || 10);
   }
 
   const isVirtual = Boolean(currentTask.is_virtual);
-
   const dialogRef = useDialog(isOpen && !isSubtaskModalOpen, onClose, isActionPending);
   const titleId = useId();
 
@@ -179,7 +265,6 @@ export function TaskDetailModal({
         return;
       }
 
-      // Update local modal state immediately
       setCurrentTask((prev) => ({
         ...prev,
         status: newStatus,
@@ -190,7 +275,6 @@ export function TaskDetailModal({
             : Boolean(prev.blocking_tasks && prev.blocking_tasks.length > 0),
       }));
 
-      // Notify parent workspace to update list state and refresh server data
       onTaskUpdated?.(newStatus);
     } catch (err) {
       setStatusError(
@@ -210,6 +294,199 @@ export function TaskDetailModal({
       await deleteTaskAction(workspaceId, currentTask.id);
       onTaskUpdated?.();
       onClose();
+    } finally {
+      setIsActionPending(false);
+    }
+  };
+
+  // Ordinary Task Properties Update Handler (This Occurrence Only)
+  const handleSaveTaskEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editTitle.trim()) {
+      setStatusError('Task title is required.');
+      return;
+    }
+
+    try {
+      setIsActionPending(true);
+      setStatusError(null);
+
+      const formData = new FormData();
+      formData.set('workspace_id', workspaceId);
+      formData.set('task_id', currentTask.id);
+      formData.set('title', editTitle.trim());
+      formData.set('description', editDescription.trim());
+      formData.set('priority', editPriority);
+
+      if (editScheduledStart.trim()) {
+        const parsed = parseLocalDatetimeString(editScheduledStart.trim(), userTimeZone);
+        formData.set('scheduled_start', parsed ? parsed.toISOString() : editScheduledStart.trim());
+      } else {
+        formData.delete('scheduled_start');
+      }
+
+      if (editScheduledEnd.trim()) {
+        const parsed = parseLocalDatetimeString(editScheduledEnd.trim(), userTimeZone);
+        formData.set('scheduled_end', parsed ? parsed.toISOString() : editScheduledEnd.trim());
+      } else {
+        formData.delete('scheduled_end');
+      }
+
+      if (editDueDate.trim()) {
+        const parsed = parseLocalDatetimeString(editDueDate.trim(), userTimeZone);
+        formData.set('due_date', parsed ? parsed.toISOString() : editDueDate.trim());
+      } else {
+        formData.delete('due_date');
+      }
+
+      if (editDuration !== '') {
+        formData.set('estimated_duration_minutes', String(editDuration));
+      } else {
+        formData.delete('estimated_duration_minutes');
+      }
+
+      const res = await updateTaskAction(null, formData);
+      if (res.error) {
+        setStatusError(res.error);
+        return;
+      }
+
+      if (res.data) {
+        const updated = res.data as TaskWithMeta;
+        setCurrentTask((prev) => ({
+          ...prev,
+          title: updated.title,
+          description: updated.description,
+          priority: updated.priority,
+          scheduled_start: updated.scheduled_start,
+          scheduled_end: updated.scheduled_end,
+          due_date: updated.due_date,
+          estimated_duration_minutes: updated.estimated_duration_minutes,
+        }));
+      }
+
+      setIsEditingTask(false);
+      onTaskUpdated?.();
+    } catch (err) {
+      setStatusError(err instanceof Error ? err.message : 'Failed to update task');
+    } finally {
+      setIsActionPending(false);
+    }
+  };
+
+  // Recurrence Schedule Edit Handler (Entire Series)
+  const handleSaveRecurrenceEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const ruleId = currentTask.recurrence_rule_id;
+
+    if (ruleFreq === 'weekly' && ruleWeekdays.length === 0) {
+      setRecurrenceError('Please select at least one weekday for weekly recurrence.');
+      return;
+    }
+    if (ruleFreq === 'monthly' && (ruleMonthday < 1 || ruleMonthday > 31)) {
+      setRecurrenceError('Month day must be between 1 and 31.');
+      return;
+    }
+    if (ruleEndType === 'until_date' && !ruleUntilDate.trim()) {
+      setRecurrenceError('Please choose an end date for recurrence.');
+      return;
+    }
+    if (ruleEndType === 'count' && (!ruleCount || ruleCount < 1)) {
+      setRecurrenceError('Occurrence count must be at least 1.');
+      return;
+    }
+
+    try {
+      setIsActionPending(true);
+      setRecurrenceError(null);
+
+      const recurrenceInput = {
+        frequency: ruleFreq,
+        interval: Math.max(1, ruleInterval),
+        by_weekday: ruleFreq === 'weekly' ? ruleWeekdays : null,
+        by_monthday: ruleFreq === 'monthly' ? [ruleMonthday] : null,
+        until_date:
+          ruleEndType === 'until_date' && ruleUntilDate
+            ? new Date(`${ruleUntilDate}T23:59:59.999Z`).toISOString()
+            : null,
+        count: ruleEndType === 'count' ? ruleCount : null,
+        timezone: currentTask.recurrence_rule?.timezone || userTimeZone,
+      };
+
+      if (ruleId) {
+        // Updating existing rule
+        const res = await updateRecurrenceRuleAction(workspaceId, ruleId, recurrenceInput);
+        if (res.error) {
+          setRecurrenceError(res.error);
+          return;
+        }
+
+        if (res.data) {
+          setCurrentTask((prev) => ({
+            ...prev,
+            recurrence_rule: res.data as RecurrenceRuleDetail,
+          }));
+        }
+      } else {
+        // Making an existing standalone task recurring
+        const res = await makeTaskRecurringAction(workspaceId, currentTask.id, recurrenceInput);
+        if (res.error) {
+          setRecurrenceError(res.error);
+          return;
+        }
+
+        if (res.data) {
+          setCurrentTask((prev) => ({
+            ...prev,
+            recurrence_rule_id: res.data?.rule.id || null,
+            recurrence_rule: res.data?.rule || null,
+          }));
+        }
+      }
+
+      setIsEditingRecurrence(false);
+      onTaskUpdated?.();
+    } catch (err) {
+      setRecurrenceError(err instanceof Error ? err.message : 'Failed to update recurrence');
+    } finally {
+      setIsActionPending(false);
+    }
+  };
+
+  // Stop Recurrence Handler
+  const handleStopRecurrence = async () => {
+    const ruleId = currentTask.recurrence_rule_id;
+    if (!ruleId) return;
+
+    try {
+      setIsActionPending(true);
+      setRecurrenceError(null);
+
+      const targetTaskId = currentTask.is_virtual
+        ? currentTask.original_task_id || undefined
+        : currentTask.id;
+
+      const res = await stopRecurrenceAction(workspaceId, ruleId, targetTaskId);
+      if (res.error) {
+        setRecurrenceError(res.error);
+        return;
+      }
+
+      setCurrentTask((prev) => ({
+        ...prev,
+        recurrence_rule_id: null,
+        recurrence_rule: null,
+      }));
+
+      setIsStopConfirmOpen(false);
+      onTaskUpdated?.();
+
+      // If viewing a virtual occurrence that was just stopped, close modal
+      if (isVirtual) {
+        onClose();
+      }
+    } catch (err) {
+      setRecurrenceError(err instanceof Error ? err.message : 'Failed to stop recurrence');
     } finally {
       setIsActionPending(false);
     }
@@ -259,6 +536,9 @@ export function TaskDetailModal({
     }
   };
 
+  const inputBaseClass =
+    'w-full px-3 py-1.5 text-xs rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] hover:border-[var(--border-strong)] transition-colors font-mono';
+
   return (
     <>
       <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/45 dark:bg-black/70 backdrop-blur-xs animate-in fade-in duration-150">
@@ -270,7 +550,7 @@ export function TaskDetailModal({
           tabIndex={-1}
           className="surface-card bg-[var(--bg-surface-elevated)] max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden text-[var(--text-primary)] shadow-[var(--shadow-elevated)]"
         >
-          {/* Sticky Header */}
+          {/* Header */}
           <div className="flex items-start justify-between gap-4 border-b border-[var(--border-subtle)] px-5 sm:px-6 py-4 shrink-0 min-w-0">
             <div className="space-y-1.5 min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
@@ -299,31 +579,59 @@ export function TaskDetailModal({
                     <span>
                       {isVirtual
                         ? `Planned Occurrence #${currentTask.occurrence_index ?? 'Future'}`
-                        : 'Recurring'}
+                        : 'Recurring Series'}
                     </span>
+                  </span>
+                )}
+
+                {isEditingTask && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-[var(--status-info-bg)] text-[var(--status-info-text)] border border-[var(--border-subtle)]">
+                    {currentTask.recurrence_rule_id
+                      ? 'Scope: This occurrence only'
+                      : 'Edit Task'}
                   </span>
                 )}
               </div>
 
-              <h2
-                id={titleId}
-                className="heading-section text-lg sm:text-xl break-words min-w-0"
-              >
-                {currentTask.title}
-              </h2>
+              {!isEditingTask ? (
+                <h2
+                  id={titleId}
+                  className="heading-section text-lg sm:text-xl break-words min-w-0"
+                >
+                  {currentTask.title}
+                </h2>
+              ) : (
+                <div className="text-xs text-[var(--text-muted)] font-mono">
+                  Modify attributes for this individual occurrence.
+                </div>
+              )}
             </div>
 
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Close task details"
-              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-muted)] transition-colors"
-            >
-              <X className="w-4 h-4" aria-hidden="true" />
-            </button>
+            <div className="flex items-center gap-1.5 shrink-0">
+              {!isVirtual && !isEditingTask && (
+                <button
+                  type="button"
+                  onClick={() => setIsEditingTask(true)}
+                  aria-label="Edit task properties"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-muted)] transition-colors"
+                  title="Edit occurrence properties"
+                >
+                  <Edit3 className="w-3.5 h-3.5" aria-hidden="true" />
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Close task details"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-muted)] transition-colors"
+              >
+                <X className="w-4 h-4" aria-hidden="true" />
+              </button>
+            </div>
           </div>
 
-          {/* Status Strip — Directly Below Header Without Box Nesting */}
+          {/* Status Strip */}
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border-subtle)] bg-[var(--bg-surface-muted)]/45 px-5 sm:px-6 py-3 shrink-0">
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="text-xs font-medium text-[var(--text-muted)] mr-1">
@@ -382,6 +690,7 @@ export function TaskDetailModal({
                 </p>
               </div>
             )}
+
             {/* Blocked State Indicator */}
             {currentTask.is_blocked && (
               <div className="p-4 rounded-2xl border badge-danger text-xs space-y-1.5">
@@ -410,16 +719,19 @@ export function TaskDetailModal({
               </div>
             )}
 
-            {/* Status Update Error Banner */}
-            {statusError && (
+            {/* Errors */}
+            {(statusError || recurrenceError) && (
               <div className="p-3.5 rounded-2xl border badge-danger text-xs flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2 min-w-0">
                   <AlertTriangle className="w-4 h-4 shrink-0" aria-hidden="true" />
-                  <span className="break-words">{statusError}</span>
+                  <span className="break-words">{statusError || recurrenceError}</span>
                 </div>
                 <button
                   type="button"
-                  onClick={() => setStatusError(null)}
+                  onClick={() => {
+                    setStatusError(null);
+                    setRecurrenceError(null);
+                  }}
                   className="p-1 rounded-full hover:opacity-80 shrink-0"
                   title="Dismiss error"
                 >
@@ -428,58 +740,474 @@ export function TaskDetailModal({
               </div>
             )}
 
-            {/* Description — Open Typography Without Nested Box */}
-            {currentTask.description && (
-              <div className="space-y-1.5">
-                <span className="text-[11px] font-mono uppercase tracking-wider text-[var(--text-muted)]">
-                  Description
-                </span>
-                <div className="text-sm text-[var(--text-primary)] whitespace-pre-wrap break-words leading-relaxed">
-                  {currentTask.description}
+            {/* EDIT TASK FORM (This Occurrence Only) */}
+            {isEditingTask ? (
+              <form onSubmit={handleSaveTaskEdit} className="p-4 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface-muted)]/40 space-y-4">
+                <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-2.5">
+                  <span className="text-xs font-semibold text-[var(--text-primary)]">
+                    {currentTask.recurrence_rule_id
+                      ? 'Edit Occurrence Details (This Task Only)'
+                      : 'Edit Task Details'}
+                  </span>
+                  <span className="text-[11px] font-mono text-[var(--text-muted)]">
+                    {userTimeZone}
+                  </span>
                 </div>
-              </div>
+
+                <div className="space-y-1">
+                  <label htmlFor="edit-task-title" className="block text-[11px] font-medium text-[var(--text-secondary)]">
+                    Title <span className="text-[var(--status-danger-text)]">*</span>
+                  </label>
+                  <input
+                    id="edit-task-title"
+                    type="text"
+                    required
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    className={inputBaseClass}
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label htmlFor="edit-task-desc" className="block text-[11px] font-medium text-[var(--text-secondary)]">
+                    Description
+                  </label>
+                  <textarea
+                    id="edit-task-desc"
+                    rows={3}
+                    value={editDescription}
+                    onChange={(e) => setEditDescription(e.target.value)}
+                    className={inputBaseClass}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label htmlFor="edit-task-priority" className="block text-[11px] font-medium text-[var(--text-secondary)]">
+                      Priority
+                    </label>
+                    <select
+                      id="edit-task-priority"
+                      value={editPriority}
+                      onChange={(e) => setEditPriority(e.target.value as TaskPriority)}
+                      className="w-full h-8 px-3 text-xs rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)]"
+                    >
+                      <option value="low">Low</option>
+                      <option value="medium">Medium</option>
+                      <option value="high">High</option>
+                      <option value="urgent">Urgent</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label htmlFor="edit-task-duration" className="block text-[11px] font-medium text-[var(--text-secondary)]">
+                      Duration (Minutes)
+                    </label>
+                    <input
+                      id="edit-task-duration"
+                      type="number"
+                      min="1"
+                      step="5"
+                      value={editDuration}
+                      onChange={(e) =>
+                        setEditDuration(e.target.value ? parseInt(e.target.value, 10) : '')
+                      }
+                      className={inputBaseClass}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label htmlFor="edit-scheduled-start" className="block text-[11px] font-medium text-[var(--text-secondary)]">
+                      Scheduled Start
+                    </label>
+                    <input
+                      id="edit-scheduled-start"
+                      type={currentTask.is_all_day ? 'date' : 'datetime-local'}
+                      value={editScheduledStart}
+                      onChange={(e) => setEditScheduledStart(e.target.value)}
+                      className={inputBaseClass}
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label htmlFor="edit-due-date" className="block text-[11px] font-medium text-[var(--text-secondary)]">
+                      Due Date / Deadline
+                    </label>
+                    <input
+                      id="edit-due-date"
+                      type={currentTask.is_all_day ? 'date' : 'datetime-local'}
+                      value={editDueDate}
+                      onChange={(e) => setEditDueDate(e.target.value)}
+                      className={inputBaseClass}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-[var(--border-subtle)]">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingTask(false)}
+                    className="btn-secondary px-3 py-1.5 text-xs"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isActionPending}
+                    className="btn-accent px-4 py-1.5 text-xs disabled:opacity-50"
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <>
+                {/* Description View */}
+                {currentTask.description && (
+                  <div className="space-y-1.5">
+                    <span className="text-[11px] font-mono uppercase tracking-wider text-[var(--text-muted)]">
+                      Description
+                    </span>
+                    <div className="text-sm text-[var(--text-primary)] whitespace-pre-wrap break-words leading-relaxed">
+                      {currentTask.description}
+                    </div>
+                  </div>
+                )}
+
+                {/* Scheduling Metadata Ledger */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 border-y border-[var(--border-subtle)] py-4 text-xs">
+                  <div className="space-y-1 min-w-0">
+                    <span className="text-[var(--text-muted)] block">Scheduled Start</span>
+                    <p className="font-mono text-[var(--text-primary)] truncate">
+                      {currentTask.scheduled_start
+                        ? new Date(currentTask.scheduled_start).toLocaleString('en-US', {
+                            timeZone: userTimeZone,
+                            month: 'short',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })
+                        : 'Not scheduled'}
+                    </p>
+                  </div>
+
+                  <div className="space-y-1 min-w-0">
+                    <span className="text-[var(--text-muted)] block">Deadline / Due</span>
+                    <p className="font-mono font-medium text-[var(--text-primary)] truncate">
+                      {currentTask.due_date
+                        ? new Date(currentTask.due_date).toLocaleString('en-US', {
+                            timeZone: userTimeZone,
+                            month: 'short',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })
+                        : 'No deadline'}
+                    </p>
+                  </div>
+
+                  <div className="space-y-1 min-w-0">
+                    <span className="text-[var(--text-muted)] block">Estimated Duration</span>
+                    <p className="font-mono text-[var(--text-primary)] truncate">
+                      {currentTask.estimated_duration_minutes
+                        ? `${currentTask.estimated_duration_minutes} mins`
+                        : 'Unspecified'}
+                    </p>
+                  </div>
+                </div>
+              </>
             )}
 
-            {/* Scheduling Metadata Ledger — Clean Hairline Strip */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 border-y border-[var(--border-subtle)] py-4 text-xs">
-              <div className="space-y-1 min-w-0">
-                <span className="text-[var(--text-muted)] block">Scheduled Start</span>
-                <p className="font-mono text-[var(--text-primary)] truncate">
-                  {currentTask.scheduled_start
-                    ? new Date(currentTask.scheduled_start).toLocaleString('en-US', {
-                        timeZone: 'Africa/Cairo',
-                        month: 'short',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })
-                    : 'Not scheduled'}
-                </p>
+            {/* RECURRENCE SCHEDULE SECTION */}
+            <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface-muted)]/50 p-4 space-y-3.5">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border-subtle)] pb-2.5">
+                <div className="flex items-center gap-2">
+                  <Repeat className="w-4 h-4 text-[var(--text-secondary)]" aria-hidden="true" />
+                  <span className="text-xs font-semibold text-[var(--text-primary)]">
+                    Recurring Series Schedule
+                  </span>
+                </div>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-[var(--bg-surface)] text-[var(--text-secondary)] border border-[var(--border-subtle)]">
+                  Scope: Entire Series
+                </span>
               </div>
 
-              <div className="space-y-1 min-w-0">
-                <span className="text-[var(--text-muted)] block">Deadline / Due</span>
-                <p className="font-mono font-medium text-[var(--text-primary)] truncate">
-                  {currentTask.due_date
-                    ? new Date(currentTask.due_date).toLocaleString('en-US', {
-                        timeZone: 'Africa/Cairo',
-                        month: 'short',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })
-                    : 'No deadline'}
-                </p>
-              </div>
+              {currentTask.recurrence_rule_id ? (
+                <>
+                  {!isEditingRecurrence ? (
+                    <div className="space-y-3">
+                      <div className="text-xs leading-relaxed text-[var(--text-primary)]">
+                        {currentTask.recurrence_rule
+                          ? formatRecurrenceSummary(currentTask.recurrence_rule)
+                          : 'Repeats periodically on schedule.'}
+                      </div>
 
-              <div className="space-y-1 min-w-0">
-                <span className="text-[var(--text-muted)] block">Estimated Duration</span>
-                <p className="font-mono text-[var(--text-primary)] truncate">
-                  {currentTask.estimated_duration_minutes
-                    ? `${currentTask.estimated_duration_minutes} mins`
-                    : 'Unspecified'}
-                </p>
-              </div>
+                      <div className="text-[11px] font-mono text-[var(--text-muted)]">
+                        Schedule Timezone: {currentTask.recurrence_rule?.timezone || userTimeZone}
+                      </div>
+
+                      {/* Series Action Controls */}
+                      <div className="flex flex-wrap items-center gap-2 pt-1">
+                        <button
+                          type="button"
+                          disabled={isActionPending}
+                          onClick={() => setIsEditingRecurrence(true)}
+                          className="btn-secondary px-3 py-1.5 text-xs"
+                        >
+                          Edit Series Schedule
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={isActionPending}
+                          onClick={() => setIsStopConfirmOpen(true)}
+                          className="px-3 py-1.5 text-xs rounded-full font-medium text-[var(--status-danger-text)] hover:bg-[var(--status-danger-bg)] transition-colors"
+                        >
+                          Stop Recurrence
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    /* EDIT RECURRENCE RULE FORM */
+                    <form onSubmit={handleSaveRecurrenceEdit} className="space-y-4 pt-1">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <label className="block text-[11px] font-medium text-[var(--text-secondary)]">
+                            Frequency
+                          </label>
+                          <select
+                            value={ruleFreq}
+                            onChange={(e) =>
+                              setRuleFreq(e.target.value as 'daily' | 'weekly' | 'monthly' | 'yearly')
+                            }
+                            className="w-full h-8 px-3 text-xs rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)]"
+                          >
+                            <option value="daily">Daily</option>
+                            <option value="weekly">Weekly</option>
+                            <option value="monthly">Monthly</option>
+                            <option value="yearly">Yearly</option>
+                          </select>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="block text-[11px] font-medium text-[var(--text-secondary)]">
+                            Interval (Every N {ruleFreq === 'daily' ? 'days' : ruleFreq === 'weekly' ? 'weeks' : ruleFreq === 'monthly' ? 'months' : 'years'})
+                          </label>
+                          <input
+                            type="number"
+                            min="1"
+                            value={ruleInterval}
+                            onChange={(e) => setRuleInterval(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                            className={inputBaseClass}
+                          />
+                        </div>
+                      </div>
+
+                      {ruleFreq === 'weekly' && (
+                        <div className="space-y-1.5 pt-1 border-t border-[var(--border-subtle)]">
+                          <label className="block text-[11px] font-medium text-[var(--text-secondary)]">
+                            Repeat on Weekdays <span className="text-[var(--status-danger-text)]">*</span>
+                          </label>
+                          <div className="flex flex-wrap gap-1.5">
+                            {[
+                              { day: 1, label: 'Mon' },
+                              { day: 2, label: 'Tue' },
+                              { day: 3, label: 'Wed' },
+                              { day: 4, label: 'Thu' },
+                              { day: 5, label: 'Fri' },
+                              { day: 6, label: 'Sat' },
+                              { day: 7, label: 'Sun' },
+                            ].map(({ day, label }) => {
+                              const isSelected = ruleWeekdays.includes(day);
+                              return (
+                                <button
+                                  key={day}
+                                  type="button"
+                                  onClick={() => {
+                                    setRuleWeekdays((prev) =>
+                                      isSelected
+                                        ? prev.filter((d) => d !== day)
+                                        : [...prev, day].sort((a, b) => a - b)
+                                    );
+                                  }}
+                                  className={`px-3 py-1 text-xs rounded-lg font-medium transition-colors ${
+                                    isSelected
+                                      ? 'bg-[var(--text-primary)] text-[var(--bg-canvas)] shadow-2xs font-semibold'
+                                      : 'bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-surface-elevated)] border border-[var(--border-subtle)]'
+                                  }`}
+                                >
+                                  {label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {ruleFreq === 'monthly' && (
+                        <div className="space-y-1 pt-1 border-t border-[var(--border-subtle)]">
+                          <label className="block text-[11px] font-medium text-[var(--text-secondary)]">
+                            Day of Month (1 - 31)
+                          </label>
+                          <input
+                            type="number"
+                            min="1"
+                            max="31"
+                            value={ruleMonthday}
+                            onChange={(e) =>
+                              setRuleMonthday(Math.min(31, Math.max(1, parseInt(e.target.value, 10) || 1)))
+                            }
+                            className="w-24 h-8 px-3 text-xs rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] font-mono"
+                          />
+                        </div>
+                      )}
+
+                      {/* Termination controls */}
+                      <div className="space-y-2 pt-2 border-t border-[var(--border-subtle)]">
+                        <label className="block text-[11px] font-medium text-[var(--text-secondary)]">
+                          Termination Condition
+                        </label>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                          <label className="flex items-center gap-2 p-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] cursor-pointer text-xs">
+                            <input
+                              type="radio"
+                              name="detail_recurrence_end"
+                              checked={ruleEndType === 'never'}
+                              onChange={() => setRuleEndType('never')}
+                              className="accent-[var(--text-primary)]"
+                            />
+                            <span>Never ends</span>
+                          </label>
+
+                          <label className="flex items-center gap-2 p-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] cursor-pointer text-xs">
+                            <input
+                              type="radio"
+                              name="detail_recurrence_end"
+                              checked={ruleEndType === 'until_date'}
+                              onChange={() => setRuleEndType('until_date')}
+                              className="accent-[var(--text-primary)]"
+                            />
+                            <span>On Date</span>
+                          </label>
+
+                          <label className="flex items-center gap-2 p-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] cursor-pointer text-xs">
+                            <input
+                              type="radio"
+                              name="detail_recurrence_end"
+                              checked={ruleEndType === 'count'}
+                              onChange={() => setRuleEndType('count')}
+                              className="accent-[var(--text-primary)]"
+                            />
+                            <span>After Occurrences</span>
+                          </label>
+                        </div>
+
+                        {ruleEndType === 'until_date' && (
+                          <div className="space-y-1 pt-1">
+                            <label className="block text-[11px] font-medium text-[var(--text-secondary)]">
+                              End Date <span className="text-[var(--status-danger-text)]">*</span>
+                            </label>
+                            <input
+                              type="date"
+                              required
+                              value={ruleUntilDate}
+                              onChange={(e) => setRuleUntilDate(e.target.value)}
+                              className="w-full sm:w-60 h-8 px-3 text-xs rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] font-mono"
+                            />
+                          </div>
+                        )}
+
+                        {ruleEndType === 'count' && (
+                          <div className="space-y-1 pt-1">
+                            <label className="block text-[11px] font-medium text-[var(--text-secondary)]">
+                              Total Occurrences <span className="text-[var(--status-danger-text)]">*</span>
+                            </label>
+                            <input
+                              type="number"
+                              min={currentTask.recurrence_rule?.total_occurrences_generated || 1}
+                              required
+                              value={ruleCount}
+                              onChange={(e) => setRuleCount(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                              className="w-32 h-8 px-3 text-xs rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] font-mono"
+                            />
+                            {currentTask.recurrence_rule?.total_occurrences_generated && (
+                              <p className="text-[11px] text-[var(--text-muted)] font-mono">
+                                {currentTask.recurrence_rule.total_occurrences_generated} occurrences already consumed. Count cannot be lower.
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-end gap-2 pt-2 border-t border-[var(--border-subtle)]">
+                        <button
+                          type="button"
+                          onClick={() => setIsEditingRecurrence(false)}
+                          className="btn-secondary px-3 py-1.5 text-xs"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={isActionPending}
+                          className="btn-accent px-4 py-1.5 text-xs disabled:opacity-50"
+                        >
+                          Save Series Schedule
+                        </button>
+                      </div>
+                    </form>
+                  )}
+                </>
+              ) : (
+                /* One-Time Task (Option to make recurring) */
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-xs text-[var(--text-secondary)]">
+                    This is currently a one-time task.
+                  </span>
+                  {!isVirtual && (
+                    <button
+                      type="button"
+                      disabled={isActionPending}
+                      onClick={() => setIsEditingRecurrence(true)}
+                      className="btn-secondary px-3 py-1.5 text-xs"
+                    >
+                      Make Recurring
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* Stop Recurrence Confirmation Dialog */}
+              {isStopConfirmOpen && (
+                <div className="p-3.5 rounded-2xl border badge-danger text-xs space-y-2.5 animate-in fade-in duration-150">
+                  <div className="flex items-center gap-2 font-semibold">
+                    <AlertTriangle className="w-4 h-4 shrink-0" aria-hidden="true" />
+                    <span>Stop Recurring Series?</span>
+                  </div>
+                  <p className="leading-relaxed opacity-95">
+                    Future occurrences will no longer be generated or projected on your calendar. All existing completed tasks and this occurrence will be preserved safely in your history.
+                  </p>
+                  <div className="flex items-center justify-end gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setIsStopConfirmOpen(false)}
+                      className="btn-secondary px-3 py-1 text-xs"
+                    >
+                      Keep Recurring
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isActionPending}
+                      onClick={handleStopRecurrence}
+                      className="btn-accent px-4 py-1 text-xs"
+                    >
+                      Confirm Stop
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Subtasks Section */}

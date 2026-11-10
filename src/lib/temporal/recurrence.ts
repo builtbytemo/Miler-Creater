@@ -546,3 +546,75 @@ export function projectOccurrencesInRange(
 
   return results;
 }
+
+const WEEKDAY_NAMES: Record<number, string> = {
+  1: 'Monday',
+  2: 'Tuesday',
+  3: 'Wednesday',
+  4: 'Thursday',
+  5: 'Friday',
+  6: 'Saturday',
+  7: 'Sunday',
+};
+
+export interface RecurrenceSummaryOptions {
+  frequency: 'daily' | 'weekly' | 'monthly' | 'yearly' | string;
+  interval?: number | null;
+  by_weekday?: number[] | null;
+  by_monthday?: number[] | null;
+  until_date?: string | null;
+  count?: number | null;
+  timezone?: string | null;
+  total_occurrences_generated?: number | null;
+}
+
+/**
+ * Returns a human-readable, user-friendly summary of a recurrence schedule.
+ */
+export function formatRecurrenceSummary(rule: RecurrenceSummaryOptions): string {
+  const interval = rule.interval && rule.interval > 1 ? rule.interval : 1;
+  const parts: string[] = [];
+
+  switch (rule.frequency) {
+    case 'daily':
+      parts.push(interval === 1 ? 'Repeats daily' : `Repeats every ${interval} days`);
+      break;
+    case 'weekly': {
+      let days = '';
+      if (rule.by_weekday && rule.by_weekday.length > 0) {
+        const sorted = [...rule.by_weekday].sort((a, b) => a - b);
+        days = ' on ' + sorted.map((d) => WEEKDAY_NAMES[d] || `Day ${d}`).join(', ');
+      }
+      parts.push(interval === 1 ? `Repeats weekly${days}` : `Repeats every ${interval} weeks${days}`);
+      break;
+    }
+    case 'monthly': {
+      let dayPart = '';
+      if (rule.by_monthday && rule.by_monthday.length > 0) {
+        dayPart = ` on day ${rule.by_monthday.join(', ')}`;
+      }
+      parts.push(interval === 1 ? `Repeats monthly${dayPart}` : `Repeats every ${interval} months${dayPart}`);
+      break;
+    }
+    case 'yearly':
+      parts.push(interval === 1 ? 'Repeats yearly' : `Repeats every ${interval} years`);
+      break;
+    default:
+      parts.push(`Repeats (${rule.frequency})`);
+      break;
+  }
+
+  // Termination
+  if (rule.count !== undefined && rule.count !== null) {
+    if (rule.total_occurrences_generated !== undefined && rule.total_occurrences_generated !== null) {
+      parts.push(`· ${rule.count} occurrences total (${rule.total_occurrences_generated} generated)`);
+    } else {
+      parts.push(`· Ends after ${rule.count} occurrences`);
+    }
+  } else if (rule.until_date) {
+    const d = rule.until_date.includes('T') ? rule.until_date.split('T')[0] : rule.until_date;
+    parts.push(`· Ends on ${d}`);
+  }
+
+  return parts.join(' ');
+}

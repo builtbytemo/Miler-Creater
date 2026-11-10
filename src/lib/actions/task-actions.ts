@@ -15,10 +15,14 @@ import {
   getTasks,
   addTaskDependency,
   removeTaskDependency,
+  updateRecurrenceRule,
+  stopRecurrence,
+  makeTaskRecurring,
   type TaskWithMeta,
+  type RecurrenceRuleDetail,
 } from '@/lib/services/task-service';
 import type { TaskPriority, TaskStatus, DependencyType } from '@/types/database';
-import type { UpdateTaskInput } from '@/lib/validation/task';
+import type { UpdateTaskInput, RecurrenceInput } from '@/lib/validation/task';
 
 export interface TaskActionResult<T = unknown> {
   success?: boolean;
@@ -57,13 +61,65 @@ export async function createTaskAction(
 
     // Recurrence fields
     const frequency = formData.get('recurrence_frequency') as string;
-    const intervalStr = formData.get('recurrence_interval') as string;
-    let recurrence = null;
+    let recurrence: RecurrenceInput | null = null;
     if (frequency && frequency !== 'none') {
+      const intervalStr = formData.get('recurrence_interval') as string;
+      const interval = intervalStr ? parseInt(intervalStr, 10) : 1;
+      const timezone =
+        (formData.get('recurrence_timezone') as string) ||
+        (formData.get('timezone') as string) ||
+        'Asia/Cairo';
+
+      // Weekdays
+      const rawWeekdays = formData.getAll('recurrence_by_weekday');
+      let by_weekday: number[] | null = null;
+      if (rawWeekdays.length > 0) {
+        by_weekday = rawWeekdays
+          .map((w) => parseInt(w as string, 10))
+          .filter((w) => !isNaN(w) && w >= 1 && w <= 7);
+        if (by_weekday.length === 0) by_weekday = null;
+      }
+
+      // Month day
+      const monthdayStr = formData.get('recurrence_by_monthday') as string;
+      let by_monthday: number[] | null = null;
+      if (monthdayStr) {
+        const md = parseInt(monthdayStr, 10);
+        if (!isNaN(md) && md >= 1 && md <= 31) {
+          by_monthday = [md];
+        }
+      }
+
+      // Termination conditions
+      const endType = formData.get('recurrence_end_type') as string;
+      let until_date: string | null = null;
+      let count: number | null = null;
+
+      if (endType === 'until_date') {
+        const rawUntil = formData.get('recurrence_until_date') as string;
+        if (rawUntil) {
+          until_date = rawUntil.includes('T')
+            ? new Date(rawUntil).toISOString()
+            : new Date(`${rawUntil}T23:59:59.999Z`).toISOString();
+        }
+      } else if (endType === 'count') {
+        const countStr = formData.get('recurrence_count') as string;
+        if (countStr) {
+          const c = parseInt(countStr, 10);
+          if (!isNaN(c) && c >= 1) {
+            count = c;
+          }
+        }
+      }
+
       recurrence = {
         frequency: frequency as 'daily' | 'weekly' | 'monthly' | 'yearly',
-        interval: intervalStr ? parseInt(intervalStr, 10) : 1,
-        timezone: 'Asia/Cairo',
+        interval,
+        by_weekday,
+        by_monthday,
+        until_date,
+        count,
+        timezone,
       };
     }
 
@@ -411,5 +467,98 @@ export async function getScheduledTasksAction(
     return { success: true, data: tasks };
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Failed to fetch scheduled tasks' };
+  }
+}
+
+/**
+ * Updates a recurring series schedule rule.
+ * Affects future virtual calendar projections and subsequent occurrence generation.
+ */
+export async function updateRecurrenceRuleAction(
+  workspaceId: string,
+  ruleId: string,
+  input: RecurrenceInput
+): Promise<TaskActionResult<RecurrenceRuleDetail>> {
+  try {
+    const supabase = await createClient();
+    const { data: authData } = await supabase.auth.getUser();
+    if (!authData.user) {
+      return { error: 'Authentication required' };
+    }
+
+    if (!workspaceId || !ruleId) {
+      return { error: 'Workspace ID and Rule ID are required' };
+    }
+
+    const updated = await updateRecurrenceRule(supabase, workspaceId, ruleId, input);
+
+    revalidatePath('/calendar');
+    revalidatePath('/tasks');
+
+    return { success: true, data: updated };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Failed to update recurrence rule' };
+  }
+}
+
+/**
+ * Stops an entire recurring series:
+ * Closes the recurrence boundary, prevents further occurrence generation,
+ * and clears future calendar previews while preserving historical completed tasks.
+ */
+export async function stopRecurrenceAction(
+  workspaceId: string,
+  ruleId: string,
+  currentTaskId?: string
+): Promise<TaskActionResult<{ success: boolean; stoppedRuleId: string }>> {
+  try {
+    const supabase = await createClient();
+    const { data: authData } = await supabase.auth.getUser();
+    if (!authData.user) {
+      return { error: 'Authentication required' };
+    }
+
+    if (!workspaceId || !ruleId) {
+      return { error: 'Workspace ID and Rule ID are required' };
+    }
+
+    const result = await stopRecurrence(supabase, workspaceId, ruleId, { currentTaskId });
+
+    revalidatePath('/calendar');
+    revalidatePath('/tasks');
+
+    return { success: true, data: result };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Failed to stop recurrence' };
+  }
+}
+
+/**
+ * Converts a standalone one-time task into a recurring series.
+ */
+export async function makeTaskRecurringAction(
+  workspaceId: string,
+  taskId: string,
+  input: RecurrenceInput
+): Promise<TaskActionResult<{ task: TaskWithMeta; rule: RecurrenceRuleDetail }>> {
+  try {
+    const supabase = await createClient();
+    const { data: authData } = await supabase.auth.getUser();
+    if (!authData.user) {
+      return { error: 'Authentication required' };
+    }
+
+    if (!workspaceId || !taskId) {
+      return { error: 'Workspace ID and Task ID are required' };
+    }
+
+    const result = await makeTaskRecurring(supabase, workspaceId, taskId, input);
+
+    revalidatePath('/calendar');
+    revalidatePath('/tasks');
+
+    return { success: true, data: result };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Failed to make task recurring' };
   }
 }

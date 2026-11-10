@@ -1411,6 +1411,7 @@ export function CalendarWorkspace({
           onClose={() => setSelectedTask(null)}
           onTaskUpdated={handleTaskUpdated}
           onOpenTask={handleOpenTaskDetail}
+          userTimeZone={userTimeZone}
         />
       )}
     </div>

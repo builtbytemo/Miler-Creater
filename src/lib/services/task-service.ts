@@ -3,9 +3,11 @@ import type { Database, TaskPriority, TaskStatus, DependencyType } from '@/types
 import {
   createTaskSchema,
   updateTaskSchema,
+  recurrenceInputSchema,
   type CreateTaskInput,
   type UpdateTaskInput,
   type TaskFilterInput,
+  type RecurrenceInput,
 } from '@/lib/validation/task';
 import { validateTaskDependency, type TaskDependencyEdge, type TaskNode } from '@/lib/tasks/dependencies';
 import {
@@ -54,6 +56,22 @@ export interface TaskWithMeta {
   original_task_id?: string | null;
 }
 
+export interface RecurrenceRuleDetail {
+  id: string;
+  workspace_id: string;
+  frequency: 'daily' | 'weekly' | 'monthly' | 'yearly';
+  interval: number;
+  by_weekday: number[] | null;
+  by_monthday: number[] | null;
+  until_date: string | null;
+  count: number | null;
+  timezone: string;
+  dtstart: string | null;
+  total_occurrences_generated: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface TaskDetail extends TaskWithMeta {
   subtasks: TaskWithMeta[];
   dependencies: {
@@ -63,6 +81,7 @@ export interface TaskDetail extends TaskWithMeta {
     dependency_type: DependencyType;
     prerequisite_task: { id: string; title: string; status: TaskStatus; due_date: string | null };
   }[];
+  recurrence_rule?: RecurrenceRuleDetail | null;
 }
 
 /**
@@ -621,6 +640,20 @@ export async function getTaskById(
 
   const isBlocked = task.status === 'blocked' || blockingTasks.length > 0;
 
+  // Fetch recurrence rule if task is part of a recurring series
+  let recurrenceRule: RecurrenceRuleDetail | null = null;
+  if (task.recurrence_rule_id) {
+    const { data: rule } = await supabase
+      .from('recurrence_rules')
+      .select('*')
+      .eq('id', task.recurrence_rule_id)
+      .eq('workspace_id', workspaceId)
+      .maybeSingle();
+    if (rule) {
+      recurrenceRule = rule as RecurrenceRuleDetail;
+    }
+  }
+
   return {
     ...task,
     subtask_count: subtasks.length,
@@ -630,6 +663,7 @@ export async function getTaskById(
     project: (task as unknown as { projects?: { id: string; name: string; color: string | null } }).projects || null,
     subtasks,
     dependencies,
+    recurrence_rule: recurrenceRule,
   };
 }
 
@@ -1562,4 +1596,210 @@ export async function removeTaskDependency(
   if (error) {
     throw new Error(`Failed to remove dependency: ${error.message}`);
   }
+}
+
+/**
+ * Updates a recurring series schedule rule.
+ * Preserves the consumed occurrence count (total_occurrences_generated)
+ * and guarantees historical occurrences remain unmodified.
+ */
+export async function updateRecurrenceRule(
+  supabase: SupabaseClient<Database>,
+  workspaceId: string,
+  ruleId: string,
+  input: RecurrenceInput
+): Promise<RecurrenceRuleDetail> {
+  const validated = recurrenceInputSchema.parse(input);
+
+  // Authorize rule exists in workspace
+  const { data: existing, error: fetchErr } = await supabase
+    .from('recurrence_rules')
+    .select('*')
+    .eq('id', ruleId)
+    .eq('workspace_id', workspaceId)
+    .maybeSingle();
+
+  if (fetchErr || !existing) {
+    throw new Error(`Recurrence rule ${ruleId} not found in workspace ${workspaceId}`);
+  }
+
+  // Preserve consumed count invariant: new count cannot be less than already generated count
+  if (
+    validated.count !== undefined &&
+    validated.count !== null &&
+    validated.count < existing.total_occurrences_generated
+  ) {
+    throw new Error(
+      `Cannot set recurrence count (${validated.count}) lower than already generated occurrences (${existing.total_occurrences_generated}).`
+    );
+  }
+
+  const { data: updated, error: updateErr } = await supabase
+    .from('recurrence_rules')
+    .update({
+      frequency: validated.frequency,
+      interval: validated.interval,
+      by_weekday: validated.by_weekday || null,
+      by_monthday: validated.by_monthday || null,
+      until_date: validated.until_date || null,
+      count: validated.count || null,
+      timezone: validated.timezone,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', ruleId)
+    .eq('workspace_id', workspaceId)
+    .select('*')
+    .single();
+
+  if (updateErr || !updated) {
+    throw new Error(`Failed to update recurrence rule: ${updateErr?.message}`);
+  }
+
+  return updated as RecurrenceRuleDetail;
+}
+
+/**
+ * Stops an entire recurring series:
+ * 1. Closes the recurrence rule boundary so no future virtual or concrete occurrences can be generated.
+ * 2. Detaches the currently active task so it becomes a standalone task.
+ * 3. Preserves all completed historical tasks with zero data loss.
+ */
+export async function stopRecurrence(
+  supabase: SupabaseClient<Database>,
+  workspaceId: string,
+  ruleId: string,
+  options?: { currentTaskId?: string }
+): Promise<{ success: boolean; stoppedRuleId: string }> {
+  // Authorize rule exists in workspace
+  const { data: existing, error: fetchErr } = await supabase
+    .from('recurrence_rules')
+    .select('*')
+    .eq('id', ruleId)
+    .eq('workspace_id', workspaceId)
+    .maybeSingle();
+
+  if (fetchErr || !existing) {
+    throw new Error(`Recurrence rule ${ruleId} not found in workspace ${workspaceId}`);
+  }
+
+  const nowIso = new Date().toISOString();
+
+  // 1. Terminate recurrence rule so virtual projection and future generation stop
+  const { error: ruleUpdateErr } = await supabase
+    .from('recurrence_rules')
+    .update({
+      count: existing.total_occurrences_generated,
+      until_date: nowIso,
+      updated_at: nowIso,
+    })
+    .eq('id', ruleId)
+    .eq('workspace_id', workspaceId);
+
+  if (ruleUpdateErr) {
+    throw new Error(`Failed to terminate recurrence rule: ${ruleUpdateErr.message}`);
+  }
+
+  // 2. Detach active uncompleted task so it becomes a standalone task
+  if (options?.currentTaskId) {
+    await supabase
+      .from('tasks')
+      .update({
+        recurrence_rule_id: null,
+        updated_at: nowIso,
+      })
+      .eq('id', options.currentTaskId)
+      .eq('workspace_id', workspaceId);
+  } else {
+    await supabase
+      .from('tasks')
+      .update({
+        recurrence_rule_id: null,
+        updated_at: nowIso,
+      })
+      .eq('workspace_id', workspaceId)
+      .eq('recurrence_rule_id', ruleId)
+      .neq('status', 'done')
+      .neq('status', 'cancelled');
+  }
+
+  return { success: true, stoppedRuleId: ruleId };
+}
+
+/**
+ * Converts a standalone one-time task into a recurring series.
+ */
+export async function makeTaskRecurring(
+  supabase: SupabaseClient<Database>,
+  workspaceId: string,
+  taskId: string,
+  input: RecurrenceInput
+): Promise<{ task: TaskWithMeta; rule: RecurrenceRuleDetail }> {
+  const validated = recurrenceInputSchema.parse(input);
+
+  const { data: task, error: taskErr } = await supabase
+    .from('tasks')
+    .select('*')
+    .eq('id', taskId)
+    .eq('workspace_id', workspaceId)
+    .maybeSingle();
+
+  if (taskErr || !task) {
+    throw new Error(`Task ${taskId} not found in workspace ${workspaceId}`);
+  }
+
+  if (task.recurrence_rule_id) {
+    throw new Error('Task is already part of a recurring series.');
+  }
+
+  const nowIso = new Date().toISOString();
+  const dtstart = task.scheduled_start || task.due_date || nowIso;
+
+  const { data: newRule, error: ruleErr } = await supabase
+    .from('recurrence_rules')
+    .insert({
+      workspace_id: workspaceId,
+      frequency: validated.frequency,
+      interval: validated.interval,
+      by_weekday: validated.by_weekday || null,
+      by_monthday: validated.by_monthday || null,
+      until_date: validated.until_date || null,
+      count: validated.count || null,
+      timezone: validated.timezone,
+      dtstart,
+      total_occurrences_generated: 1,
+    })
+    .select('*')
+    .single();
+
+  if (ruleErr || !newRule) {
+    throw new Error(`Failed to create recurrence rule: ${ruleErr?.message}`);
+  }
+
+  const { data: updatedTask, error: updateErr } = await supabase
+    .from('tasks')
+    .update({
+      recurrence_rule_id: newRule.id,
+      occurrence_index: 1,
+      updated_at: nowIso,
+    })
+    .eq('id', taskId)
+    .eq('workspace_id', workspaceId)
+    .select('*, projects(id, name, color)')
+    .single();
+
+  if (updateErr || !updatedTask) {
+    throw new Error(`Failed to attach recurrence rule to task: ${updateErr?.message}`);
+  }
+
+  return {
+    task: {
+      ...updatedTask,
+      subtask_count: 0,
+      completed_subtask_count: 0,
+      is_blocked: updatedTask.status === 'blocked',
+      blocking_tasks: [],
+      project: (updatedTask as unknown as { projects?: { id: string; name: string; color: string | null } }).projects || null,
+    },
+    rule: newRule as RecurrenceRuleDetail,
+  };
 }
