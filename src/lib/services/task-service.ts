@@ -11,7 +11,13 @@ import { validateTaskDependency, type TaskDependencyEdge, type TaskNode } from '
 import {
   calculateNextOccurrence,
   calculateNextUpcomingSlot,
+  projectOccurrencesInRange,
   type RecurrenceRuleParams,
+} from '@/lib/temporal/recurrence';
+
+export {
+  generateOccurrencesInRange,
+  projectOccurrencesInRange,
 } from '@/lib/temporal/recurrence';
 
 export interface TaskWithMeta {
@@ -44,6 +50,8 @@ export interface TaskWithMeta {
   is_blocked: boolean;
   blocking_tasks: { id: string; title: string; status: TaskStatus }[];
   project?: { id: string; name: string; color: string | null } | null;
+  is_virtual?: boolean;
+  original_task_id?: string | null;
 }
 
 export interface TaskDetail extends TaskWithMeta {
@@ -150,64 +158,73 @@ export async function getTasks(
     throw new Error(`Failed to fetch tasks: ${error.message}`);
   }
 
-  if (!rawTasks || rawTasks.length === 0) {
+  const isCalendarRange = Boolean(
+    filters.scheduled_from && filters.scheduled_to && filters.include_virtual !== false
+  );
+
+  if ((!rawTasks || rawTasks.length === 0) && !isCalendarRange) {
     return [];
   }
 
-  const taskIds = rawTasks.map((t) => t.id);
+  const safeRawTasks = rawTasks || [];
+  const taskIds = safeRawTasks.map((t) => t.id);
 
   // 1. Fetch subtask summary
-  const { data: allSubtasks } = await supabase
-    .from('tasks')
-    .select('id, parent_task_id, status')
-    .in('parent_task_id', taskIds);
-
   const subtaskCountMap = new Map<string, { total: number; completed: number }>();
-  if (allSubtasks) {
-    for (const sub of allSubtasks) {
-      if (!sub.parent_task_id) continue;
-      const curr = subtaskCountMap.get(sub.parent_task_id) || { total: 0, completed: 0 };
-      curr.total += 1;
-      if (sub.status === 'done') curr.completed += 1;
-      subtaskCountMap.set(sub.parent_task_id, curr);
+  if (taskIds.length > 0) {
+    const { data: allSubtasks } = await supabase
+      .from('tasks')
+      .select('id, parent_task_id, status')
+      .in('parent_task_id', taskIds);
+
+    if (allSubtasks) {
+      for (const sub of allSubtasks) {
+        if (!sub.parent_task_id) continue;
+        const curr = subtaskCountMap.get(sub.parent_task_id) || { total: 0, completed: 0 };
+        curr.total += 1;
+        if (sub.status === 'done') curr.completed += 1;
+        subtaskCountMap.set(sub.parent_task_id, curr);
+      }
     }
   }
 
   // 2. Fetch dependencies to compute blocked state
-  const { data: deps } = await supabase
-    .from('task_dependencies')
-    .select('task_id, depends_on_task_id')
-    .in('task_id', taskIds);
-
-  const prereqIds = deps ? deps.map((d) => d.depends_on_task_id) : [];
-  const prereqTaskMap = new Map<string, { id: string; title: string; status: TaskStatus }>();
-
-  if (prereqIds.length > 0) {
-    const { data: prereqTasks } = await supabase
-      .from('tasks')
-      .select('id, title, status')
-      .in('id', prereqIds);
-
-    if (prereqTasks) {
-      for (const pt of prereqTasks) {
-        prereqTaskMap.set(pt.id, pt);
-      }
-    }
-  }
-
   const taskBlockersMap = new Map<string, { id: string; title: string; status: TaskStatus }[]>();
-  if (deps) {
-    for (const d of deps) {
-      const prereq = prereqTaskMap.get(d.depends_on_task_id);
-      if (prereq && prereq.status !== 'done') {
-        const list = taskBlockersMap.get(d.task_id) || [];
-        list.push(prereq);
-        taskBlockersMap.set(d.task_id, list);
+  if (taskIds.length > 0) {
+    const { data: deps } = await supabase
+      .from('task_dependencies')
+      .select('task_id, depends_on_task_id')
+      .in('task_id', taskIds);
+
+    const prereqIds = deps ? deps.map((d) => d.depends_on_task_id) : [];
+    const prereqTaskMap = new Map<string, { id: string; title: string; status: TaskStatus }>();
+
+    if (prereqIds.length > 0) {
+      const { data: prereqTasks } = await supabase
+        .from('tasks')
+        .select('id, title, status')
+        .in('id', prereqIds);
+
+      if (prereqTasks) {
+        for (const pt of prereqTasks) {
+          prereqTaskMap.set(pt.id, pt);
+        }
+      }
+    }
+
+    if (deps) {
+      for (const d of deps) {
+        const prereq = prereqTaskMap.get(d.depends_on_task_id);
+        if (prereq && prereq.status !== 'done') {
+          const list = taskBlockersMap.get(d.task_id) || [];
+          list.push(prereq);
+          taskBlockersMap.set(d.task_id, list);
+        }
       }
     }
   }
 
-  return rawTasks.map((t) => {
+  const concreteTasks: TaskWithMeta[] = safeRawTasks.map((t) => {
     const counts = subtaskCountMap.get(t.id) || { total: 0, completed: 0 };
     const blockers = taskBlockersMap.get(t.id) || [];
     const isBlocked = t.status === 'blocked' || blockers.length > 0;
@@ -221,6 +238,271 @@ export async function getTasks(
       project: (t as unknown as { projects?: { id: string; name: string; color: string | null } }).projects || null,
     };
   });
+
+  // If this is a calendar range query, project virtual occurrences
+  if (filters.scheduled_from && filters.scheduled_to && filters.include_virtual !== false) {
+    try {
+      const virtualTasks = await projectVirtualTaskOccurrences(
+        supabase,
+        workspaceId,
+        filters.scheduled_from,
+        filters.scheduled_to,
+        concreteTasks,
+        {
+          projectIds: filters.project_id ? [filters.project_id] : undefined,
+          statuses: filters.status
+            ? Array.isArray(filters.status)
+              ? filters.status
+              : [filters.status]
+            : undefined,
+        }
+      );
+
+      if (virtualTasks.length > 0) {
+        const combined = [...concreteTasks, ...virtualTasks];
+        // Sort chronologically by scheduled_start or due_date
+        combined.sort((a, b) => {
+          const timeA = a.scheduled_start
+            ? new Date(a.scheduled_start).getTime()
+            : a.due_date
+            ? new Date(a.due_date).getTime()
+            : 0;
+          const timeB = b.scheduled_start
+            ? new Date(b.scheduled_start).getTime()
+            : b.due_date
+            ? new Date(b.due_date).getTime()
+            : 0;
+          return timeA - timeB;
+        });
+        return combined;
+      }
+    } catch {
+      // In case virtual projection fails (e.g. mock or pending migration), fail safely to concrete tasks
+    }
+  }
+
+  return concreteTasks;
+}
+
+export interface ProjectVirtualOccurrencesOptions {
+  userTimeZone?: string;
+  includeCompleted?: boolean;
+  projectIds?: string[];
+  statuses?: string[];
+  maxOccurrencesPerRule?: number;
+}
+
+/**
+ * Projects virtual task occurrences for recurring series in the workspace for a given date window.
+ * Strictly read-only: does NOT mutate the database.
+ * Enforces:
+ * - Real stored occurrences take precedence over virtual occurrences.
+ * - Deterministic collision-resistant IDs: `virtual:${rule.id}:${index}:${timestamp}`.
+ * - Series color stability via `recurrence_rule_id`.
+ * - Bounded iterations and range limits.
+ */
+export async function projectVirtualTaskOccurrences(
+  supabase: SupabaseClient<Database>,
+  workspaceId: string,
+  startDate: string | Date,
+  endDate: string | Date,
+  existingTasks?: TaskWithMeta[],
+  options?: ProjectVirtualOccurrencesOptions
+): Promise<TaskWithMeta[]> {
+  const startIso = typeof startDate === 'string' ? startDate : startDate.toISOString();
+  const endIso = typeof endDate === 'string' ? endDate : endDate.toISOString();
+
+  // 1. Fetch recurrence rules for this workspace
+  const { data: rules, error: rulesErr } = await supabase
+    .from('recurrence_rules')
+    .select('*')
+    .eq('workspace_id', workspaceId);
+
+  if (rulesErr || !rules || rules.length === 0) {
+    return [];
+  }
+
+  // 2. Fetch tasks belonging to these recurrence rules in this workspace
+  const ruleIds = rules.map((r) => r.id);
+  const { data: rawSeriesTasks, error: tasksErr } = await supabase
+    .from('tasks')
+    .select(`
+      *,
+      projects (id, name, color)
+    `)
+    .eq('workspace_id', workspaceId)
+    .in('recurrence_rule_id', ruleIds);
+
+  if (tasksErr || !rawSeriesTasks || rawSeriesTasks.length === 0) {
+    return [];
+  }
+
+  // Merge with existingTasks if provided
+  const combinedTasksMap = new Map<string, TaskWithMeta | (typeof rawSeriesTasks)[0]>();
+  for (const st of rawSeriesTasks) {
+    combinedTasksMap.set(st.id, st);
+  }
+  if (existingTasks) {
+    for (const et of existingTasks) {
+      if (et.recurrence_rule_id && et.workspace_id === workspaceId) {
+        combinedTasksMap.set(et.id, et);
+      }
+    }
+  }
+
+  // Group tasks by recurrence_rule_id
+  const tasksByRule = new Map<string, Array<TaskWithMeta | (typeof rawSeriesTasks)[0]>>();
+  for (const t of combinedTasksMap.values()) {
+    if (!t.recurrence_rule_id) continue;
+    const list = tasksByRule.get(t.recurrence_rule_id) || [];
+    list.push(t);
+    tasksByRule.set(t.recurrence_rule_id, list);
+  }
+
+  const virtualTasks: TaskWithMeta[] = [];
+
+  for (const rule of rules) {
+    const seriesTasks = tasksByRule.get(rule.id);
+    if (!seriesTasks || seriesTasks.length === 0) continue;
+
+    // Pick template task: prefer active task (status not done or cancelled)
+    let templateTask = seriesTasks.find((t) => t.status !== 'done' && t.status !== 'cancelled');
+    if (!templateTask) {
+      // Pick latest task
+      templateTask = [...seriesTasks].sort((a, b) => {
+        const idxA = a.occurrence_index || 0;
+        const idxB = b.occurrence_index || 0;
+        if (idxA !== idxB) return idxB - idxA;
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      })[0];
+    }
+    if (!templateTask) continue;
+
+    // Filter by projectIds if requested
+    if (options?.projectIds && options.projectIds.length > 0) {
+      if (!templateTask.project_id || !options.projectIds.includes(templateTask.project_id)) {
+        continue;
+      }
+    }
+
+    // Filter by statuses if requested: virtual occurrences are 'todo'
+    if (options?.statuses && options.statuses.length > 0) {
+      if (!options.statuses.includes('todo')) {
+        continue;
+      }
+    }
+
+    // Collect stored occurrence slots for deduplication
+    const storedIndices = new Set<number>();
+    const storedTimestamps = new Set<number>();
+
+    for (const st of seriesTasks) {
+      if (st.occurrence_index) storedIndices.add(st.occurrence_index);
+      if (st.scheduled_start) storedTimestamps.add(new Date(st.scheduled_start).getTime());
+      if (st.due_date) storedTimestamps.add(new Date(st.due_date).getTime());
+    }
+
+    // Determine initial anchor
+    const initialStart =
+      rule.dtstart ||
+      templateTask.scheduled_start ||
+      templateTask.due_date ||
+      templateTask.created_at;
+
+    const ruleParams: RecurrenceRuleParams = {
+      frequency: rule.frequency,
+      interval: rule.interval,
+      by_weekday: rule.by_weekday,
+      by_monthday: rule.by_monthday,
+      until_date: rule.until_date,
+      count: rule.count,
+      timezone: rule.timezone,
+      dtstart: rule.dtstart,
+    };
+
+    const projected = projectOccurrencesInRange(
+      ruleParams,
+      initialStart,
+      startIso,
+      endIso,
+      options?.maxOccurrencesPerRule ?? 100,
+      {
+        anchorDate: rule.dtstart || initialStart,
+      }
+    );
+
+    for (const { date, occurrenceIndex } of projected) {
+      const slotMs = date.getTime();
+
+      // Real stored occurrence takes precedence over virtual occurrence!
+      if (storedIndices.has(occurrenceIndex)) continue;
+      if (storedTimestamps.has(slotMs)) continue;
+      if (rule.count !== undefined && rule.count !== null && occurrenceIndex > rule.count) continue;
+
+      let virtualScheduledStart: string | null = null;
+      let virtualScheduledEnd: string | null = null;
+      let virtualDueDate: string | null = null;
+
+      if (templateTask.scheduled_start) {
+        virtualScheduledStart = date.toISOString();
+        if (templateTask.scheduled_end) {
+          const durationMs =
+            new Date(templateTask.scheduled_end).getTime() - new Date(templateTask.scheduled_start).getTime();
+          virtualScheduledEnd = new Date(slotMs + Math.max(0, durationMs)).toISOString();
+        }
+        if (templateTask.due_date) {
+          const dueOffsetMs =
+            new Date(templateTask.due_date).getTime() - new Date(templateTask.scheduled_start).getTime();
+          virtualDueDate = new Date(slotMs + dueOffsetMs).toISOString();
+        }
+      } else if (templateTask.due_date) {
+        virtualScheduledStart = null;
+        virtualScheduledEnd = null;
+        virtualDueDate = date.toISOString();
+      } else {
+        virtualScheduledStart = date.toISOString();
+        virtualScheduledEnd = null;
+        virtualDueDate = null;
+      }
+
+      const virtualId = `virtual:${rule.id}:${occurrenceIndex}:${slotMs}`;
+
+      virtualTasks.push({
+        id: virtualId,
+        workspace_id: workspaceId,
+        parent_task_id: null,
+        project_id: templateTask.project_id,
+        milestone_id: templateTask.milestone_id,
+        title: templateTask.title,
+        description: templateTask.description,
+        priority: templateTask.priority,
+        status: 'todo',
+        scheduled_start: virtualScheduledStart,
+        scheduled_end: virtualScheduledEnd,
+        due_date: virtualDueDate,
+        estimated_duration_minutes: templateTask.estimated_duration_minutes,
+        is_all_day: templateTask.is_all_day,
+        completed_at: null,
+        tags: templateTask.tags ? [...templateTask.tags] : [],
+        recurrence_rule_id: rule.id,
+        occurrence_index: occurrenceIndex,
+        created_by: templateTask.created_by,
+        assigned_to: templateTask.assigned_to,
+        created_at: templateTask.created_at,
+        updated_at: templateTask.updated_at,
+        created_from: templateTask.created_from || 'tasks',
+        subtask_count: 0,
+        completed_subtask_count: 0,
+        is_blocked: false,
+        blocking_tasks: [],
+        project: (templateTask as unknown as { projects?: { id: string; name: string; color: string | null } }).projects || null,
+        is_virtual: true,
+        original_task_id: templateTask.id,
+      });
+    }
+  }
+
+  return virtualTasks;
 }
 
 /**

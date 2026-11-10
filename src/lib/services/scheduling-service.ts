@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, TaskStatus, ContentStatus, SocialPlatform, ContentActionType, TaskPriority } from '@/types/database';
 import { formatInTimeZone, DEFAULT_TIMEZONE } from '@/lib/temporal/timezone';
+import { projectVirtualTaskOccurrences } from '@/lib/services/task-service';
 
 export type ScheduleItemType = 'task' | 'content';
 
@@ -24,6 +25,11 @@ export interface UnifiedScheduleItem {
   actionType?: ContentActionType | null;
   priority?: TaskPriority | null;
   isBlocked?: boolean;
+  // Virtual projection fields
+  isVirtual?: boolean;
+  recurrenceRuleId?: string | null;
+  originalTaskId?: string | null;
+  occurrenceIndex?: number;
 }
 
 export interface UnifiedScheduleFilter {
@@ -220,6 +226,83 @@ export async function getUnifiedSchedule(
           isBlocked: d.status === 'blocked',
         });
       }
+    }
+
+    // 1C. Project Virtual Occurrences for Recurring Task Series in Range
+    try {
+      const virtualTasks = await projectVirtualTaskOccurrences(
+        supabase,
+        workspaceId,
+        startDate,
+        endDate,
+        undefined,
+        {
+          userTimeZone,
+          includeCompleted,
+          projectIds,
+          statuses,
+        }
+      );
+
+      for (const vt of virtualTasks) {
+        if (vt.scheduled_start) {
+          const displayTime = formatInTimeZone(vt.scheduled_start, userTimeZone, {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true,
+          });
+
+          events.push({
+            id: vt.id,
+            itemType: 'task',
+            title: vt.title,
+            status: vt.status,
+            startTime: vt.scheduled_start,
+            endTime: vt.scheduled_end,
+            deadline: vt.due_date,
+            isAllDay: vt.is_all_day,
+            localDisplayTime: vt.is_all_day ? 'All Day' : displayTime,
+            projectId: vt.project_id,
+            projectName: vt.project?.name || null,
+            projectColor: vt.project?.color || null,
+            priority: vt.priority,
+            isBlocked: false,
+            isVirtual: true,
+            recurrenceRuleId: vt.recurrence_rule_id,
+            originalTaskId: vt.original_task_id,
+            occurrenceIndex: vt.occurrence_index || undefined,
+          });
+        } else if (vt.due_date) {
+          const displayTime = formatInTimeZone(vt.due_date, userTimeZone, {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true,
+          });
+
+          deadlineItems.push({
+            id: vt.id,
+            itemType: 'task',
+            title: vt.title,
+            status: vt.status,
+            startTime: null,
+            endTime: null,
+            deadline: vt.due_date,
+            isAllDay: vt.is_all_day,
+            localDisplayTime: displayTime,
+            projectId: vt.project_id,
+            projectName: vt.project?.name || null,
+            projectColor: vt.project?.color || null,
+            priority: vt.priority,
+            isBlocked: false,
+            isVirtual: true,
+            recurrenceRuleId: vt.recurrence_rule_id,
+            originalTaskId: vt.original_task_id,
+            occurrenceIndex: vt.occurrence_index || undefined,
+          });
+        }
+      }
+    } catch {
+      // Graceful fallback if table is unavailable in mock environment
     }
   }
 

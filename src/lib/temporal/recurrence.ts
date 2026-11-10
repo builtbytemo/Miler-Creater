@@ -483,7 +483,11 @@ export function projectOccurrencesInRange(
   initialStart: Date | string,
   rangeStart: Date | string,
   rangeEnd: Date | string,
-  maxOccurrences = 100
+  maxOccurrences = 100,
+  options?: {
+    initialOccurrenceIndex?: number;
+    anchorDate?: Date | string;
+  }
 ): ProjectedOccurrence[] {
   const initDate = typeof initialStart === 'string' ? new Date(initialStart) : initialStart;
   const start = typeof rangeStart === 'string' ? new Date(rangeStart) : rangeStart;
@@ -495,16 +499,31 @@ export function projectOccurrencesInRange(
 
   const results: ProjectedOccurrence[] = [];
   let current: Date | null = initDate;
-  let occurrenceIndex = 1;
+  let occurrenceIndex = options?.initialOccurrenceIndex ?? 1;
   let iterations = 0;
+
+  const tz = rule.timezone || DEFAULT_TIMEZONE;
+  const anchorDate = options?.anchorDate
+    ? typeof options.anchorDate === 'string'
+      ? new Date(options.anchorDate)
+      : options.anchorDate
+    : rule.dtstart
+      ? typeof rule.dtstart === 'string'
+        ? new Date(rule.dtstart)
+        : rule.dtstart
+      : initDate;
 
   const effectiveRule: RecurrenceRuleParams = {
     ...rule,
-    dtstart: rule.dtstart || initDate,
+    dtstart: anchorDate,
   };
 
   while (current && current.getTime() <= end.getTime() && results.length < maxOccurrences) {
     if (rule.count !== undefined && rule.count !== null && occurrenceIndex > rule.count) {
+      break;
+    }
+
+    if (rule.until_date && current.getTime() > parseUntilDate(rule.until_date, tz)) {
       break;
     }
 
@@ -517,11 +536,12 @@ export function projectOccurrencesInRange(
 
     current = calculateNextOccurrence(effectiveRule, current, {
       occurrenceIndex,
-      anchorDate: initDate,
+      anchorDate,
+      timeZoneOverride: tz,
     });
     occurrenceIndex++;
     iterations++;
-    if (iterations > 500) break; // Hard safety boundary
+    if (iterations > 2000) break; // Hard safety boundary
   }
 
   return results;

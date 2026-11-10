@@ -62,6 +62,8 @@ export function TaskDetailModal({
     setStatusError(null);
   }
 
+  const isVirtual = Boolean(currentTask.is_virtual);
+
   const dialogRef = useDialog(isOpen && !isSubtaskModalOpen, onClose, isActionPending);
   const titleId = useId();
 
@@ -294,7 +296,11 @@ export function TaskDetailModal({
                 {currentTask.recurrence_rule_id && (
                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium badge-editorial border">
                     <Clock className="w-3 h-3" aria-hidden="true" />
-                    <span>Recurring</span>
+                    <span>
+                      {isVirtual
+                        ? `Planned Occurrence #${currentTask.occurrence_index ?? 'Future'}`
+                        : 'Recurring'}
+                    </span>
                   </span>
                 )}
               </div>
@@ -323,28 +329,34 @@ export function TaskDetailModal({
               <span className="text-xs font-medium text-[var(--text-muted)] mr-1">
                 Status:
               </span>
-              {(['todo', 'in_progress', 'blocked', 'done', 'cancelled'] as TaskStatus[]).map(
-                (st) => {
-                  const isCurrent = currentTask.status === st;
-                  return (
-                    <button
-                      key={st}
-                      type="button"
-                      disabled={isActionPending}
-                      onClick={() => handleStatusChange(st)}
-                      className={clsx(
-                        'px-3 py-1 text-xs rounded-full font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap',
-                        isCurrent
-                          ? 'bg-[var(--text-primary)] text-[var(--bg-canvas)] font-semibold shadow-2xs'
-                          : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface)]'
-                      )}
-                    >
-                      {st === 'in_progress'
-                        ? 'In Progress'
-                        : st.charAt(0).toUpperCase() + st.slice(1)}
-                    </button>
-                  );
-                }
+              {isVirtual ? (
+                <span className="px-3 py-1 text-xs rounded-full font-semibold bg-[var(--bg-surface)] text-[var(--text-secondary)] border border-[var(--border-subtle)] shadow-2xs">
+                  Planned Future Occurrence (Read-Only Preview)
+                </span>
+              ) : (
+                (['todo', 'in_progress', 'blocked', 'done', 'cancelled'] as TaskStatus[]).map(
+                  (st) => {
+                    const isCurrent = currentTask.status === st;
+                    return (
+                      <button
+                        key={st}
+                        type="button"
+                        disabled={isActionPending}
+                        onClick={() => handleStatusChange(st)}
+                        className={clsx(
+                          'px-3 py-1 text-xs rounded-full font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap',
+                          isCurrent
+                            ? 'bg-[var(--text-primary)] text-[var(--bg-canvas)] font-semibold shadow-2xs'
+                            : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface)]'
+                        )}
+                      >
+                        {st === 'in_progress'
+                          ? 'In Progress'
+                          : st.charAt(0).toUpperCase() + st.slice(1)}
+                      </button>
+                    );
+                  }
+                )
               )}
             </div>
 
@@ -358,6 +370,18 @@ export function TaskDetailModal({
 
           {/* Scrollable Editorial Body */}
           <div className="flex-1 overflow-y-auto px-5 sm:px-6 py-5 space-y-6 min-w-0">
+            {/* Virtual Projection Notice */}
+            {isVirtual && (
+              <div className="p-3.5 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface-muted)]/60 text-xs text-[var(--text-secondary)] space-y-1">
+                <div className="flex items-center gap-2 font-medium text-[var(--text-primary)]">
+                  <Clock className="w-4 h-4 text-[var(--text-muted)] shrink-0" aria-hidden="true" />
+                  <span>Projected Recurring Occurrence</span>
+                </div>
+                <p>
+                  This occurrence is projected virtually from your recurring schedule. It will be generated automatically in the database when preceding occurrences are completed.
+                </p>
+              </div>
+            )}
             {/* Blocked State Indicator */}
             {currentTask.is_blocked && (
               <div className="p-4 rounded-2xl border badge-danger text-xs space-y-1.5">
@@ -464,14 +488,16 @@ export function TaskDetailModal({
                 <h3 className="text-xs font-semibold text-[var(--text-primary)] tracking-tight">
                   Subtasks ({currentTask.completed_subtask_count}/{currentTask.subtask_count})
                 </h3>
-                <button
-                  type="button"
-                  onClick={() => setIsSubtaskModalOpen(true)}
-                  className="btn-secondary px-3 py-1 text-xs"
-                >
-                  <Plus className="w-3.5 h-3.5" aria-hidden="true" />
-                  <span>Add Subtask</span>
-                </button>
+                {!isVirtual && (
+                  <button
+                    type="button"
+                    onClick={() => setIsSubtaskModalOpen(true)}
+                    className="btn-secondary px-3 py-1 text-xs"
+                  >
+                    <Plus className="w-3.5 h-3.5" aria-hidden="true" />
+                    <span>Add Subtask</span>
+                  </button>
+                )}
               </div>
 
               {currentTask.subtasks.length === 0 ? (
@@ -488,10 +514,16 @@ export function TaskDetailModal({
                       <div className="flex items-start gap-2.5 min-w-0 flex-1">
                         <button
                           type="button"
-                          disabled={isActionPending}
-                          onClick={(e) => handleToggleSubtask(st.id, e)}
+                          disabled={isActionPending || isVirtual}
+                          onClick={(e) => !isVirtual && handleToggleSubtask(st.id, e)}
                           className="mt-0.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors shrink-0 disabled:opacity-50"
-                          title={st.status === 'done' ? 'Mark incomplete' : 'Mark completed'}
+                          title={
+                            isVirtual
+                              ? 'Projected template subtask (read-only)'
+                              : st.status === 'done'
+                                ? 'Mark incomplete'
+                                : 'Mark completed'
+                          }
                         >
                           {st.status === 'done' ? (
                             <CheckCircle2
@@ -504,9 +536,13 @@ export function TaskDetailModal({
                         </button>
                         <button
                           type="button"
-                          onClick={() => onOpenTask?.(st)}
-                          className="text-left min-w-0 flex-1 hover:underline"
-                          title="View subtask details"
+                          disabled={isVirtual}
+                          onClick={() => !isVirtual && onOpenTask?.(st)}
+                          className={clsx(
+                            'text-left min-w-0 flex-1',
+                            !isVirtual && 'hover:underline'
+                          )}
+                          title={isVirtual ? undefined : 'View subtask details'}
                         >
                           <span
                             className={clsx(
@@ -575,22 +611,24 @@ export function TaskDetailModal({
                           </span>
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        disabled={isActionPending}
-                        onClick={() => handleRemoveDependency(dep.id)}
-                        className="p-1.5 rounded-full text-[var(--text-muted)] hover:text-[var(--status-danger-text)] hover:bg-[var(--status-danger-bg)] transition-colors shrink-0"
-                        title="Remove dependency"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
-                      </button>
+                      {!isVirtual && (
+                        <button
+                          type="button"
+                          disabled={isActionPending}
+                          onClick={() => handleRemoveDependency(dep.id)}
+                          className="p-1.5 rounded-full text-[var(--text-muted)] hover:text-[var(--status-danger-text)] hover:bg-[var(--status-danger-bg)] transition-colors shrink-0"
+                          title="Remove dependency"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>
               )}
 
               {/* Add Dependency Input */}
-              {candidatePrereqs.length > 0 && (
+              {!isVirtual && candidatePrereqs.length > 0 && (
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1 min-w-0">
                   <select
                     aria-label="Select prerequisite task"
@@ -620,15 +658,21 @@ export function TaskDetailModal({
 
           {/* Sticky Footer Actions */}
           <div className="flex items-center justify-between gap-3 border-t border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] px-5 sm:px-6 py-3.5 shrink-0">
-            <button
-              type="button"
-              disabled={isActionPending}
-              onClick={handleDelete}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-[var(--status-danger-text)] hover:bg-[var(--status-danger-bg)] rounded-full transition-colors disabled:opacity-50"
-            >
-              <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
-              <span>Delete Task</span>
-            </button>
+            {!isVirtual ? (
+              <button
+                type="button"
+                disabled={isActionPending}
+                onClick={handleDelete}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-[var(--status-danger-text)] hover:bg-[var(--status-danger-bg)] rounded-full transition-colors disabled:opacity-50"
+              >
+                <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+                <span>Delete Task</span>
+              </button>
+            ) : (
+              <span className="text-[11px] text-[var(--text-muted)] font-mono">
+                Read-only series projection
+              </span>
+            )}
 
             <button
               type="button"

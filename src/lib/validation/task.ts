@@ -137,6 +137,7 @@ export const taskFilterSchema = z.object({
   is_scheduled: z.boolean().optional(),
   search: z.string().optional(),
   parent_task_id: z.string().uuid().optional().nullable(),
+  include_virtual: z.boolean().optional(),
 });
 
 export type CreateTaskInput = z.input<typeof createTaskSchema>;

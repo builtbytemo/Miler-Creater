@@ -196,6 +196,43 @@ export function CalendarWorkspace({
 
   const handleOpenTaskDetail = useCallback(
     async (task: TaskWithMeta) => {
+      if (task.is_virtual) {
+        setSelectedTask({
+          ...task,
+          subtasks: [],
+          dependencies: [],
+          blocking_tasks: [],
+        });
+        if (task.original_task_id) {
+          try {
+            const res = await getTaskDetailAction(workspaceId, task.original_task_id);
+            if (res.success && res.data) {
+              const templateDetail = res.data as TaskDetail;
+              setSelectedTask({
+                ...templateDetail,
+                id: task.id,
+                is_virtual: true,
+                original_task_id: task.original_task_id,
+                scheduled_start: task.scheduled_start,
+                scheduled_end: task.scheduled_end,
+                due_date: task.due_date,
+                occurrence_index: task.occurrence_index,
+                recurrence_rule_id: task.recurrence_rule_id,
+                status: 'todo',
+                subtasks: (templateDetail.subtasks || []).map((st) => ({
+                  ...st,
+                  status: 'todo' as const,
+                  completed_at: null,
+                })),
+              });
+            }
+          } catch {
+            // Keep optimistic task detail
+          }
+        }
+        return;
+      }
+
       setSelectedTask({
         ...task,
         subtasks: [],
