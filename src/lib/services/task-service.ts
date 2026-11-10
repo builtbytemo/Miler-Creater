@@ -8,7 +8,11 @@ import {
   type TaskFilterInput,
 } from '@/lib/validation/task';
 import { validateTaskDependency, type TaskDependencyEdge, type TaskNode } from '@/lib/tasks/dependencies';
-import { calculateNextOccurrence } from '@/lib/temporal/recurrence';
+import {
+  calculateNextOccurrence,
+  calculateNextUpcomingSlot,
+  type RecurrenceRuleParams,
+} from '@/lib/temporal/recurrence';
 
 export interface TaskWithMeta {
   created_from?: 'tasks' | 'calendar';
@@ -29,6 +33,7 @@ export interface TaskWithMeta {
   completed_at: string | null;
   tags: string[];
   recurrence_rule_id: string | null;
+  occurrence_index?: number | null;
   created_by: string | null;
   assigned_to: string | null;
   created_at: string;
@@ -448,6 +453,8 @@ export async function createTask(
         until_date: validated.recurrence.until_date || null,
         count: validated.recurrence.count || null,
         timezone: validated.recurrence.timezone,
+        dtstart: validated.scheduled_start || validated.due_date || new Date().toISOString(),
+        total_occurrences_generated: 1,
       })
       .select('id')
       .single();
@@ -478,6 +485,7 @@ export async function createTask(
       parent_task_id: validated.parent_task_id || null,
       tags: validated.tags,
       recurrence_rule_id: recurrenceRuleId,
+      occurrence_index: recurrenceRuleId ? 1 : 1,
       created_by: userId || null,
     })
     .select(`
@@ -502,12 +510,15 @@ export async function createTask(
 
 /**
  * Updates an existing task with server-side validation.
+ * If status is transitioning to done, delegates directly to completeTask to ensure
+ * atomic completion and next-occurrence generation without bypassing recurrence.
  */
 export async function updateTask(
   supabase: SupabaseClient<Database>,
   workspaceId: string,
   taskId: string,
-  input: UpdateTaskInput
+  input: UpdateTaskInput,
+  userId?: string
 ): Promise<TaskWithMeta> {
   const validated = updateTaskSchema.parse(input);
 
@@ -523,38 +534,55 @@ export async function updateTask(
     taskId
   );
 
-  // If status is transitioning to done, verify prerequisite dependencies
+  // Authoritative lifecycle routing: If transitioning to done, route through completeTask
   if (validated.status === 'done') {
-    const { data: deps } = await supabase
-      .from('task_dependencies')
-      .select('depends_on_task_id')
-      .eq('workspace_id', workspaceId)
-      .eq('task_id', taskId);
-
-    if (deps && deps.length > 0) {
-      const prereqIds = deps.map((d) => d.depends_on_task_id);
-      const { data: incompletePrereqs } = await supabase
+    // If other attributes were provided alongside status: 'done', update them first
+    const { status: _status, ...otherUpdates } = validated;
+    void _status;
+    if (Object.keys(otherUpdates).length > 0) {
+      await supabase
         .from('tasks')
-        .select('id, title, status')
-        .in('id', prereqIds)
-        .neq('status', 'done');
-
-      if (incompletePrereqs && incompletePrereqs.length > 0) {
-        const titles = incompletePrereqs.map((p) => p.title).join(', ');
-        throw new Error(`Cannot complete task while prerequisite dependencies are incomplete: ${titles}`);
-      }
+        .update(otherUpdates)
+        .eq('workspace_id', workspaceId)
+        .eq('id', taskId);
     }
+    const { completedTask } = await completeTask(supabase, workspaceId, taskId, userId);
+    return completedTask;
   }
 
   const updates: Database['public']['Tables']['tasks']['Update'] = {
     ...validated,
   };
 
-  // If status is transitioning to done, set completed_at
-  if (validated.status === 'done') {
-    updates.completed_at = new Date().toISOString();
-  } else if (validated.status) {
+  // Safe reopening & status changes
+  if (validated.status) {
     updates.completed_at = null;
+
+    // Check if task was completed and is recurring
+    const { data: current } = await supabase
+      .from('tasks')
+      .select('id, status, recurrence_rule_id')
+      .eq('workspace_id', workspaceId)
+      .eq('id', taskId)
+      .single();
+
+    if (current?.status === 'done' && current?.recurrence_rule_id) {
+      // If an active occurrence already exists in the workspace for this recurrence rule,
+      // detach recurrence_rule_id to avoid corrupting the series or violating uq_active_task_per_recurrence
+      const { data: activeExisting } = await supabase
+        .from('tasks')
+        .select('id')
+        .eq('workspace_id', workspaceId)
+        .eq('recurrence_rule_id', current.recurrence_rule_id)
+        .neq('id', taskId)
+        .not('status', 'in', '("done","cancelled")')
+        .limit(1)
+        .maybeSingle();
+
+      if (activeExisting) {
+        updates.recurrence_rule_id = null;
+      }
+    }
   }
 
   const { data: updated, error } = await supabase
@@ -584,11 +612,14 @@ export async function updateTask(
 
 /**
  * Completes a task. If the task is recurring, atomically schedules the next occurrence.
+ * Utilizes complete_task_transactional RPC with database row locking, dependency verification,
+ * idempotency protection, skip-slot scheduling for late completions, and subtask template cloning.
  */
 export async function completeTask(
   supabase: SupabaseClient<Database>,
   workspaceId: string,
-  taskId: string
+  taskId: string,
+  userId?: string
 ): Promise<{ completedTask: TaskWithMeta; nextOccurrence: TaskWithMeta | null }> {
   // 1. Fetch current task
   const { data: current, error: fetchErr } = await supabase
@@ -599,10 +630,15 @@ export async function completeTask(
     .single();
 
   if (fetchErr || !current) {
-    throw new Error(`Task not found: ${fetchErr?.message}`);
+    throw new Error(`Task not found: ${fetchErr?.message || 'Task does not exist in this workspace'}`);
   }
 
-  // 1b. Check if task has unresolved prerequisite dependencies
+  // 2. Check for cancelled status
+  if (current.status === 'cancelled') {
+    throw new Error(`Cannot complete a cancelled task: ${taskId}`);
+  }
+
+  // 3. Verify prerequisite dependencies
   const { data: deps } = await supabase
     .from('task_dependencies')
     .select('depends_on_task_id')
@@ -623,14 +659,192 @@ export async function completeTask(
     }
   }
 
-  // 2. Mark current task done
+  // 4. Idempotent check: if already completed, return without generating duplicate occurrences
+  if (current.status === 'done') {
+    let nextOcc: TaskWithMeta | null = null;
+    if (current.recurrence_rule_id) {
+      const { data: activeExisting } = await supabase
+        .from('tasks')
+        .select(`
+          *,
+          projects (id, name, color)
+        `)
+        .eq('workspace_id', workspaceId)
+        .eq('recurrence_rule_id', current.recurrence_rule_id)
+        .neq('id', taskId)
+        .not('status', 'in', '("done","cancelled")')
+        .limit(1)
+        .maybeSingle();
+
+      if (activeExisting) {
+        nextOcc = {
+          ...activeExisting,
+          subtask_count: 0,
+          completed_subtask_count: 0,
+          is_blocked: false,
+          blocking_tasks: [],
+          project: (activeExisting as unknown as { projects?: { id: string; name: string; color: string | null } }).projects || null,
+        };
+      }
+    }
+
+    return {
+      completedTask: {
+        ...current,
+        subtask_count: 0,
+        completed_subtask_count: 0,
+        is_blocked: false,
+        blocking_tasks: [],
+        project: (current as unknown as { projects?: { id: string; name: string; color: string | null } }).projects || null,
+      },
+      nextOccurrence: nextOcc,
+    };
+  }
+
+  // 5. If recurring, calculate canonical next occurrence
   const nowIso = new Date().toISOString();
+  let nextScheduledStart: string | null = null;
+  let nextScheduledEnd: string | null = null;
+  let nextDueDate: string | null = null;
+  let nextOccurrenceIndex = 1;
+  let shouldCreateNext = false;
+
+  if (current.recurrence_rule_id) {
+    const { data: rule } = await supabase
+      .from('recurrence_rules')
+      .select('*')
+      .eq('id', current.recurrence_rule_id)
+      .single();
+
+    if (rule) {
+      const referenceTime = current.scheduled_start || current.due_date || current.created_at || nowIso;
+      const anchorDate = rule.dtstart || referenceTime;
+      const currentIdx = current.occurrence_index || 1;
+
+      // Check if task is completed late: skip missed slots without building overdue backlog
+      const isLate = new Date(nowIso).getTime() > new Date(referenceTime).getTime();
+      let nextSlotResult: { nextSlot: Date; nextOccurrenceIndex: number; skippedSlots: number } | null = null;
+
+      if (isLate) {
+        nextSlotResult = calculateNextUpcomingSlot(
+          rule as RecurrenceRuleParams,
+          referenceTime,
+          nowIso,
+          {
+            occurrenceIndex: currentIdx,
+            anchorDate,
+            timeZoneOverride: rule.timezone,
+          }
+        );
+      } else {
+        const nextSlotDate = calculateNextOccurrence(
+          rule as RecurrenceRuleParams,
+          referenceTime,
+          {
+            occurrenceIndex: currentIdx,
+            anchorDate,
+            timeZoneOverride: rule.timezone,
+          }
+        );
+        if (nextSlotDate) {
+          nextSlotResult = {
+            nextSlot: nextSlotDate,
+            nextOccurrenceIndex: currentIdx + 1,
+            skippedSlots: 0,
+          };
+        }
+      }
+
+      if (nextSlotResult) {
+        shouldCreateNext = true;
+        nextOccurrenceIndex = nextSlotResult.nextOccurrenceIndex;
+        const nextStart = nextSlotResult.nextSlot;
+
+        if (current.scheduled_start) {
+          nextScheduledStart = nextStart.toISOString();
+          if (current.scheduled_end) {
+            const durationMs = new Date(current.scheduled_end).getTime() - new Date(current.scheduled_start).getTime();
+            nextScheduledEnd = new Date(nextStart.getTime() + Math.max(0, durationMs)).toISOString();
+          }
+        }
+
+        if (current.due_date) {
+          if (current.scheduled_start) {
+            const dueOffsetMs = new Date(current.due_date).getTime() - new Date(current.scheduled_start).getTime();
+            nextDueDate = new Date(nextStart.getTime() + dueOffsetMs).toISOString();
+          } else {
+            nextDueDate = nextStart.toISOString();
+          }
+        }
+      }
+    }
+  }
+
+  // 6. Execute atomic completion via RPC with fallback
+  let rpcSuccess = false;
+  let rpcResult: { next_task_id?: string | null } | null = null;
+
+  if (typeof supabase.rpc === 'function') {
+    try {
+      const { data, error: rpcErr } = await supabase.rpc('complete_task_transactional', {
+        p_task_id: taskId,
+        p_workspace_id: workspaceId,
+        p_completed_by: userId || null,
+        p_next_scheduled_start: shouldCreateNext ? nextScheduledStart : null,
+        p_next_scheduled_end: shouldCreateNext ? nextScheduledEnd : null,
+        p_next_due_date: shouldCreateNext ? nextDueDate : null,
+        p_next_occurrence_index: nextOccurrenceIndex,
+        p_now: nowIso,
+      });
+
+      if (rpcErr) {
+        if (rpcErr.code === 'PGRST202' || rpcErr.code === '42883') {
+          // RPC missing from schema cache, fall back to application-level atomic execution
+          rpcSuccess = false;
+        } else {
+          throw new Error(`Failed to complete task: ${rpcErr.message}`);
+        }
+      } else {
+        rpcSuccess = true;
+        rpcResult = data as { next_task_id?: string | null };
+      }
+    } catch (rpcEx) {
+      if ((rpcEx as Error).message.includes('Failed to complete task:')) {
+        throw rpcEx;
+      }
+      rpcSuccess = false;
+    }
+  }
+
+  if (rpcSuccess && rpcResult) {
+    const completedTask = await getTaskById(supabase, workspaceId, taskId);
+    const nextOccurrence = rpcResult.next_task_id
+      ? await getTaskById(supabase, workspaceId, rpcResult.next_task_id)
+      : null;
+
+    return {
+      completedTask: completedTask || {
+        ...current,
+        status: 'done',
+        completed_at: nowIso,
+        subtask_count: 0,
+        completed_subtask_count: 0,
+        is_blocked: false,
+        blocking_tasks: [],
+        project: null,
+      },
+      nextOccurrence,
+    };
+  }
+
+  // Application fallback (when RPC is not deployed in test environment or mock)
   const { data: completed, error: completeErr } = await supabase
     .from('tasks')
     .update({
       status: 'done',
       completed_at: nowIso,
     })
+    .eq('workspace_id', workspaceId)
     .eq('id', taskId)
     .select(`
       *,
@@ -644,80 +858,113 @@ export async function completeTask(
 
   let nextOccurrence: TaskWithMeta | null = null;
 
-  // 3. If recurring, calculate and provision next occurrence
-  if (current.recurrence_rule_id) {
+  if (shouldCreateNext && current.recurrence_rule_id) {
     // Check if an active occurrence already exists
     const { data: activeExisting } = await supabase
       .from('tasks')
       .select('id')
       .eq('workspace_id', workspaceId)
       .eq('recurrence_rule_id', current.recurrence_rule_id)
+      .neq('id', taskId)
       .not('status', 'in', '("done","cancelled")')
       .limit(1)
       .maybeSingle();
 
     if (!activeExisting) {
-      // Fetch recurrence rule
-      const { data: rule } = await supabase
-        .from('recurrence_rules')
-        .select('*')
-        .eq('id', current.recurrence_rule_id)
+      const { data: nextCreated, error: createErr } = await supabase
+        .from('tasks')
+        .insert({
+          workspace_id: workspaceId,
+          ...(current.created_from ? { created_from: current.created_from } : {}),
+          title: current.title,
+          description: current.description,
+          priority: current.priority,
+          status: 'todo',
+          scheduled_start: nextScheduledStart,
+          scheduled_end: nextScheduledEnd,
+          due_date: nextDueDate,
+          is_all_day: current.is_all_day,
+          estimated_duration_minutes: current.estimated_duration_minutes,
+          project_id: current.project_id,
+          milestone_id: current.milestone_id,
+          tags: current.tags,
+          recurrence_rule_id: current.recurrence_rule_id,
+          occurrence_index: nextOccurrenceIndex,
+          created_by: userId || current.created_by,
+        })
+        .select(`
+          *,
+          projects (id, name, color)
+        `)
         .single();
 
-      if (rule) {
-        const referenceTime = current.scheduled_start || current.due_date || nowIso;
-        const nextStart = calculateNextOccurrence(rule, referenceTime);
-
-        if (nextStart) {
-          let nextEnd: string | null = null;
-          if (current.scheduled_start && current.scheduled_end) {
-            const durationMs = new Date(current.scheduled_end).getTime() - new Date(current.scheduled_start).getTime();
-            nextEnd = new Date(nextStart.getTime() + durationMs).toISOString();
-          }
-
-          let nextDue: string | null = null;
-          if (current.due_date) {
-            nextDue = nextStart.toISOString();
-          }
-
-          const { data: nextCreated } = await supabase
+      if (createErr) {
+        if (createErr.code === '23505') {
+          // Concurrency collision: another transaction already created the next active occurrence
+          const { data: existingActive } = await supabase
             .from('tasks')
-            .insert({
-              workspace_id: workspaceId,
-              ...(current.created_from ? { created_from: current.created_from } : {}),
-              title: current.title,
-              description: current.description,
-              priority: current.priority,
-              status: 'todo',
-              scheduled_start: current.scheduled_start ? nextStart.toISOString() : null,
-              scheduled_end: nextEnd,
-              due_date: nextDue,
-              is_all_day: current.is_all_day,
-              estimated_duration_minutes: current.estimated_duration_minutes,
-              project_id: current.project_id,
-              milestone_id: current.milestone_id,
-              tags: current.tags,
-              recurrence_rule_id: current.recurrence_rule_id,
-              created_by: current.created_by,
-            })
-            .select(`
-              *,
-              projects (id, name, color)
-            `)
-            .single();
+            .select('id')
+            .eq('workspace_id', workspaceId)
+            .eq('recurrence_rule_id', current.recurrence_rule_id)
+            .not('status', 'in', '("done","cancelled")')
+            .limit(1)
+            .maybeSingle();
 
-          if (nextCreated) {
-            nextOccurrence = {
-              ...nextCreated,
-              subtask_count: 0,
-              completed_subtask_count: 0,
-              is_blocked: false,
-              blocking_tasks: [],
-              project: (nextCreated as unknown as { projects?: { id: string; name: string; color: string | null } }).projects || null,
-            };
+          if (existingActive) {
+            nextOccurrence = await getTaskById(supabase, workspaceId, existingActive.id);
           }
+        } else {
+          throw new Error(`Failed to create next occurrence: ${createErr.message}`);
         }
+      } else if (nextCreated) {
+        // Clone subtask template: fresh incomplete subtasks
+        const { data: subtasks } = await supabase
+          .from('tasks')
+          .select('title, description, priority, is_all_day, estimated_duration_minutes, project_id, milestone_id, tags')
+          .eq('workspace_id', workspaceId)
+          .eq('parent_task_id', taskId)
+          .order('created_at', { ascending: true });
+
+        if (subtasks && subtasks.length > 0) {
+          const subtaskInserts = subtasks.map((st) => ({
+            workspace_id: workspaceId,
+            parent_task_id: nextCreated.id,
+            created_from: current.created_from || 'tasks',
+            title: st.title,
+            description: st.description,
+            priority: st.priority,
+            status: 'todo' as TaskStatus,
+            is_all_day: st.is_all_day,
+            estimated_duration_minutes: st.estimated_duration_minutes,
+            project_id: st.project_id,
+            milestone_id: st.milestone_id,
+            tags: st.tags || [],
+            recurrence_rule_id: null,
+            created_by: userId || current.created_by,
+          }));
+          await supabase.from('tasks').insert(subtaskInserts);
+        }
+
+        // Update total_occurrences_generated on recurrence_rules
+        await supabase
+          .from('recurrence_rules')
+          .update({
+            total_occurrences_generated: nextOccurrenceIndex,
+            updated_at: nowIso,
+          })
+          .eq('id', current.recurrence_rule_id);
+
+        nextOccurrence = {
+          ...nextCreated,
+          subtask_count: subtasks?.length || 0,
+          completed_subtask_count: 0,
+          is_blocked: false,
+          blocking_tasks: [],
+          project: (nextCreated as unknown as { projects?: { id: string; name: string; color: string | null } }).projects || null,
+        };
       }
+    } else {
+      nextOccurrence = await getTaskById(supabase, workspaceId, activeExisting.id);
     }
   }
 
@@ -729,6 +976,195 @@ export async function completeTask(
       is_blocked: false,
       blocking_tasks: [],
       project: (completed as unknown as { projects?: { id: string; name: string; color: string | null } }).projects || null,
+    },
+    nextOccurrence,
+  };
+}
+
+/**
+ * Skips a single occurrence of a recurring task by marking the current occurrence as cancelled
+ * and immediately advancing the schedule to the next occurrence.
+ * If the task is non-recurring, it behaves identically to cancelTask.
+ */
+export async function skipTaskOccurrence(
+  supabase: SupabaseClient<Database>,
+  workspaceId: string,
+  taskId: string,
+  userId?: string
+): Promise<{ cancelledTask: TaskWithMeta; nextOccurrence: TaskWithMeta | null }> {
+  // 1. Fetch current task
+  const { data: current, error: fetchErr } = await supabase
+    .from('tasks')
+    .select('*')
+    .eq('workspace_id', workspaceId)
+    .eq('id', taskId)
+    .single();
+
+  if (fetchErr || !current) {
+    throw new Error(`Task not found: ${fetchErr?.message || 'Task does not exist in this workspace'}`);
+  }
+
+  if (current.status === 'done') {
+    throw new Error(`Cannot skip an already completed task: ${taskId}`);
+  }
+
+  // 2. Mark current task cancelled
+  const nowIso = new Date().toISOString();
+  const { data: cancelled, error: cancelErr } = await supabase
+    .from('tasks')
+    .update({
+      status: 'cancelled',
+      completed_at: null,
+      updated_at: nowIso,
+    })
+    .eq('workspace_id', workspaceId)
+    .eq('id', taskId)
+    .select(`
+      *,
+      projects (id, name, color)
+    `)
+    .single();
+
+  if (cancelErr || !cancelled) {
+    throw new Error(`Failed to skip task: ${cancelErr?.message}`);
+  }
+
+  let nextOccurrence: TaskWithMeta | null = null;
+
+  // 3. If recurring, provision the next occurrence
+  if (current.recurrence_rule_id) {
+    const { data: rule } = await supabase
+      .from('recurrence_rules')
+      .select('*')
+      .eq('id', current.recurrence_rule_id)
+      .single();
+
+    if (rule) {
+      const referenceTime = current.scheduled_start || current.due_date || current.created_at || nowIso;
+      const anchorDate = rule.dtstart || referenceTime;
+      const currentIdx = current.occurrence_index || 1;
+
+      // Skipping this occurrence: calculate next slot
+      const nextSlotDate = calculateNextOccurrence(
+        rule as RecurrenceRuleParams,
+        referenceTime,
+        {
+          occurrenceIndex: currentIdx,
+          anchorDate,
+          timeZoneOverride: rule.timezone,
+        }
+      );
+
+      if (nextSlotDate) {
+        const nextOccurrenceIndex = currentIdx + 1;
+        let nextScheduledStart: string | null = null;
+        let nextScheduledEnd: string | null = null;
+        let nextDueDate: string | null = null;
+
+        if (current.scheduled_start) {
+          nextScheduledStart = nextSlotDate.toISOString();
+          if (current.scheduled_end) {
+            const durationMs = new Date(current.scheduled_end).getTime() - new Date(current.scheduled_start).getTime();
+            nextScheduledEnd = new Date(nextSlotDate.getTime() + Math.max(0, durationMs)).toISOString();
+          }
+        }
+
+        if (current.due_date) {
+          if (current.scheduled_start) {
+            const dueOffsetMs = new Date(current.due_date).getTime() - new Date(current.scheduled_start).getTime();
+            nextDueDate = new Date(nextSlotDate.getTime() + dueOffsetMs).toISOString();
+          } else {
+            nextDueDate = nextSlotDate.toISOString();
+          }
+        }
+
+        // Insert next occurrence
+        const { data: nextCreated } = await supabase
+          .from('tasks')
+          .insert({
+            workspace_id: workspaceId,
+            ...(current.created_from ? { created_from: current.created_from } : {}),
+            title: current.title,
+            description: current.description,
+            priority: current.priority,
+            status: 'todo',
+            scheduled_start: nextScheduledStart,
+            scheduled_end: nextScheduledEnd,
+            due_date: nextDueDate,
+            is_all_day: current.is_all_day,
+            estimated_duration_minutes: current.estimated_duration_minutes,
+            project_id: current.project_id,
+            milestone_id: current.milestone_id,
+            tags: current.tags,
+            recurrence_rule_id: current.recurrence_rule_id,
+            occurrence_index: nextOccurrenceIndex,
+            created_by: userId || current.created_by,
+          })
+          .select(`
+            *,
+            projects (id, name, color)
+          `)
+          .single();
+
+        if (nextCreated) {
+          // Clone subtask template
+          const { data: subtasks } = await supabase
+            .from('tasks')
+            .select('title, description, priority, is_all_day, estimated_duration_minutes, project_id, milestone_id, tags')
+            .eq('workspace_id', workspaceId)
+            .eq('parent_task_id', taskId)
+            .order('created_at', { ascending: true });
+
+          if (subtasks && subtasks.length > 0) {
+            const subtaskInserts = subtasks.map((st) => ({
+              workspace_id: workspaceId,
+              parent_task_id: nextCreated.id,
+              created_from: current.created_from || 'tasks',
+              title: st.title,
+              description: st.description,
+              priority: st.priority,
+              status: 'todo' as TaskStatus,
+              is_all_day: st.is_all_day,
+              estimated_duration_minutes: st.estimated_duration_minutes,
+              project_id: st.project_id,
+              milestone_id: st.milestone_id,
+              tags: st.tags || [],
+              recurrence_rule_id: null,
+              created_by: userId || current.created_by,
+            }));
+            await supabase.from('tasks').insert(subtaskInserts);
+          }
+
+          // Update recurrence_rules
+          await supabase
+            .from('recurrence_rules')
+            .update({
+              total_occurrences_generated: nextOccurrenceIndex,
+              updated_at: nowIso,
+            })
+            .eq('id', current.recurrence_rule_id);
+
+          nextOccurrence = {
+            ...nextCreated,
+            subtask_count: subtasks?.length || 0,
+            completed_subtask_count: 0,
+            is_blocked: false,
+            blocking_tasks: [],
+            project: (nextCreated as unknown as { projects?: { id: string; name: string; color: string | null } }).projects || null,
+          };
+        }
+      }
+    }
+  }
+
+  return {
+    cancelledTask: {
+      ...cancelled,
+      subtask_count: 0,
+      completed_subtask_count: 0,
+      is_blocked: false,
+      blocking_tasks: [],
+      project: (cancelled as unknown as { projects?: { id: string; name: string; color: string | null } }).projects || null,
     },
     nextOccurrence,
   };

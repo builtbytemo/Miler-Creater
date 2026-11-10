@@ -8,6 +8,7 @@ import {
   createTask,
   updateTask,
   completeTask,
+  skipTaskOccurrence,
   cancelTask,
   deleteTask,
   getTaskById,
@@ -223,11 +224,11 @@ export async function completeTaskAction(
 ): Promise<TaskActionResult> {
   try {
     const supabase = await createClient();
+    const authRes = await supabase?.auth?.getUser?.();
     const res = await completeTask(supabase, workspaceId, taskId);
 
     // Attempt to notify task creator if distinct from actor
     try {
-      const authRes = await supabase?.auth?.getUser?.();
       const authData = authRes?.data;
       if (authData?.user && res.completedTask.created_by && res.completedTask.created_by !== authData.user.id) {
         const adminSupabase = createAdminClient();
@@ -253,6 +254,25 @@ export async function completeTaskAction(
     return { success: true, data: res };
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Failed to complete task' };
+  }
+}
+
+export async function skipTaskOccurrenceAction(
+  workspaceId: string,
+  taskId: string
+): Promise<TaskActionResult> {
+  try {
+    const supabase = await createClient();
+    const { data: authData } = await supabase.auth.getUser();
+    const userId = authData?.user?.id;
+    const res = await skipTaskOccurrence(supabase, workspaceId, taskId, userId);
+
+    revalidatePath('/tasks');
+    revalidatePath('/dashboard');
+    revalidatePath('/calendar');
+    return { success: true, data: res };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Failed to skip task occurrence' };
   }
 }
 

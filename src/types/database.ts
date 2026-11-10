@@ -901,6 +901,24 @@ export interface Database {
           resource: string | null;
         }[];
       };
+      complete_task_transactional: {
+        Args: {
+          p_task_id: string;
+          p_workspace_id: string;
+          p_completed_by?: string | null;
+          p_next_scheduled_start?: string | null;
+          p_next_scheduled_end?: string | null;
+          p_next_due_date?: string | null;
+          p_next_occurrence_index?: number;
+          p_now?: string | null;
+        };
+        Returns: {
+          success: boolean;
+          already_completed: boolean;
+          completed_task_id: string;
+          next_task_id: string | null;
+        };
+      };
     };
     Enums: {
       workspace_role: WorkspaceRole;

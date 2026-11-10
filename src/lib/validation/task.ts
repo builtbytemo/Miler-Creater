@@ -139,7 +139,7 @@ export const taskFilterSchema = z.object({
   parent_task_id: z.string().uuid().optional().nullable(),
 });
 
-export type CreateTaskInput = z.infer<typeof createTaskSchema>;
-export type UpdateTaskInput = z.infer<typeof updateTaskSchema>;
-export type TaskFilterInput = z.infer<typeof taskFilterSchema>;
-export type RecurrenceInput = z.infer<typeof recurrenceInputSchema>;
+export type CreateTaskInput = z.input<typeof createTaskSchema>;
+export type UpdateTaskInput = z.input<typeof updateTaskSchema>;
+export type TaskFilterInput = z.input<typeof taskFilterSchema>;
+export type RecurrenceInput = z.input<typeof recurrenceInputSchema>;
