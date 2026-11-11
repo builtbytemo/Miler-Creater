@@ -229,7 +229,7 @@ CREATE POLICY "briefing_attempts_select_own" ON public.briefing_delivery_attempt
                 WHERE d.id = delivery_id AND d.user_id = auth.uid()));
 
 REVOKE ALL ON public.briefing_deliveries, public.briefing_delivery_attempts FROM anon, authenticated;
-GRANT SELECT (id, channel, local_date, timezone, scheduled_for, status, attempt_count, completed_at)
+GRANT SELECT (id, user_id, channel, local_date, timezone, scheduled_for, status, attempt_count, completed_at)
     ON public.briefing_deliveries TO authenticated;
 GRANT ALL ON public.briefing_deliveries, public.briefing_delivery_attempts TO service_role;
 
