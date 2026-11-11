@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect } from 'vitest';
 import { enqueueDueBriefings } from '../src/lib/briefing/scheduler';
 import { createFakeAdmin } from './helpers-briefing-fake-db';

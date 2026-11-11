@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /* Minimal in-memory Supabase fake for Daily Briefing tests. */
 export interface FakeDb {
   tables: Record<string, Array<Record<string, any>>>;
@@ -11,11 +12,10 @@ export function createFakeAdmin(db: FakeDb, opts: { users?: Record<string, { ema
   };
   function from(table: string) {
     db.tables[table] ??= [];
-    let rows = db.tables[table];
-    let filters: Array<(r: any) => boolean> = [];
+    const rows = db.tables[table];
+    const filters: Array<(r: any) => boolean> = [];
     let op: 'select' | 'upsert' | 'insert' | 'update' = 'select';
     let payload: any;
-    let ignoreDup = false;
     let lim = Infinity;
     const b: any = {
       select: () => b,
@@ -24,7 +24,7 @@ export function createFakeAdmin(db: FakeDb, opts: { users?: Record<string, { ema
       order: () => b,
       limit: (n: number) => ((lim = n), b),
       maybeSingle: async () => ({ data: rows.filter((r) => filters.every((f) => f(r)))[0] ?? null, error: null }),
-      upsert: (p: any, o: any) => ((op = 'upsert'), (payload = p), (ignoreDup = !!o?.ignoreDuplicates), b),
+      upsert: (p: any) => ((op = 'upsert'), (payload = p), b),
       insert: (p: any) => ((op = 'insert'), (payload = p), b),
       update: (p: any) => ((op = 'update'), (payload = p), b),
       then: (resolve: any, reject: any) => {

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createTelegramAdapter } from '../src/lib/briefing/channels/telegram';
 import { createEmailAdapter } from '../src/lib/briefing/channels/email';
