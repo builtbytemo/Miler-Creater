@@ -333,7 +333,8 @@ describe('Empty states', () => {
   it('delivers a friendly empty-day message in both channels', async () => {
     const s = await snap({});
     expect(renderEmail(s).text).toContain('Nothing is scheduled for today');
-    expect(renderEmail(s).html).toContain('Wednesday, November 11, 2026');
+    expect(renderEmail(s).html).toContain('Wednesday');
+    expect(renderEmail(s).html).toContain('November 11, 2026');
     const t = renderTelegram(s);
     expect(t.parts).toHaveLength(1);
     expect(t.text).toContain('Nothing on your list for today');
@@ -372,19 +373,19 @@ describe('Email rendering', () => {
     expect(text.indexOf('TASKS')).toBeLessThan(text.indexOf('CONTENT'));
     expect(text.indexOf('CONTENT')).toBeLessThan(text.indexOf('DAY FINDER'));
     expect(subject).toContain('Wed, Nov 11');
-    expect(html).toContain('Wednesday, November 11, 2026');
+    expect(html).toContain('Wednesday');
+    expect(html).toContain('November 11, 2026');
     expect(html).toContain('viewport');
   });
 
-  it('supports both Journal and Planner editorial visual concepts while keeping identical content', async () => {
+  it('renders the approved Architectural Atelier Planner email presentation', async () => {
     const s = await rich();
-    const journal = renderEmail(s, { concept: 'journal' });
-    const planner = renderEmail(s, { concept: 'planner' });
-    expect(journal.text).toEqual(planner.text);
-    expect(journal.html).toContain('Daily Briefing');
-    expect(journal.html).toContain('Wednesday, November 11, 2026');
-    expect(planner.html).toContain('01 / </span>Tasks');
-    expect(planner.html).toContain('Wednesday');
+    const email = renderEmail(s);
+    expect(email.html).toContain('01 / </span>Tasks');
+    expect(email.html).toContain('02 / </span>Content');
+    expect(email.html).toContain('Wednesday');
+    expect(email.html).toContain('November 11, 2026');
+    expect(email.html).toContain('Miler Daily Planner');
   });
 
   it('escapes user-generated HTML everywhere', async () => {
