@@ -3,6 +3,7 @@ import { connection } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { resolveAuthorizedWorkspace } from '@/lib/actions/content-actions';
 import { AppNavigation } from '@/components/layout/AppNavigation';
+import { DailyBriefingSettings } from '@/components/settings/DailyBriefingSettings';
 import { NotificationPreferencesForm } from '@/components/notifications/NotificationPreferencesForm';
 
 export const instant = false;
@@ -52,6 +53,9 @@ export default async function NotificationSettingsPage() {
           workspaceId={workspaceId}
           workspaceName={wsData?.name}
         />
+        <div className="mt-10 pt-8 border-t border-neutral-800">
+          <DailyBriefingSettings />
+        </div>
       </main>
     </div>
   );

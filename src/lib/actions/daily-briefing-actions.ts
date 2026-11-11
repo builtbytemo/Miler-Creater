@@ -1,0 +1,187 @@
+'use server';
+
+import { revalidatePath } from 'next/cache';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { createTelegramAdapter } from '@/lib/briefing/channels/telegram';
+import { createEmailAdapter } from '@/lib/briefing/channels/email';
+import { getDeliveryServiceStatus, getTelegramBotUsername, type DeliveryServiceStatus } from '@/lib/briefing/config';
+import {
+  DEFAULT_BRIEFING_LOCAL_TIME,
+  DEFAULT_BRIEFING_TIMEZONE,
+  isValidLocalTime,
+  isValidTimeZone,
+} from '@/lib/briefing/timezone';
+import { LINK_TOKEN_TTL_SECONDS, buildDeepLink, generateLinkToken, hashLinkToken } from '@/lib/briefing/telegram-linking';
+import type { BriefingChannel } from '@/lib/briefing/types';
+
+export interface DailyBriefingState {
+  enabled: boolean;
+  emailEnabled: boolean;
+  telegramEnabled: boolean;
+  timezone: string;
+  deliveryLocalTime: string;
+  telegram: { status: 'not_connected' | 'active' | 'blocked'; username: string | null };
+  emailAddressVerified: boolean;
+  service: DeliveryServiceStatus;
+}
+
+export interface BriefingActionResult<T = undefined> {
+  success?: boolean;
+  error?: string;
+  data?: T;
+}
+
+async function requireUser(): Promise<{ supabase: SupabaseClient; userId: string; emailVerified: boolean } | null> {
+  const supabase = (await createClient()) as unknown as SupabaseClient;
+  const { data } = await supabase.auth.getUser();
+  if (!data.user) return null;
+  return { supabase, userId: data.user.id, emailVerified: Boolean(data.user.email && data.user.email_confirmed_at) };
+}
+
+export async function getDailyBriefingStateAction(): Promise<BriefingActionResult<DailyBriefingState>> {
+  const ctx = await requireUser();
+  if (!ctx) return { error: 'Authentication required' };
+
+  const [{ data: prefs }, { data: conn }] = await Promise.all([
+    ctx.supabase.from('daily_briefing_preferences').select('*').eq('user_id', ctx.userId).maybeSingle(),
+    ctx.supabase.from('telegram_connections').select('status, telegram_username').eq('user_id', ctx.userId).maybeSingle(),
+  ]);
+
+  return {
+    data: {
+      enabled: prefs?.enabled ?? false,
+      emailEnabled: prefs?.email_enabled ?? false,
+      telegramEnabled: prefs?.telegram_enabled ?? false,
+      timezone: prefs?.timezone ?? DEFAULT_BRIEFING_TIMEZONE,
+      deliveryLocalTime: String(prefs?.delivery_local_time ?? DEFAULT_BRIEFING_LOCAL_TIME).slice(0, 5),
+      telegram: conn
+        ? { status: conn.status as 'active' | 'blocked', username: conn.telegram_username ?? null }
+        : { status: 'not_connected', username: null },
+      emailAddressVerified: ctx.emailVerified,
+      service: getDeliveryServiceStatus(),
+    },
+  };
+}
+
+export async function updateDailyBriefingPreferencesAction(input: {
+  enabled?: boolean;
+  emailEnabled?: boolean;
+  telegramEnabled?: boolean;
+  timezone?: string;
+  deliveryLocalTime?: string;
+}): Promise<BriefingActionResult> {
+  const ctx = await requireUser();
+  if (!ctx) return { error: 'Authentication required' };
+
+  if (input.timezone !== undefined && !isValidTimeZone(input.timezone)) return { error: 'Invalid timezone' };
+  if (input.deliveryLocalTime !== undefined && !isValidLocalTime(input.deliveryLocalTime)) {
+    return { error: 'Invalid delivery time' };
+  }
+  if (input.emailEnabled && !ctx.emailVerified) {
+    return { error: 'Your account email address is not verified' };
+  }
+
+  const patch: Record<string, unknown> = {};
+  if (input.enabled !== undefined) patch.enabled = input.enabled;
+  if (input.emailEnabled !== undefined) patch.email_enabled = input.emailEnabled;
+  if (input.telegramEnabled !== undefined) patch.telegram_enabled = input.telegramEnabled;
+  if (input.timezone !== undefined) patch.timezone = input.timezone;
+  if (input.deliveryLocalTime !== undefined) patch.delivery_local_time = input.deliveryLocalTime;
+
+  // Own-row upsert through RLS; unspecified columns keep safe defaults (disabled).
+  const { error } = await ctx.supabase
+    .from('daily_briefing_preferences')
+    .upsert({ user_id: ctx.userId, ...patch }, { onConflict: 'user_id' });
+  if (error) return { error: 'Could not save Daily Briefing preferences' };
+
+  revalidatePath('/settings/notifications');
+  return { success: true };
+}
+
+export async function startTelegramConnectionAction(): Promise<BriefingActionResult<{ deepLink: string; expiresAt: string }>> {
+  const ctx = await requireUser();
+  if (!ctx) return { error: 'Authentication required' };
+
+  const username = getTelegramBotUsername();
+  if (!getDeliveryServiceStatus().telegramConfigured || !username) {
+    return { error: 'Telegram is not configured on this server yet' };
+  }
+
+  const token = generateLinkToken();
+  const { data, error } = await ctx.supabase.rpc('create_telegram_link_token', {
+    p_token_hash: hashLinkToken(token),
+    p_ttl_seconds: LINK_TOKEN_TTL_SECONDS,
+  });
+  if (error) return { error: 'Could not start the Telegram connection. Please try again later.' };
+  return { success: true, data: { deepLink: buildDeepLink(username, token), expiresAt: String(data) } };
+}
+
+export async function disconnectTelegramAction(): Promise<BriefingActionResult> {
+  const ctx = await requireUser();
+  if (!ctx) return { error: 'Authentication required' };
+
+  const { error } = await ctx.supabase.from('telegram_connections').delete().eq('user_id', ctx.userId);
+  if (error) return { error: 'Could not disconnect Telegram' };
+  await ctx.supabase.from('daily_briefing_preferences').update({ telegram_enabled: false }).eq('user_id', ctx.userId);
+
+  revalidatePath('/settings/notifications');
+  return { success: true };
+}
+
+const TEST_COOLDOWN_MS = 60_000;
+
+/**
+ * Explicit, user-triggered provider check. Sends a fixed "test" message to the caller's OWN
+ * verified destination only. This is not a briefing and never uses the content generator.
+ */
+export async function sendTestBriefingMessageAction(channel: BriefingChannel): Promise<BriefingActionResult> {
+  const ctx = await requireUser();
+  if (!ctx) return { error: 'Authentication required' };
+  if (channel !== 'email' && channel !== 'telegram') return { error: 'Invalid channel' };
+
+  const status = getDeliveryServiceStatus();
+  if (channel === 'telegram' && !status.telegramConfigured) return { error: 'Telegram is not configured on this server yet' };
+  if (channel === 'email' && !status.emailConfigured) return { error: 'Email delivery is not configured on this server yet' };
+
+  const admin = createAdminClient() as unknown as SupabaseClient;
+  const { data: prefs } = await admin
+    .from('daily_briefing_preferences')
+    .select('last_test_sent_at')
+    .eq('user_id', ctx.userId)
+    .maybeSingle();
+  if (prefs?.last_test_sent_at && Date.now() - new Date(prefs.last_test_sent_at).getTime() < TEST_COOLDOWN_MS) {
+    return { error: 'Please wait a minute before sending another test' };
+  }
+
+  const message = {
+    channel,
+    subject: 'Miler delivery test',
+    text: 'This is a Miler test message confirming that delivery to this destination works. It is not a Daily Briefing.',
+  };
+
+  let result;
+  if (channel === 'telegram') {
+    const { data: conn } = await admin
+      .from('telegram_connections')
+      .select('chat_id, status')
+      .eq('user_id', ctx.userId)
+      .maybeSingle();
+    if (!conn || conn.status !== 'active') return { error: 'Telegram is not connected' };
+    result = await createTelegramAdapter().send({ chatId: conn.chat_id }, message);
+  } else {
+    if (!ctx.emailVerified) return { error: 'Your account email address is not verified' };
+    const { data: u } = await admin.auth.admin.getUserById(ctx.userId);
+    if (!u.user?.email) return { error: 'No verified email address' };
+    result = await createEmailAdapter().send({ to: u.user.email }, message);
+  }
+
+  // Record the attempt time regardless of outcome to bound abuse.
+  await admin
+    .from('daily_briefing_preferences')
+    .upsert({ user_id: ctx.userId, last_test_sent_at: new Date().toISOString() }, { onConflict: 'user_id' });
+
+  if (!result.ok) return { error: `Test delivery failed (${result.code})` };
+  return { success: true };
+}
