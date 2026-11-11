@@ -223,7 +223,7 @@ describe('Recurrence', () => {
 });
 
 describe('Day Finder (calendar blocks)', () => {
-  it('lists calendar-origin blocks ordered by start with name, start and end; tasks stay out of Day Finder', async () => {
+  it('lists calendar timeline blocks ordered by start with name, start and end; plain tasks stay out of Day Finder', async () => {
     const s = await snap({
       tasks: [
         task({ title: 'Lunch', created_from: 'calendar', scheduled_start: cairo('13:00'), scheduled_end: cairo('14:00') }),
@@ -232,28 +232,38 @@ describe('Day Finder (calendar blocks)', () => {
       ],
     });
     expect(s.dayFinder.map((b) => b.name)).toEqual(['University', 'Lunch']);
-    expect(titles(s.tasks)).toEqual(['Plain task']);
+    // Calendar timeline tasks also remain actionable in Tasks; they do not disappear simply because they lack a deadline
+    expect(titles(s.tasks)).toContain('Plain task');
+    expect(titles(s.tasks)).toContain('University');
+    expect(titles(s.tasks)).toContain('Lunch');
     expect(renderEmail(s).text).toContain('University | 9:00 AM–12:00 PM');
   });
 
-  it('includes calendar-origin content in Content so it is never lost from briefings or Telegram', async () => {
+  it('includes calendar-origin content in Content AND Day Finder so it is never lost from briefings or timeline', async () => {
     const s = await snap({ content: [content({ title: 'Live stream', created_from: 'calendar', scheduled_at: cairo('18:00'), duration_minutes: 90 })] });
     expect(titles(s.content)).toEqual(['Live stream']);
+    expect(s.dayFinder.map((b) => b.name)).toEqual(['Live stream']);
     expect(renderEmail(s).text).toContain('Live stream | Publish 6:00 PM');
+    expect(renderEmail(s).text).toContain('Live stream | 6:00 PM–7:30 PM');
     expect(renderTelegram(s).text).toContain('Live stream');
   });
 
-  it('includes tasks created through the calendar that have a deadline (due_date) in Tasks', async () => {
+  it('includes tasks created through the calendar with or without deadlines in Tasks', async () => {
     const s = await snap({
       tasks: [
         task({ title: 'Calendar task with due date', created_from: 'calendar', scheduled_start: cairo('10:00'), due_date: cairo('17:00') }),
-        task({ title: 'Calendar appointment block', created_from: 'calendar', scheduled_start: cairo('10:00'), due_date: null }),
+        task({ title: 'Calendar task without deadline', created_from: 'calendar', scheduled_start: cairo('10:00'), due_date: null }),
+        task({ title: 'Ordinary task', created_from: 'tasks', scheduled_start: cairo('11:00') }),
       ],
     });
-    expect(titles(s.tasks)).toEqual(['Calendar task with due date']);
-    expect(s.dayFinder.map((b) => b.name)).toEqual(['Calendar appointment block']);
+    // All 3 active tasks appear in Tasks
+    expect(titles(s.tasks)).toEqual(['Calendar task with due date', 'Calendar task without deadline', 'Ordinary task']);
+    // Only calendar-scheduled items appear on the timeline in Day Finder
+    expect(s.dayFinder.map((b) => b.name)).toEqual(['Calendar task with due date', 'Calendar task without deadline']);
+    // Telegram excludes Day Finder but retains both calendar tasks with full details
     expect(renderTelegram(s).text).toContain('Calendar task with due date');
-    expect(renderTelegram(s).text).not.toContain('Calendar appointment block');
+    expect(renderTelegram(s).text).toContain('Calendar task without deadline');
+    expect(renderTelegram(s).text).not.toContain('Day Finder');
   });
 
   it('handles cross-midnight blocks on both days and excludes blocks ending exactly at midnight', async () => {
@@ -341,9 +351,10 @@ describe('Empty states', () => {
   });
 
   it('Telegram is empty (and still delivered) when only Day Finder blocks exist; email shows the block', async () => {
-    const s = await snap({ tasks: [task({ title: 'Gym', created_from: 'calendar', scheduled_start: cairo('07:00'), scheduled_end: cairo('08:00') })] });
+    // Completed tasks stay on the calendar timeline (Day Finder) but are excluded from actionable Tasks
+    const s = await snap({ tasks: [task({ title: 'Completed appointment', status: 'done', created_from: 'calendar', scheduled_start: cairo('07:00'), scheduled_end: cairo('08:00') })] });
     expect(renderTelegram(s).text).toContain('Nothing on your list for today');
-    expect(renderEmail(s).text).toContain('Gym | 7:00 AM–8:00 AM');
+    expect(renderEmail(s).text).toContain('Completed appointment | 7:00 AM–8:00 AM');
   });
 });
 

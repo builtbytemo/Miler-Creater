@@ -179,10 +179,8 @@ function plusMinutes(iso: string, minutes: number | null): string | null {
   return minutes && minutes > 0 ? new Date(ms(iso) + minutes * 60_000).toISOString() : null;
 }
 
-function isDedicatedCalendarBlock(t: RawTask): boolean {
-  // A dedicated calendar block is an event/appointment created on the calendar
-  // with a scheduled start time and no task deadline/due_date.
-  return t.created_from === 'calendar' && Boolean(t.scheduled_start) && !t.due_date;
+function isCalendarTimelineBlock(t: RawTask): boolean {
+  return t.created_from === 'calendar' && Boolean(t.scheduled_start);
 }
 
 export function buildBriefingSnapshot(src: BriefingSources, localDate: string): BriefingSnapshot {
@@ -194,17 +192,18 @@ export function buildBriefingSnapshot(src: BriefingSources, localDate: string): 
   const content = src.content.filter((c) => authorized.has(c.workspace_id));
 
   // --- Tasks ---
-  // Ordinary tasks (created_from !== 'calendar') AND tasks created through the calendar that have
-  // a deadline (due_date) or lack a time block start are actionable tasks, not dedicated calendar blocks.
+  // All active actionable tasks visible to the user whose scheduled date OR deadline date matches
+  // the briefing date are included in Tasks. A task created through the calendar does not disappear
+  // from Tasks simply because it was scheduled on the calendar or lacks a deadline.
   const seenTask = new Set<string>();
   const seenOccurrence = new Set<string>();
   const taskEntries: BriefingTask[] = [];
   for (const t of [...tasks].sort((a, b) => a.id.localeCompare(b.id))) {
-    if (isDedicatedCalendarBlock(t) || !ACTIVE_TASK_STATUSES.has(t.status)) continue;
+    if (!ACTIVE_TASK_STATUSES.has(t.status)) continue;
     if (seenTask.has(t.id)) continue;
     const entry = buildTask(t, src, localDate);
     if (!entry) continue;
-    // One real row per recurrence occurrence: never list the same occurrence twice.
+    // One real row per recurrence occurrence: never list the same occurrence twice within Tasks.
     if (t.recurrence_rule_id) {
       const key = `${t.recurrence_rule_id}#${t.occurrence_index ?? entry.sortKey ?? 'any'}`;
       if (seenOccurrence.has(key)) continue;
@@ -215,8 +214,8 @@ export function buildBriefingSnapshot(src: BriefingSources, localDate: string): 
   }
 
   // --- Content ---
-  // All actionable content items (whether created in Content workspace or through the Calendar)
-  // are included so they are not accidentally excluded simply because they originated in the calendar.
+  // All actionable content items whose scheduled publication date matches the briefing date
+  // are included so they are never missed from Content.
   const seenContent = new Set<string>();
   const seenContentOccurrence = new Set<string>();
   const contentEntries: BriefingContent[] = [];
@@ -234,13 +233,23 @@ export function buildBriefingSnapshot(src: BriefingSources, localDate: string): 
     contentEntries.push(entry);
   }
 
-  // --- Day Finder: dedicated calendar blocks (appointments, meetings, agenda blocks) ---
+  // --- Day Finder: reflects actual CalendarDayView timeline blocks ---
+  // Matches CalendarDayView's 24h timeline event extraction:
+  // 1. Tasks scheduled on the calendar (created_from === 'calendar' with scheduled_start).
+  // 2. Content scheduled on the calendar (created_from === 'calendar' with scheduled_at).
   const blocks = new Map<string, DayFinderBlock>();
   for (const t of tasks) {
-    if (!isDedicatedCalendarBlock(t) || t.status === 'cancelled') continue;
+    if (!isCalendarTimelineBlock(t) || t.status === 'cancelled') continue;
     const end = t.scheduled_end ?? (t.scheduled_start ? plusMinutes(t.scheduled_start, t.estimated_duration_minutes) : null);
     const b = dayFinderBlock(t.id, clean(t.title) ?? 'Untitled', t.scheduled_start, end, t.is_all_day, tz, localDate);
     if (b) blocks.set(`task:${t.id}`, b);
+  }
+
+  for (const c of content) {
+    if (c.created_from !== 'calendar' || !c.scheduled_at || c.status === 'archived') continue;
+    const end = plusMinutes(c.scheduled_at, c.duration_minutes ?? 45);
+    const b = dayFinderBlock(c.id, clean(c.title) ?? 'Untitled post', c.scheduled_at, end, false, tz, localDate);
+    if (b) blocks.set(`content:${c.id}`, b);
   }
 
   return {
