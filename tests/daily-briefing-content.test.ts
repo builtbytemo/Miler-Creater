@@ -376,6 +376,17 @@ describe('Email rendering', () => {
     expect(html).toContain('viewport');
   });
 
+  it('supports both Journal and Planner editorial visual concepts while keeping identical content', async () => {
+    const s = await rich();
+    const journal = renderEmail(s, { concept: 'journal' });
+    const planner = renderEmail(s, { concept: 'planner' });
+    expect(journal.text).toEqual(planner.text);
+    expect(journal.html).toContain('Daily Briefing');
+    expect(journal.html).toContain('Wednesday, November 11, 2026');
+    expect(planner.html).toContain('01 / </span>Tasks');
+    expect(planner.html).toContain('Wednesday');
+  });
+
   it('escapes user-generated HTML everywhere', async () => {
     const evil = '<script>alert("x")</script> & "Co"';
     const s = await snap({
