@@ -74,7 +74,28 @@ const TASK_COLUMNS =
 const CONTENT_COLUMNS =
   'id, workspace_id, social_account_id, platform, action_type, status, title, body, scheduled_at, duration_minutes, media_urls, external_links, target_reference, tags, notes, project_id, milestone_id, recurrence_rule_id, created_from';
 
-const MAX_ROWS = 2000;
+const PAGE_SIZE = 1000;
+
+/**
+ * Paginates PostgREST requests with `.range(start, end)` so query limits (default 1000 rows)
+ * never silently omit records. Fails closed (throws) immediately if any page returns an error.
+ */
+async function fetchAllPages<T>(
+  fetchPage: (start: number, end: number) => PromiseLike<{ data: unknown; error: unknown }>,
+  what: string
+): Promise<T[]> {
+  const all: T[] = [];
+  let offset = 0;
+  while (true) {
+    const res = await fetchPage(offset, offset + PAGE_SIZE - 1);
+    if (res.error) throw new Error(`briefing_source_${what}_failed`);
+    const chunk = (res.data as T[] | null) ?? [];
+    all.push(...chunk);
+    if (chunk.length < PAGE_SIZE) break;
+    offset += PAGE_SIZE;
+  }
+  return all;
+}
 
 /** PostgREST `or` filter: any date column of the row can touch the UTC window. */
 export function taskWindowFilter(from: string, to: string): string {
@@ -117,15 +138,25 @@ export async function loadBriefingSources(
   };
 
   // Authorization: current memberships (any role can view, as in RLS).
-  const memberships = rows<{ workspace_id: string }>(
-    await admin.from('workspace_members').select('workspace_id').eq('user_id', userId),
+  const memberships = await fetchAllPages<{ workspace_id: string }>(
+    (start, end) =>
+      admin
+        .from('workspace_members')
+        .select('workspace_id')
+        .eq('user_id', userId)
+        .range(start, end),
     'memberships'
   );
   const workspaceIds = ids(memberships.map((m) => m.workspace_id));
   if (workspaceIds.length === 0) return empty;
 
-  const wsRows = rows<{ id: string; name: string }>(
-    await admin.from('workspaces').select('id, name').in('id', workspaceIds),
+  const wsRows = await fetchAllPages<{ id: string; name: string }>(
+    (start, end) =>
+      admin
+        .from('workspaces')
+        .select('id, name')
+        .in('id', workspaceIds)
+        .range(start, end),
     'workspaces'
   );
   const workspaces: Record<string, string> = {};
@@ -134,24 +165,26 @@ export async function loadBriefingSources(
   if (authorizedIds.length === 0) return empty;
 
   const { from, to } = utcWindowForDate(localDate);
-  const tasks = rows<RawTask>(
-    await admin
-      .from('tasks')
-      .select(TASK_COLUMNS)
-      .in('workspace_id', authorizedIds)
-      .neq('status', 'cancelled')
-      .or(taskWindowFilter(from, to))
-      .limit(MAX_ROWS),
+  const tasks = await fetchAllPages<RawTask>(
+    (start, end) =>
+      admin
+        .from('tasks')
+        .select(TASK_COLUMNS)
+        .in('workspace_id', authorizedIds)
+        .neq('status', 'cancelled')
+        .or(taskWindowFilter(from, to))
+        .range(start, end),
     'tasks'
   );
-  const content = rows<RawContent>(
-    await admin
-      .from('content_items')
-      .select(CONTENT_COLUMNS)
-      .in('workspace_id', authorizedIds)
-      .neq('status', 'archived')
-      .or(contentWindowFilter(from, to))
-      .limit(MAX_ROWS),
+  const content = await fetchAllPages<RawContent>(
+    (start, end) =>
+      admin
+        .from('content_items')
+        .select(CONTENT_COLUMNS)
+        .in('workspace_id', authorizedIds)
+        .neq('status', 'archived')
+        .or(contentWindowFilter(from, to))
+        .range(start, end),
     'content'
   );
 

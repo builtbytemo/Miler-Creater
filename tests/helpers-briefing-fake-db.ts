@@ -17,6 +17,8 @@ export function createFakeAdmin(db: FakeDb, opts: { users?: Record<string, { ema
     let op: 'select' | 'upsert' | 'insert' | 'update' = 'select';
     let payload: any;
     let lim = Infinity;
+    let rangeFrom: number | null = null;
+    let rangeTo: number | null = null;
     const b: any = {
       select: () => b,
       eq: (c: string, v: any) => (filters.push((r) => r[c] === v), b),
@@ -27,13 +29,20 @@ export function createFakeAdmin(db: FakeDb, opts: { users?: Record<string, { ema
       or: () => b,
       order: () => b,
       limit: (n: number) => ((lim = n), b),
+      range: (fromIdx: number, toIdx: number) => ((rangeFrom = fromIdx), (rangeTo = toIdx), b),
       maybeSingle: async () => ({ data: rows.filter((r) => filters.every((f) => f(r)))[0] ?? null, error: null }),
       upsert: (p: any) => ((op = 'upsert'), (payload = p), b),
       insert: (p: any) => ((op = 'insert'), (payload = p), b),
       update: (p: any) => ((op = 'update'), (payload = p), b),
       then: (resolve: any, reject: any) => {
         const run = () => {
-          if (op === 'select') return { data: rows.filter((r) => filters.every((f) => f(r))).slice(0, lim), error: null };
+          if (op === 'select') {
+            const filtered = rows.filter((r) => filters.every((f) => f(r)));
+            if (rangeFrom !== null && rangeTo !== null) {
+              return { data: filtered.slice(rangeFrom, rangeTo + 1), error: null };
+            }
+            return { data: filtered.slice(0, lim), error: null };
+          }
           if (op === 'update') {
             rows.filter((r) => filters.every((f) => f(r))).forEach((r) => Object.assign(r, payload));
             return { data: null, error: null };

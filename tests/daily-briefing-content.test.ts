@@ -172,6 +172,34 @@ describe('Workspaces and authorization', () => {
     expect(spy).toHaveBeenCalledWith('workspace_members');
     expect(taskWindowFilter('A', 'B')).toContain('scheduled_start.gte.A');
   });
+
+  it('paginates tasks and content when records exceed 1000, never silently dropping rows', async () => {
+    const manyTasks = Array.from({ length: 1050 }, (_, i) =>
+      task({ title: `Task ${i}`, scheduled_start: cairo('09:00') })
+    );
+    const { admin } = makeAdmin({ tasks: manyTasks });
+    const s = await buildSnapshotForUser(admin, 'u1', DATE);
+    expect(s.tasks).toHaveLength(1050);
+  });
+
+  it('fails closed and throws an error if a query fails, preventing a false empty day', async () => {
+    const { admin } = makeAdmin();
+    vi.spyOn(admin, 'from').mockImplementation(((table: string) => {
+      if (table === 'tasks') {
+        const b: any = {
+          select: () => b,
+          in: () => b,
+          neq: () => b,
+          or: () => b,
+          range: () => Promise.resolve({ data: null, error: { message: 'Database connection dropped' } }),
+        };
+        return b;
+      }
+      return (makeAdmin().admin as any).from(table);
+    }) as any);
+
+    await expect(buildSnapshotForUser(admin, 'u1', DATE)).rejects.toThrow('briefing_source_tasks_failed');
+  });
 });
 
 describe('Recurrence', () => {
@@ -208,10 +236,24 @@ describe('Day Finder (calendar blocks)', () => {
     expect(renderEmail(s).text).toContain('University | 9:00 AM–12:00 PM');
   });
 
-  it('includes calendar-origin content blocks and does not duplicate them in Content', async () => {
+  it('includes calendar-origin content in Content so it is never lost from briefings or Telegram', async () => {
     const s = await snap({ content: [content({ title: 'Live stream', created_from: 'calendar', scheduled_at: cairo('18:00'), duration_minutes: 90 })] });
-    expect(s.content).toEqual([]);
-    expect(renderEmail(s).text).toContain('Live stream | 6:00 PM–7:30 PM');
+    expect(titles(s.content)).toEqual(['Live stream']);
+    expect(renderEmail(s).text).toContain('Live stream | Publish 6:00 PM');
+    expect(renderTelegram(s).text).toContain('Live stream');
+  });
+
+  it('includes tasks created through the calendar that have a deadline (due_date) in Tasks', async () => {
+    const s = await snap({
+      tasks: [
+        task({ title: 'Calendar task with due date', created_from: 'calendar', scheduled_start: cairo('10:00'), due_date: cairo('17:00') }),
+        task({ title: 'Calendar appointment block', created_from: 'calendar', scheduled_start: cairo('10:00'), due_date: null }),
+      ],
+    });
+    expect(titles(s.tasks)).toEqual(['Calendar task with due date']);
+    expect(s.dayFinder.map((b) => b.name)).toEqual(['Calendar appointment block']);
+    expect(renderTelegram(s).text).toContain('Calendar task with due date');
+    expect(renderTelegram(s).text).not.toContain('Calendar appointment block');
   });
 
   it('handles cross-midnight blocks on both days and excludes blocks ending exactly at midnight', async () => {

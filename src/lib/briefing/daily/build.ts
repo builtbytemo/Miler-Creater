@@ -179,6 +179,12 @@ function plusMinutes(iso: string, minutes: number | null): string | null {
   return minutes && minutes > 0 ? new Date(ms(iso) + minutes * 60_000).toISOString() : null;
 }
 
+function isDedicatedCalendarBlock(t: RawTask): boolean {
+  // A dedicated calendar block is an event/appointment created on the calendar
+  // with a scheduled start time and no task deadline/due_date.
+  return t.created_from === 'calendar' && Boolean(t.scheduled_start) && !t.due_date;
+}
+
 export function buildBriefingSnapshot(src: BriefingSources, localDate: string): BriefingSnapshot {
   const authorized = new Set(Object.keys(src.workspaces));
   const tz = src.timezone;
@@ -187,12 +193,14 @@ export function buildBriefingSnapshot(src: BriefingSources, localDate: string): 
   const tasks = src.tasks.filter((t) => authorized.has(t.workspace_id));
   const content = src.content.filter((c) => authorized.has(c.workspace_id));
 
-  // --- Tasks (Tasks tab semantics: calendar-origin entries are calendar blocks, not tasks) ---
+  // --- Tasks ---
+  // Ordinary tasks (created_from !== 'calendar') AND tasks created through the calendar that have
+  // a deadline (due_date) or lack a time block start are actionable tasks, not dedicated calendar blocks.
   const seenTask = new Set<string>();
   const seenOccurrence = new Set<string>();
   const taskEntries: BriefingTask[] = [];
   for (const t of [...tasks].sort((a, b) => a.id.localeCompare(b.id))) {
-    if (t.created_from === 'calendar' || !ACTIVE_TASK_STATUSES.has(t.status)) continue;
+    if (isDedicatedCalendarBlock(t) || !ACTIVE_TASK_STATUSES.has(t.status)) continue;
     if (seenTask.has(t.id)) continue;
     const entry = buildTask(t, src, localDate);
     if (!entry) continue;
@@ -207,11 +215,13 @@ export function buildBriefingSnapshot(src: BriefingSources, localDate: string): 
   }
 
   // --- Content ---
+  // All actionable content items (whether created in Content workspace or through the Calendar)
+  // are included so they are not accidentally excluded simply because they originated in the calendar.
   const seenContent = new Set<string>();
   const seenContentOccurrence = new Set<string>();
   const contentEntries: BriefingContent[] = [];
   for (const c of [...content].sort((a, b) => a.id.localeCompare(b.id))) {
-    if (c.created_from === 'calendar' || !ACTIONABLE_CONTENT_STATUSES.has(c.status)) continue;
+    if (!ACTIONABLE_CONTENT_STATUSES.has(c.status)) continue;
     if (seenContent.has(c.id)) continue;
     const entry = buildContent(c, src, localDate);
     if (!entry) continue;
@@ -224,19 +234,13 @@ export function buildBriefingSnapshot(src: BriefingSources, localDate: string): 
     contentEntries.push(entry);
   }
 
-  // --- Day Finder: calendar-origin entries (what the Calendar day view shows as time blocks) ---
+  // --- Day Finder: dedicated calendar blocks (appointments, meetings, agenda blocks) ---
   const blocks = new Map<string, DayFinderBlock>();
   for (const t of tasks) {
-    if (t.created_from !== 'calendar' || t.status === 'cancelled') continue;
+    if (!isDedicatedCalendarBlock(t) || t.status === 'cancelled') continue;
     const end = t.scheduled_end ?? (t.scheduled_start ? plusMinutes(t.scheduled_start, t.estimated_duration_minutes) : null);
     const b = dayFinderBlock(t.id, clean(t.title) ?? 'Untitled', t.scheduled_start, end, t.is_all_day, tz, localDate);
     if (b) blocks.set(`task:${t.id}`, b);
-  }
-  for (const c of content) {
-    if (c.created_from !== 'calendar' || c.status === 'archived') continue;
-    const end = c.scheduled_at ? plusMinutes(c.scheduled_at, c.duration_minutes) : null;
-    const b = dayFinderBlock(c.id, contentTitle(c), c.scheduled_at, end, false, tz, localDate);
-    if (b) blocks.set(`content:${c.id}`, b);
   }
 
   return {
