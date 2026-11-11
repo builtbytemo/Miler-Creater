@@ -23,6 +23,15 @@ export const DEFAULT_ALLOWED_CLAUDE_REDIRECT_URIS: readonly string[] = [
   'https://claude.com/api/mcp/auth_callback',
 ] as const;
 
+export const DEFAULT_ALLOWED_CHATGPT_REDIRECT_URIS: readonly string[] = [
+  'https://chatgpt.com/connector_platform_oauth_redirect',
+  'https://platform.openai.com/apps-manage/oauth',
+] as const;
+
+/** ChatGPT per-connection callback: https://chatgpt.com/connector/oauth/{callback_id} */
+const CHATGPT_PER_CONNECTION_REDIRECT_RE =
+  /^https:\/\/chatgpt\.com\/connector\/oauth\/[A-Za-z0-9_-]{1,128}$/;
+
 export const DEFAULT_READ_ONLY_SCOPES: readonly ToolScope[] = [
   'task:read',
   'content:read',
@@ -231,7 +240,10 @@ export function buildMcpWwwAuthenticateHeader(options?: {
  * Defaults to Claude's official remote MCP callback endpoints.
  */
 export function getAllowedRedirectUris(): Set<string> {
-  const allowed = new Set<string>(DEFAULT_ALLOWED_CLAUDE_REDIRECT_URIS);
+  const allowed = new Set<string>([
+    ...DEFAULT_ALLOWED_CLAUDE_REDIRECT_URIS,
+    ...DEFAULT_ALLOWED_CHATGPT_REDIRECT_URIS,
+  ]);
 
   const extraRaw = process.env.MCP_OAUTH_ALLOWED_REDIRECT_URIS;
   if (extraRaw) {
@@ -324,7 +336,11 @@ export function validateRedirectUri(rawUri: unknown): {
   const normalized = `${parsed.origin}${parsed.pathname}`;
   const allowlist = getAllowedRedirectUris();
 
-  if (!isCodexLoopback && !allowlist.has(normalized)) {
+  if (
+    !isCodexLoopback &&
+    !allowlist.has(normalized) &&
+    !CHATGPT_PER_CONNECTION_REDIRECT_RE.test(normalized)
+  ) {
     return {
       valid: false,
       reason: `redirect_uri "${normalized}" is not an allowlisted MCP callback URI`,
