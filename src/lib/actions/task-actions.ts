@@ -131,6 +131,7 @@ export async function createTaskAction(
       workspaceId,
       {
         created_from: (formData.get('created_from') || undefined) as 'tasks' | 'calendar' | undefined,
+        entry_type: (formData.get('entry_type') || undefined) as 'task' | 'calendar_block' | undefined,
         title,
         description,
         priority,
@@ -180,6 +181,10 @@ export async function updateTaskAction(
     if (formData.has('title')) {
       const val = formData.get('title');
       if (typeof val === 'string') input.title = val;
+    }
+    if (formData.has('entry_type')) {
+      const val = formData.get('entry_type');
+      if (typeof val === 'string' && val) input.entry_type = val as 'task' | 'calendar_block';
     }
     if (formData.has('description')) {
       const val = formData.get('description');

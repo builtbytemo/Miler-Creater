@@ -10,7 +10,7 @@ export function task(over: Record<string, any> = {}) {
     title: 'Task', description: null, priority: 'medium', status: 'todo',
     scheduled_start: null, scheduled_end: null, due_date: null, estimated_duration_minutes: null,
     is_all_day: false, tags: [], recurrence_rule_id: null, occurrence_index: null,
-    created_from: 'tasks', assigned_to: null, ...over,
+    created_from: 'tasks', entry_type: 'task', assigned_to: null, ...over,
   };
 }
 

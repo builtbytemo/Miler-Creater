@@ -180,7 +180,9 @@ function plusMinutes(iso: string, minutes: number | null): string | null {
 }
 
 function isCalendarTimelineBlock(t: RawTask): boolean {
-  return t.created_from === 'calendar' && Boolean(t.scheduled_start);
+  if (!t.scheduled_start) return false;
+  if (t.entry_type === 'calendar_block') return true;
+  return t.created_from === 'calendar';
 }
 
 export function buildBriefingSnapshot(src: BriefingSources, localDate: string): BriefingSnapshot {
@@ -195,11 +197,13 @@ export function buildBriefingSnapshot(src: BriefingSources, localDate: string): 
   // All active actionable tasks visible to the user whose scheduled date OR deadline date matches
   // the briefing date are included in Tasks. A task created through the calendar does not disappear
   // from Tasks simply because it was scheduled on the calendar or lacks a deadline.
+  // Dedicated calendar blocks (entry_type === 'calendar_block') are excluded from Tasks.
   const seenTask = new Set<string>();
   const seenOccurrence = new Set<string>();
   const taskEntries: BriefingTask[] = [];
   for (const t of [...tasks].sort((a, b) => a.id.localeCompare(b.id))) {
     if (!ACTIVE_TASK_STATUSES.has(t.status)) continue;
+    if (t.entry_type === 'calendar_block') continue;
     if (seenTask.has(t.id)) continue;
     const entry = buildTask(t, src, localDate);
     if (!entry) continue;

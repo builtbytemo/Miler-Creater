@@ -266,6 +266,38 @@ describe('Day Finder (calendar blocks)', () => {
     expect(renderTelegram(s).text).not.toContain('Day Finder');
   });
 
+  it('excludes pure calendar blocks (entry_type === calendar_block) from Tasks and Telegram, but includes them in Day Finder', async () => {
+    const s = await snap({
+      tasks: [
+        task({ title: 'Gym Workout', entry_type: 'calendar_block', scheduled_start: cairo('18:00'), scheduled_end: cairo('19:00') }),
+        task({ title: 'Actionable Task', entry_type: 'task', scheduled_start: cairo('09:00'), due_date: cairo('17:00') }),
+      ],
+    });
+    // Tasks section contains only the actionable task; pure calendar block is excluded
+    expect(titles(s.tasks)).toEqual(['Actionable Task']);
+    // Day Finder contains the pure calendar block; tasks created from 'tasks' stay out of Day Finder
+    expect(s.dayFinder.map((b) => b.name)).toEqual(['Gym Workout']);
+    // Telegram includes the task and excludes the calendar block
+    expect(renderTelegram(s).text).toContain('Actionable Task');
+    expect(renderTelegram(s).text).not.toContain('Gym Workout');
+    expect(renderTelegram(s).text).not.toContain('Day Finder');
+    // Email shows both in their respective sections
+    const email = renderEmail(s).text;
+    expect(email).toContain('Actionable Task | Scheduled 9:00 AM · Due 5:00 PM');
+    expect(email).toContain('Gym Workout | 6:00 PM–7:00 PM');
+  });
+
+  it('existing legacy records without entry_type retain their meaning as actionable tasks', async () => {
+    const s = await snap({
+      tasks: [
+        task({ title: 'Legacy calendar task', created_from: 'calendar', entry_type: null, scheduled_start: cairo('10:00') }),
+        task({ title: 'Legacy regular task', created_from: 'tasks', entry_type: null, due_date: cairo('15:00') }),
+      ],
+    });
+    expect(titles(s.tasks)).toEqual(['Legacy calendar task', 'Legacy regular task']);
+    expect(s.dayFinder.map((b) => b.name)).toEqual(['Legacy calendar task']);
+  });
+
   it('handles cross-midnight blocks on both days and excludes blocks ending exactly at midnight', async () => {
     const night = task({ title: 'Night shift', created_from: 'calendar', scheduled_start: cairo('22:00', '2026-11-10'), scheduled_end: cairo('02:00') });
     const late = task({ title: 'Late', created_from: 'calendar', scheduled_start: cairo('22:00'), scheduled_end: cairo('02:00', '2026-11-12') });

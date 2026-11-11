@@ -3,6 +3,7 @@ import { isValidTimeZone } from '@/lib/temporal/timezone';
 
 export const taskPriorityEnum = z.enum(['low', 'medium', 'high', 'urgent']);
 export const taskStatusEnum = z.enum(['todo', 'in_progress', 'blocked', 'done', 'cancelled']);
+export const taskEntryTypeEnum = z.enum(['task', 'calendar_block']);
 export const recurrenceFrequencyEnum = z.enum(['daily', 'weekly', 'monthly', 'yearly', 'custom']);
 
 export const recurrenceInputSchema = z
@@ -65,6 +66,7 @@ export const recurrenceInputSchema = z
 export const createTaskSchema = z
   .object({
     created_from: z.enum(['tasks', 'calendar']).optional(),
+    entry_type: taskEntryTypeEnum.default('task'),
     title: z.string().trim().min(1, 'Task title is required').max(255, 'Title is too long'),
     description: z.string().trim().max(5000).optional().nullable(),
     priority: taskPriorityEnum.default('medium'),
@@ -107,6 +109,7 @@ export const createTaskSchema = z
 
 export const updateTaskSchema = z
   .object({
+    entry_type: taskEntryTypeEnum.optional(),
     title: z.string().trim().min(1, 'Task title cannot be empty').max(255).optional(),
     description: z.string().trim().max(5000).optional().nullable(),
     priority: taskPriorityEnum.optional(),
@@ -135,6 +138,7 @@ export const updateTaskSchema = z
   );
 
 export const taskFilterSchema = z.object({
+  entry_type: z.union([taskEntryTypeEnum, z.array(taskEntryTypeEnum)]).optional(),
   status: z.union([taskStatusEnum, z.array(taskStatusEnum)]).optional(),
   priority: z.union([taskPriorityEnum, z.array(taskPriorityEnum)]).optional(),
   project_id: z.string().uuid().optional(),

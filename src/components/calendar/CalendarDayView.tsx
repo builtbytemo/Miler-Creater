@@ -217,7 +217,7 @@ export function CalendarDayView({
     const rawEvents: Omit<TimelineEvent, 'lane' | 'lanes' | 'overlapCount'>[] = [];
 
     for (const task of taskItems) {
-      if (task.created_from === 'calendar') {
+      if (task.created_from === 'calendar' || task.entry_type === 'calendar_block') {
         if (!task.scheduled_start) continue;
         if (getCalendarDateKey(task.scheduled_start, userTimeZone) !== dayRange.dateKey) continue;
 
@@ -242,7 +242,10 @@ export function CalendarDayView({
           id: `task-${task.id}`,
           type: 'task',
           title: task.title,
-          subtitle: `${PRIORITY_BADGE_MAP[task.priority]?.label || task.priority} priority`,
+          subtitle:
+            task.entry_type === 'calendar_block'
+              ? 'Calendar Block'
+              : `${PRIORITY_BADGE_MAP[task.priority]?.label || task.priority} priority`,
           statusLabel: statusInfo.label,
           statusBadgeClass: statusInfo.badgeClass,
           start,

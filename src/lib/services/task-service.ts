@@ -24,6 +24,7 @@ export {
 
 export interface TaskWithMeta {
   created_from?: 'tasks' | 'calendar';
+  entry_type?: 'task' | 'calendar_block';
   id: string;
   workspace_id: string;
   parent_task_id: string | null;
@@ -124,6 +125,15 @@ export async function getTasks(
       query = query.in('priority', filters.priority);
     } else {
       query = query.eq('priority', filters.priority);
+    }
+  }
+
+  // Filter: Entry Type
+  if (filters.entry_type) {
+    if (Array.isArray(filters.entry_type)) {
+      query = query.in('entry_type', filters.entry_type);
+    } else {
+      query = query.eq('entry_type', filters.entry_type);
     }
   }
 
@@ -510,6 +520,7 @@ export async function projectVirtualTaskOccurrences(
         created_at: templateTask.created_at,
         updated_at: templateTask.updated_at,
         created_from: templateTask.created_from || 'tasks',
+        entry_type: templateTask.entry_type || 'task',
         subtask_count: 0,
         completed_subtask_count: 0,
         is_blocked: false,
@@ -787,6 +798,7 @@ export async function createTask(
     .insert({
       workspace_id: workspaceId,
       ...(validated.created_from ? { created_from: validated.created_from } : {}),
+      entry_type: validated.entry_type ?? 'task',
       title: validated.title,
       description: validated.description || null,
       priority: validated.priority,
@@ -1194,6 +1206,7 @@ export async function completeTask(
         .insert({
           workspace_id: workspaceId,
           ...(current.created_from ? { created_from: current.created_from } : {}),
+          entry_type: current.entry_type || 'task',
           title: current.title,
           description: current.description,
           priority: current.priority,
@@ -1248,6 +1261,7 @@ export async function completeTask(
             workspace_id: workspaceId,
             parent_task_id: nextCreated.id,
             created_from: current.created_from || 'tasks',
+            entry_type: 'task' as const,
             title: st.title,
             description: st.description,
             priority: st.priority,
@@ -1403,6 +1417,7 @@ export async function skipTaskOccurrence(
           .insert({
             workspace_id: workspaceId,
             ...(current.created_from ? { created_from: current.created_from } : {}),
+            entry_type: current.entry_type || 'task',
             title: current.title,
             description: current.description,
             priority: current.priority,
@@ -1439,6 +1454,7 @@ export async function skipTaskOccurrence(
               workspace_id: workspaceId,
               parent_task_id: nextCreated.id,
               created_from: current.created_from || 'tasks',
+              entry_type: 'task' as const,
               title: st.title,
               description: st.description,
               priority: st.priority,

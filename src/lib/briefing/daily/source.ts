@@ -31,6 +31,7 @@ export interface RawTask {
   recurrence_rule_id: string | null;
   occurrence_index: number | null;
   created_from: 'tasks' | 'calendar' | null;
+  entry_type?: 'task' | 'calendar_block' | null;
   assigned_to: string | null;
 }
 
@@ -70,6 +71,8 @@ export interface BriefingSources {
 }
 
 const TASK_COLUMNS =
+  'id, workspace_id, parent_task_id, project_id, milestone_id, title, description, priority, status, scheduled_start, scheduled_end, due_date, estimated_duration_minutes, is_all_day, tags, recurrence_rule_id, occurrence_index, created_from, entry_type, assigned_to';
+const LEGACY_TASK_COLUMNS =
   'id, workspace_id, parent_task_id, project_id, milestone_id, title, description, priority, status, scheduled_start, scheduled_end, due_date, estimated_duration_minutes, is_all_day, tags, recurrence_rule_id, occurrence_index, created_from, assigned_to';
 const CONTENT_COLUMNS =
   'id, workspace_id, social_account_id, platform, action_type, status, title, body, scheduled_at, duration_minutes, media_urls, external_links, target_reference, tags, notes, project_id, milestone_id, recurrence_rule_id, created_from';
@@ -165,17 +168,38 @@ export async function loadBriefingSources(
   if (authorizedIds.length === 0) return empty;
 
   const { from, to } = utcWindowForDate(localDate);
-  const tasks = await fetchAllPages<RawTask>(
-    (start, end) =>
-      admin
-        .from('tasks')
-        .select(TASK_COLUMNS)
-        .in('workspace_id', authorizedIds)
-        .neq('status', 'cancelled')
-        .or(taskWindowFilter(from, to))
-        .range(start, end),
-    'tasks'
-  );
+  let tasks: RawTask[];
+  try {
+    tasks = await fetchAllPages<RawTask>(
+      (start, end) =>
+        admin
+          .from('tasks')
+          .select(TASK_COLUMNS)
+          .in('workspace_id', authorizedIds)
+          .neq('status', 'cancelled')
+          .or(taskWindowFilter(from, to))
+          .range(start, end),
+      'tasks'
+    );
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('entry_type') || msg.includes('column') || msg.includes('PGRST204')) {
+      const legacyTasks = await fetchAllPages<RawTask>(
+        (start, end) =>
+          admin
+            .from('tasks')
+            .select(LEGACY_TASK_COLUMNS)
+            .in('workspace_id', authorizedIds)
+            .neq('status', 'cancelled')
+            .or(taskWindowFilter(from, to))
+            .range(start, end),
+        'tasks'
+      );
+      tasks = legacyTasks.map((t) => ({ ...t, entry_type: t.entry_type ?? 'task' }));
+    } else {
+      throw err;
+    }
+  }
   const content = await fetchAllPages<RawContent>(
     (start, end) =>
       admin
