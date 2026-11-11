@@ -6,6 +6,12 @@ export interface BriefingMessage {
   subject?: string;
   text: string;
   html?: string;
+  /**
+   * Telegram only: ordered messages (each within Telegram's limit) sent in sequence with
+   * `parseMode`. When absent the single `text` is sent as plain text.
+   */
+  parts?: string[];
+  parseMode?: 'HTML';
 }
 
 export interface BriefingContentRequest {

@@ -21,6 +21,10 @@ export function createFakeAdmin(db: FakeDb, opts: { users?: Record<string, { ema
       select: () => b,
       eq: (c: string, v: any) => (filters.push((r) => r[c] === v), b),
       gt: (c: string, v: any) => (filters.push((r) => r[c] > v), b),
+      neq: (c: string, v: any) => (filters.push((r) => r[c] !== v), b),
+      in: (c: string, v: any[]) => (filters.push((r) => v.includes(r[c])), b),
+      // PostgREST OR windows are a retrieval optimisation only; semantic filtering is done in code under test.
+      or: () => b,
       order: () => b,
       limit: (n: number) => ((lim = n), b),
       maybeSingle: async () => ({ data: rows.filter((r) => filters.every((f) => f(r)))[0] ?? null, error: null }),

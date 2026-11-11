@@ -39,12 +39,13 @@ describe('Daily Briefing dispatcher', () => {
     expect(finalized[0]).toMatchObject({ p_outcome: 'skipped', p_error_code: 'content_not_configured' });
   });
 
-  it('default generator is unconfigured: production never sends generic briefings', async () => {
+  it('with no generator override the approved Daily Briefing generator is used (never a generic message)', async () => {
     const { admin } = setup();
     const a = adapters();
     const s = await dispatchDueBriefings(admin, a);
-    expect(s.skipped).toBe(1);
-    expect(a.telegram.send).not.toHaveBeenCalled();
+    expect(s.sent).toBe(1);
+    const msg = (a.telegram.send.mock.calls[0] as any)[1];
+    expect(msg.text).toContain('Nothing on your list for today');
   });
 
   it('sends via telegram when ready and records provider id', async () => {

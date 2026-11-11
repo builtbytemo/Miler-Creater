@@ -1,8 +1,8 @@
 import type { BriefingContentGenerator } from './types';
 
 /**
- * Placeholder generator. Real briefing content is designed separately; until a generator is
- * registered, scheduled deliveries are marked "skipped" and nothing is sent.
+ * Placeholder generator, kept for tests and as an explicit "send nothing" override
+ * (registerBriefingContentGenerator(unconfiguredContentGenerator)).
  */
 export const unconfiguredContentGenerator: BriefingContentGenerator = {
   async generate() {
@@ -20,6 +20,12 @@ export function getBriefingContentGenerator(): BriefingContentGenerator {
   return registered ?? unconfiguredContentGenerator;
 }
 
+/** The approved generator (daily/generator.ts) is built in, so content is always configured. */
 export function isBriefingContentConfigured(): boolean {
-  return registered !== null;
+  return true;
+}
+
+/** Explicit override registered via registerBriefingContentGenerator, if any. */
+export function getRegisteredBriefingContentGenerator(): BriefingContentGenerator | null {
+  return registered;
 }

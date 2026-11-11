@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { getBriefingContentGenerator } from './content';
+import { getRegisteredBriefingContentGenerator } from './content';
+import { createDailyBriefingGenerator } from './daily/generator';
 import { createEmailAdapter, type EmailDestination } from './channels/email';
 import { createTelegramAdapter, type TelegramDestination } from './channels/telegram';
 import type { BriefingContentGenerator, BriefingChannel, ChannelAdapter, DeliveryResult } from './types';
@@ -112,7 +113,7 @@ export async function dispatchDueBriefings(
   limit = 25
 ): Promise<DispatchSummary> {
   const resolved: Required<DispatchDeps> = {
-    generator: deps.generator ?? getBriefingContentGenerator(),
+    generator: deps.generator ?? getRegisteredBriefingContentGenerator() ?? createDailyBriefingGenerator(admin),
     telegram: deps.telegram ?? createTelegramAdapter(),
     email: deps.email ?? createEmailAdapter(),
   };
