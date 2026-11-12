@@ -24,7 +24,7 @@ export async function enqueueDueBriefings(admin: SupabaseClient, now: Date = new
   for (let page = 0; page < MAX_PAGES; page++) {
     let q = admin
       .from('daily_briefing_preferences')
-      .select('user_id, email_enabled, telegram_enabled, timezone, delivery_local_time')
+      .select('user_id, email_enabled, telegram_enabled, timezone, delivery_local_time, email_consent_at')
       .eq('enabled', true)
       .order('user_id')
       .limit(PAGE_SIZE);
@@ -51,7 +51,7 @@ export async function enqueueDueBriefings(admin: SupabaseClient, now: Date = new
         continue;
       }
       const channels: BriefingChannel[] = [];
-      if (pref.email_enabled) channels.push('email');
+      if (pref.email_enabled && pref.email_consent_at) channels.push('email');
       if (pref.telegram_enabled) channels.push('telegram');
       for (const channel of channels) {
         rows.push({

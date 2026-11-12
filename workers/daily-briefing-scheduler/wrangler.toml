@@ -1,0 +1,18 @@
+name = "miler-daily-briefing-scheduler"
+main = "src/index.ts"
+compatibility_date = "2026-11-12"
+compatibility_flags = ["nodejs_compat"]
+
+[triggers]
+# Run every 5 minutes on Cloudflare edge
+crons = ["*/5 * * * *"]
+
+[vars]
+TARGET_URL = "https://miler-creater-git-feat-daily-briefin-f2acc6-temo-ctrls-projects.vercel.app/api/cron/daily-briefing"
+REQUEST_TIMEOUT_MS = "20000"
+
+# Note on Secrets:
+# Secrets must NOT be committed to git in plaintext.
+# Set via Cloudflare Dashboard or Wrangler CLI before activation:
+#   npx wrangler secret put CRON_SECRET
+#   npx wrangler secret put VERCEL_PROTECTION_BYPASS_SECRET

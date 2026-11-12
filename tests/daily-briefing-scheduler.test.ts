@@ -5,7 +5,8 @@ import { createFakeAdmin } from './helpers-briefing-fake-db';
 
 const prefs = (over: Record<string, any> = {}) => ({
   user_id: 'u1', enabled: true, email_enabled: true, telegram_enabled: true,
-  timezone: 'Africa/Cairo', delivery_local_time: '00:00:00', ...over,
+  timezone: 'Africa/Cairo', delivery_local_time: '00:00:00',
+  email_consent_at: '2026-01-01T00:00:00Z', ...over,
 });
 const NOW = new Date('2026-01-14T22:05:00Z'); // 00:05 Cairo on 2026-01-15
 
@@ -26,6 +27,12 @@ describe('Daily Briefing scheduler', () => {
 
   it('skips disabled channels', async () => {
     const db: any = { tables: { daily_briefing_preferences: [prefs({ email_enabled: false })] }, rpcs: {} };
+    await enqueueDueBriefings(createFakeAdmin(db), NOW);
+    expect(db.tables.briefing_deliveries.map((r: any) => r.channel)).toEqual(['telegram']);
+  });
+
+  it('never enqueues email when email_consent_at is missing', async () => {
+    const db: any = { tables: { daily_briefing_preferences: [prefs({ email_enabled: true, email_consent_at: null })] }, rpcs: {} };
     await enqueueDueBriefings(createFakeAdmin(db), NOW);
     expect(db.tables.briefing_deliveries.map((r: any) => r.channel)).toEqual(['telegram']);
   });
