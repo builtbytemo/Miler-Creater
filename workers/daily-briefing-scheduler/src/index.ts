@@ -1,26 +1,30 @@
 /**
  * Miler Daily Briefing - Cloudflare Worker Cron Trigger Handler
  *
- * Runs on a 5-minute cron schedule (`* /5 * * * *`) on Cloudflare's global edge network.
+ * Runs on a 5-minute cron schedule on Cloudflare's global edge network (initially crons = [] until approved).
  * Dispatches an authenticated request to the Vercel Preview cron endpoint:
  *   /api/cron/daily-briefing
  *
  * Operational Safeguards:
- * 1. Authenticates via `Authorization: Bearer <CRON_SECRET>`.
- * 2. Bypasses Vercel Deployment Protection via `x-vercel-protection-bypass` header.
- * 3. Sets `redirect: 'manual'` to immediately detect Vercel SSO protection challenges.
- * 4. Never automatically retries on timeout or ambiguous network outcomes.
- * 5. Never logs secrets (`CRON_SECRET`, `VERCEL_PROTECTION_BYPASS_SECRET`).
- * 6. Fits comfortably inside Cloudflare Worker free-tier limits:
+ * 1. Strict Host & Path Allowlist: Strictly targets approved staging Preview URL and /api/cron/daily-briefing.
+ * 2. Authenticates via constant-time `Authorization: Bearer <CRON_SECRET>`.
+ * 3. Bypasses Vercel Deployment Protection via `x-vercel-protection-bypass` header.
+ * 4. Sets `redirect: 'manual'` to immediately detect Vercel SSO protection challenges without following.
+ * 5. Never automatically retries on timeout or ambiguous network outcomes.
+ * 6. Never logs secrets (`CRON_SECRET`, `VERCEL_PROTECTION_BYPASS_SECRET`).
+ * 7. Fits comfortably inside Cloudflare Worker free-tier limits:
  *    - 288 runs/day (<0.3% of 100,000 requests/day).
  *    - <1ms CPU time/execution (limit: 10ms CPU time).
  */
+
+import { timingSafeEqual, createHash } from 'node:crypto';
 
 export interface Env {
   TARGET_URL: string;
   CRON_SECRET: string;
   VERCEL_PROTECTION_BYPASS_SECRET?: string;
   REQUEST_TIMEOUT_MS?: string;
+  ALLOW_MANUAL_TRIGGER?: string;
 }
 
 export interface SchedulerExecutionResult {
@@ -32,27 +36,77 @@ export interface SchedulerExecutionResult {
   error?: string;
 }
 
+// Strict staging allowlist parameters
+export const ALLOWED_STAGING_HOST = 'miler-creater-git-feat-daily-briefin-f2acc6-temo-ctrls-projects.vercel.app';
+export const ALLOWED_CRON_PATH = '/api/cron/daily-briefing';
+export const PRODUCTION_SUPABASE_REF = 'zcpdpizrbaaekteurwup';
+
+export function timingSafeTokenCompare(provided: string | null, expected: string): boolean {
+  if (!provided || !expected) return false;
+  const a = createHash('sha256').update(provided).digest();
+  const b = createHash('sha256').update(expected).digest();
+  return timingSafeEqual(a, b);
+}
+
+export function validateTargetUrl(rawUrl: string): { valid: boolean; error?: string; url?: URL } {
+  if (!rawUrl || typeof rawUrl !== 'string') {
+    return { valid: false, error: 'TARGET_URL is required' };
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl.trim());
+  } catch {
+    return { valid: false, error: 'TARGET_URL is not a valid URL' };
+  }
+
+  if (parsed.protocol !== 'https:') {
+    return { valid: false, error: `Disallowed protocol "${parsed.protocol}". Only https: is permitted` };
+  }
+
+  if (parsed.hostname !== ALLOWED_STAGING_HOST) {
+    return { valid: false, error: `Disallowed host "${parsed.hostname}". Strictly restricted to ${ALLOWED_STAGING_HOST}` };
+  }
+
+  if (parsed.pathname !== ALLOWED_CRON_PATH) {
+    return { valid: false, error: `Disallowed path "${parsed.pathname}". Strictly restricted to ${ALLOWED_CRON_PATH}` };
+  }
+
+  if (parsed.search || parsed.hash) {
+    return { valid: false, error: 'TARGET_URL must not contain query parameters or hash fragments' };
+  }
+
+  if (rawUrl.includes(PRODUCTION_SUPABASE_REF)) {
+    return { valid: false, error: 'Refusing to execute against production project reference' };
+  }
+
+  return { valid: true, url: parsed };
+}
+
 export async function triggerDailyBriefingCron(
   env: Env,
   source: 'cron' | 'manual' = 'cron'
 ): Promise<SchedulerExecutionResult> {
   const startTime = Date.now();
 
-  const targetUrl = env.TARGET_URL?.trim();
   const cronSecret = env.CRON_SECRET?.trim();
   const bypassSecret = env.VERCEL_PROTECTION_BYPASS_SECRET?.trim();
   const timeoutMs = parseInt(env.REQUEST_TIMEOUT_MS || '20000', 10) || 20000;
 
-  if (!targetUrl) {
-    console.error(`[Daily Briefing Scheduler] [${source}] Configuration Error: TARGET_URL is not defined.`);
+  // Strict host, protocol, path, and production isolation validation
+  const validation = validateTargetUrl(env.TARGET_URL);
+  if (!validation.valid || !validation.url) {
+    console.error(`[Daily Briefing Scheduler] [${source}] Configuration/Target Guard Violation: ${validation.error}`);
     return {
       ok: false,
       statusCode: 0,
-      statusText: 'CONFIG_ERROR',
+      statusText: 'TARGET_GUARD_VIOLATION',
       durationMs: 0,
-      error: 'TARGET_URL is required',
+      error: validation.error,
     };
   }
+
+  const targetUrl = validation.url.toString();
 
   if (!cronSecret) {
     console.error(`[Daily Briefing Scheduler] [${source}] Configuration Error: CRON_SECRET is not configured.`);
@@ -62,20 +116,6 @@ export async function triggerDailyBriefingCron(
       statusText: 'CONFIG_ERROR',
       durationMs: 0,
       error: 'CRON_SECRET is required',
-    };
-  }
-
-  // Safety check: protect against accidental production targeting
-  if (targetUrl.includes('zcpdpizrbaaekteurwup')) {
-    console.error(
-      `[Daily Briefing Scheduler] [${source}] Target Guard Violation: TARGET_URL references production Supabase project ref!`
-    );
-    return {
-      ok: false,
-      statusCode: 0,
-      statusText: 'TARGET_GUARD_VIOLATION',
-      durationMs: 0,
-      error: 'Refusing to execute against production project reference',
     };
   }
 
@@ -138,7 +178,7 @@ export async function triggerDailyBriefingCron(
 
     if (statusCode === 403) {
       console.error(
-        `[Daily Briefing Scheduler] [${source}] HTTP 403 Forbidden from target. Check Vercel protection headers.`
+        `[Daily Briefing Scheduler] [${source}] HTTP 403 Forbidden from target. Check target configuration / project ref.`
       );
       return {
         ok: false,
@@ -232,9 +272,8 @@ const worker = {
     const promise = triggerDailyBriefingCron(env, 'cron');
     if (ctx?.waitUntil) {
       ctx.waitUntil(promise);
-    } else {
-      await promise;
     }
+    await promise;
   },
 
   /**
@@ -252,6 +291,7 @@ const worker = {
           targetConfigured: Boolean(env.TARGET_URL),
           hasCronSecret: Boolean(env.CRON_SECRET),
           hasBypassSecret: Boolean(env.VERCEL_PROTECTION_BYPASS_SECRET),
+          manualTriggerAllowed: env.ALLOW_MANUAL_TRIGGER !== 'false',
         }),
         {
           status: 200,
@@ -262,17 +302,34 @@ const worker = {
 
     // Manual test trigger endpoint
     if (url.pathname === '/trigger') {
+      // 1. Safeguard: Check whether manual trigger is disabled
+      if (env.ALLOW_MANUAL_TRIGGER === 'false') {
+        return new Response(JSON.stringify({ error: 'Manual trigger is disabled' }), {
+          status: 403,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      // 2. Safeguard: Strictly enforce POST method
+      if (request.method !== 'POST') {
+        return new Response(JSON.stringify({ error: 'Method Not Allowed. Use POST.' }), {
+          status: 405,
+          headers: { 'Content-Type': 'application/json', 'Allow': 'POST' },
+        });
+      }
+
+      // 3. Safeguard: Strong constant-time Bearer authentication check
       const authHeader = request.headers.get('Authorization');
       const expectedSecret = env.CRON_SECRET?.trim();
 
-      // Require same secret to manually trigger via HTTP
-      if (!expectedSecret || authHeader !== `Bearer ${expectedSecret}`) {
+      if (!expectedSecret || !timingSafeTokenCompare(authHeader, `Bearer ${expectedSecret}`)) {
         return new Response(JSON.stringify({ error: 'Unauthorized manual trigger' }), {
           status: 401,
           headers: { 'Content-Type': 'application/json' },
         });
       }
 
+      // 4. Safeguard: Execute trigger strictly against allowlisted TARGET_URL (arbitrary URLs rejected)
       const result = await triggerDailyBriefingCron(env, 'manual');
       return new Response(JSON.stringify(result), {
         status: result.ok ? 200 : 502,

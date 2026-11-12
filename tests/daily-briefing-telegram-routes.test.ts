@@ -36,7 +36,10 @@ function linkDb() {
   return { db, tokens };
 }
 
-beforeEach(() => { process.env.TELEGRAM_WEBHOOK_SECRET = 'whsec'; });
+beforeEach(() => {
+  process.env.TELEGRAM_WEBHOOK_SECRET = 'whsec';
+  process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://prmgrrzqtnygmitplkhn.supabase.co';
+});
 afterEach(() => { process.env = { ...env }; });
 
 describe('Telegram webhook security', () => {

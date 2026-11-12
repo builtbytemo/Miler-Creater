@@ -4,12 +4,15 @@ compatibility_date = "2026-11-12"
 compatibility_flags = ["nodejs_compat"]
 
 [triggers]
-# Run every 5 minutes on Cloudflare edge
-crons = ["*/5 * * * *"]
+# INITIAL DEPLOYMENT SAFEGUARD:
+# Deployed with NO active cron triggers to prevent premature execution.
+# The 5-minute schedule ("*/5 * * * *") will be activated only after explicit user approval.
+crons = []
 
 [vars]
 TARGET_URL = "https://miler-creater-git-feat-daily-briefin-f2acc6-temo-ctrls-projects.vercel.app/api/cron/daily-briefing"
 REQUEST_TIMEOUT_MS = "20000"
+ALLOW_MANUAL_TRIGGER = "true"
 
 # Note on Secrets:
 # Secrets must NOT be committed to git in plaintext.
