@@ -3,6 +3,8 @@
 -- Infrastructure only: no briefing content is generated here.
 -- Existing notification_preferences / notifications tables are NOT modified.
 
+BEGIN;
+
 -- ============================================================================
 -- 1. PER-USER PREFERENCES (default: everything disabled)
 -- ============================================================================
@@ -333,3 +335,5 @@ GRANT EXECUTE ON FUNCTION public.consume_telegram_link_token(TEXT, BIGINT, TEXT)
 GRANT EXECUTE ON FUNCTION public.claim_briefing_deliveries(INT, INT) TO service_role;
 GRANT EXECUTE ON FUNCTION public.finalize_briefing_delivery(UUID, UUID, TEXT, TEXT, TEXT, TEXT, INT) TO service_role;
 GRANT EXECUTE ON FUNCTION public.create_telegram_link_token(TEXT, INT) TO authenticated;
+
+COMMIT;

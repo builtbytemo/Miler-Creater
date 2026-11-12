@@ -79,8 +79,13 @@ export async function updateDailyBriefingPreferencesAction(input: {
   if (input.deliveryLocalTime !== undefined && !isValidLocalTime(input.deliveryLocalTime)) {
     return { error: 'Invalid delivery time' };
   }
-  if (input.emailEnabled && !ctx.emailVerified) {
-    return { error: 'Your account email address is not verified' };
+  if (input.emailEnabled) {
+    if (!getDeliveryServiceStatus().emailConfigured) {
+      return { error: 'Email delivery is not configured on this server' };
+    }
+    if (!ctx.emailVerified) {
+      return { error: 'Your account email address is not verified' };
+    }
   }
 
   const patch: Record<string, unknown> = {};

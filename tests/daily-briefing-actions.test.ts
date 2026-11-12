@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   updateDailyBriefingPreferencesAction,
   getDailyBriefingStateAction,
@@ -34,9 +34,15 @@ vi.mock('@/lib/supabase/server', () => ({
 
 describe('Daily Briefing Actions Suite', () => {
   const userId = 'b9dffc37-9bb8-422b-ba72-7ab1c3dfb8e3';
+  const originalEnv = { ...process.env };
 
   beforeEach(() => {
     vi.clearAllMocks();
+    process.env = {
+      ...originalEnv,
+      RESEND_API_KEY: 're_test_key',
+      EMAIL_FROM: 'briefing@miler.app',
+    };
     mockGetUser.mockResolvedValue({
       data: {
         user: {
@@ -46,6 +52,10 @@ describe('Daily Briefing Actions Suite', () => {
         },
       },
     });
+  });
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
   });
 
   describe('updateDailyBriefingPreferencesAction', () => {
@@ -63,6 +73,42 @@ describe('Daily Briefing Actions Suite', () => {
     it('rejects invalid delivery time', async () => {
       const res = await updateDailyBriefingPreferencesAction({ deliveryLocalTime: '25:99' });
       expect(res).toEqual({ error: 'Invalid delivery time' });
+    });
+
+    it('rejects enabling email when email delivery is not configured on server', async () => {
+      delete process.env.RESEND_API_KEY;
+      const res = await updateDailyBriefingPreferencesAction({ emailEnabled: true });
+      expect(res).toEqual({ error: 'Email delivery is not configured on this server' });
+    });
+
+    it('allows updating Telegram and general preferences when email delivery is unconfigured', async () => {
+      delete process.env.RESEND_API_KEY;
+      delete process.env.EMAIL_FROM;
+
+      const updateMock = vi.fn().mockReturnThis();
+      const eqMock = vi.fn().mockReturnThis();
+      const selectMock = vi.fn().mockResolvedValue({
+        data: [{ user_id: userId }],
+        error: null,
+      });
+
+      mockPreferencesDb = {
+        update: updateMock,
+        eq: eqMock,
+        select: selectMock,
+        insert: vi.fn(),
+      };
+
+      const res = await updateDailyBriefingPreferencesAction({
+        enabled: true,
+        telegramEnabled: true,
+      });
+
+      expect(res).toEqual({ success: true });
+      expect(updateMock).toHaveBeenCalledWith({
+        enabled: true,
+        telegram_enabled: true,
+      });
     });
 
     it('rejects enabling email if user email is unverified', async () => {

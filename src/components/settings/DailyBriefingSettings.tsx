@@ -150,12 +150,14 @@ export function DailyBriefingSettings() {
             id="toggle-briefing-email"
             label="Email"
             description={
-              state.emailAddressVerified
-                ? 'Send to your verified account email. Enabling records your consent.'
-                : 'Your account email address must be verified first.'
+              !service.emailConfigured
+                ? 'Email delivery is not configured on this server.'
+                : state.emailAddressVerified
+                  ? 'Send to your verified account email. Enabling records your consent.'
+                  : 'Your account email address must be verified first.'
             }
-            checked={state.emailEnabled}
-            disabled={pending || !state.emailAddressVerified}
+            checked={state.emailEnabled && service.emailConfigured}
+            disabled={pending || !service.emailConfigured || !state.emailAddressVerified}
             onChange={(v) => update({ emailEnabled: v })}
           />
           <button
