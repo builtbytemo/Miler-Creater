@@ -18,7 +18,11 @@ function authorized(header: string | null, secret: string): boolean {
  * Daily Briefing scheduler tick. Invoke every ~5 minutes from an external scheduler with
  * `Authorization: Bearer <CRON_SECRET>` (same convention as /api/cron/reminders).
  * Does nothing unless DAILY_BRIEFING_DELIVERY_ENABLED === 'true' (production kill switch).
- * Strictly requires Staging Supabase (prmgrrzqtnygmitplkhn) and refuses production (zcpdpizrbaaekteurwup).
+ *
+ * Environment-aware target guard:
+ * - VERCEL_ENV === 'preview': Strictly requires Staging Supabase (prmgrrzqtnygmitplkhn.supabase.co).
+ * - VERCEL_ENV === 'production': Strictly requires Production Supabase (zcpdpizrbaaekteurwup.supabase.co).
+ * - Any other environment or host mismatch: Fails closed with HTTP 403.
  */
 async function handle(request: NextRequest) {
   const cronSecret = process.env.CRON_SECRET?.trim();
@@ -29,19 +33,43 @@ async function handle(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // Production isolation safeguard: verify Supabase configuration points to staging, not production.
+  // Environment-aware Supabase host isolation safeguard
+  const vercelEnv = process.env.VERCEL_ENV?.trim();
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
-  if (supabaseUrl.includes(PRODUCTION_PROJECT_REF)) {
-    console.error('[Daily Briefing Cron] FATAL: Production Supabase instance targeted by cron endpoint!');
+
+  let hostname: string;
+  try {
+    hostname = new URL(supabaseUrl).hostname.toLowerCase();
+  } catch {
+    console.error('[Daily Briefing Cron] FATAL: Supabase URL is invalid or unparseable');
     return NextResponse.json(
-      { error: 'Refusing to execute cron against production Supabase instance' },
+      { error: 'Invalid Supabase URL configuration' },
       { status: 403 }
     );
   }
-  if (!supabaseUrl.includes(STAGING_PROJECT_REF)) {
-    console.error('[Daily Briefing Cron] FATAL: Staging Supabase instance (prmgrrzqtnygmitplkhn) is not targeted!');
+
+  const STAGING_HOST = `${STAGING_PROJECT_REF}.supabase.co`;
+  const PRODUCTION_HOST = `${PRODUCTION_PROJECT_REF}.supabase.co`;
+
+  let expectedHost: string;
+  if (vercelEnv === 'preview') {
+    expectedHost = STAGING_HOST;
+  } else if (vercelEnv === 'production') {
+    expectedHost = PRODUCTION_HOST;
+  } else {
+    console.error(`[Daily Briefing Cron] FATAL: Invalid or unsupported VERCEL_ENV: "${vercelEnv}"`);
     return NextResponse.json(
-      { error: 'Invalid Supabase environment: Staging project ref required' },
+      { error: 'Invalid or unsupported runtime environment' },
+      { status: 403 }
+    );
+  }
+
+  if (hostname !== expectedHost) {
+    console.error(
+      `[Daily Briefing Cron] FATAL: Supabase target mismatch for environment "${vercelEnv}": expected "${expectedHost}", got "${hostname}"`
+    );
+    return NextResponse.json(
+      { error: `Supabase target mismatch: ${expectedHost} required for ${vercelEnv} environment` },
       { status: 403 }
     );
   }

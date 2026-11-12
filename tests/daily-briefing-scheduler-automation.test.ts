@@ -19,6 +19,7 @@ describe('Daily Briefing Scheduler & Automation Audit Suite', () => {
     process.env = {
       ...originalEnv,
       NEXT_PUBLIC_SUPABASE_URL: 'https://prmgrrzqtnygmitplkhn.supabase.co',
+      VERCEL_ENV: 'preview',
     };
   });
 
@@ -637,8 +638,9 @@ describe('Daily Briefing Scheduler & Automation Audit Suite', () => {
       expect(resWrongAuth.status).toBe(401);
     });
 
-    it('rejects requests with HTTP 403 when Supabase URL targets production (zcpdpizrbaaekteurwup)', async () => {
+    it('in preview mode, rejects requests with HTTP 403 when Supabase URL targets production (zcpdpizrbaaekteurwup)', async () => {
       process.env.CRON_SECRET = TEST_SECRET;
+      process.env.VERCEL_ENV = 'preview';
       process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://zcpdpizrbaaekteurwup.supabase.co';
 
       const req = new NextRequest('https://preview.miler.app/api/cron/daily-briefing', {
@@ -647,11 +649,13 @@ describe('Daily Briefing Scheduler & Automation Audit Suite', () => {
       const res = await GET(req);
       expect(res.status).toBe(403);
       const body = await res.json();
-      expect(body.error).toContain('production Supabase instance');
+      expect(body.error).toContain('Supabase target mismatch');
+      expect(body.error).toContain('preview environment');
     });
 
-    it('rejects requests with HTTP 403 when Supabase URL does not point to staging (prmgrrzqtnygmitplkhn)', async () => {
+    it('in preview mode, rejects requests with HTTP 403 when Supabase URL does not point to staging (prmgrrzqtnygmitplkhn)', async () => {
       process.env.CRON_SECRET = TEST_SECRET;
+      process.env.VERCEL_ENV = 'preview';
       process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://other-project.supabase.co';
 
       const req = new NextRequest('https://preview.miler.app/api/cron/daily-briefing', {
@@ -660,7 +664,65 @@ describe('Daily Briefing Scheduler & Automation Audit Suite', () => {
       const res = await GET(req);
       expect(res.status).toBe(403);
       const body = await res.json();
-      expect(body.error).toContain('Staging project ref required');
+      expect(body.error).toContain('Supabase target mismatch');
+    });
+
+    it('in production mode, rejects requests with HTTP 403 when Supabase URL points to staging (prmgrrzqtnygmitplkhn)', async () => {
+      process.env.CRON_SECRET = TEST_SECRET;
+      process.env.VERCEL_ENV = 'production';
+      process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://prmgrrzqtnygmitplkhn.supabase.co';
+
+      const req = new NextRequest('https://miler-creater.vercel.app/api/cron/daily-briefing', {
+        headers: { authorization: `Bearer ${TEST_SECRET}` },
+      });
+      const res = await GET(req);
+      expect(res.status).toBe(403);
+      const body = await res.json();
+      expect(body.error).toContain('Supabase target mismatch');
+      expect(body.error).toContain('production environment');
+    });
+
+    it('in production mode, accepts requests when Supabase URL points to production (zcpdpizrbaaekteurwup)', async () => {
+      process.env.CRON_SECRET = TEST_SECRET;
+      process.env.VERCEL_ENV = 'production';
+      process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://zcpdpizrbaaekteurwup.supabase.co';
+      process.env.DAILY_BRIEFING_DELIVERY_ENABLED = 'false';
+
+      const req = new NextRequest('https://miler-creater.vercel.app/api/cron/daily-briefing', {
+        headers: { authorization: `Bearer ${TEST_SECRET}` },
+      });
+      const res = await GET(req);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.enabled).toBe(false);
+    });
+
+    it('rejects with HTTP 403 when VERCEL_ENV is missing or unsupported', async () => {
+      process.env.CRON_SECRET = TEST_SECRET;
+      delete process.env.VERCEL_ENV;
+      process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://prmgrrzqtnygmitplkhn.supabase.co';
+
+      const req = new NextRequest('https://preview.miler.app/api/cron/daily-briefing', {
+        headers: { authorization: `Bearer ${TEST_SECRET}` },
+      });
+      const res = await GET(req);
+      expect(res.status).toBe(403);
+      const body = await res.json();
+      expect(body.error).toContain('Invalid or unsupported runtime environment');
+    });
+
+    it('rejects with HTTP 403 when Supabase URL is malformed', async () => {
+      process.env.CRON_SECRET = TEST_SECRET;
+      process.env.VERCEL_ENV = 'preview';
+      process.env.NEXT_PUBLIC_SUPABASE_URL = 'not-a-valid-url';
+
+      const req = new NextRequest('https://preview.miler.app/api/cron/daily-briefing', {
+        headers: { authorization: `Bearer ${TEST_SECRET}` },
+      });
+      const res = await GET(req);
+      expect(res.status).toBe(403);
+      const body = await res.json();
+      expect(body.error).toContain('Invalid Supabase URL configuration');
     });
 
     it('returns HTTP 200 with enabled: false when killswitch DAILY_BRIEFING_DELIVERY_ENABLED !== "true"', async () => {

@@ -4,6 +4,7 @@ import worker, {
   triggerDailyBriefingCron,
   validateTargetUrl,
   ALLOWED_STAGING_HOST,
+  ALLOWED_PRODUCTION_HOST,
   ALLOWED_CRON_PATH,
   type Env,
 } from '../workers/daily-briefing-scheduler/src/index';
@@ -31,10 +32,31 @@ describe('Cloudflare Worker Daily Briefing Scheduler Suite', () => {
 
   describe('Target URL Strict Allowlist & Production Isolation Validation', () => {
     it('accepts valid staging preview URL with exact host, https protocol, and exact cron path', () => {
-      const res = validateTargetUrl(validTargetUrl);
+      const res = validateTargetUrl(validTargetUrl, 'staging');
       expect(res.valid).toBe(true);
       expect(res.url?.hostname).toBe(ALLOWED_STAGING_HOST);
       expect(res.url?.pathname).toBe(ALLOWED_CRON_PATH);
+    });
+
+    it('accepts valid production URL with exact host when environment is production', () => {
+      const prodUrl = `https://${ALLOWED_PRODUCTION_HOST}${ALLOWED_CRON_PATH}`;
+      const res = validateTargetUrl(prodUrl, 'production');
+      expect(res.valid).toBe(true);
+      expect(res.url?.hostname).toBe(ALLOWED_PRODUCTION_HOST);
+      expect(res.url?.pathname).toBe(ALLOWED_CRON_PATH);
+    });
+
+    it('rejects production host when environment is staging', () => {
+      const prodUrl = `https://${ALLOWED_PRODUCTION_HOST}${ALLOWED_CRON_PATH}`;
+      const res = validateTargetUrl(prodUrl, 'staging');
+      expect(res.valid).toBe(false);
+      expect(res.error).toContain(`Strictly restricted to ${ALLOWED_STAGING_HOST}`);
+    });
+
+    it('rejects staging preview host when environment is production', () => {
+      const res = validateTargetUrl(validTargetUrl, 'production');
+      expect(res.valid).toBe(false);
+      expect(res.error).toContain(`Strictly restricted to ${ALLOWED_PRODUCTION_HOST}`);
     });
 
     it('rejects missing or empty TARGET_URL', () => {
@@ -251,12 +273,19 @@ describe('Cloudflare Worker Daily Briefing Scheduler Suite', () => {
       const body = await res.json();
       expect(body).toEqual({
         service: 'miler-daily-briefing-scheduler',
+        environment: 'staging',
         status: 'healthy',
         targetConfigured: true,
         hasCronSecret: true,
         hasBypassSecret: true,
         manualTriggerAllowed: true,
       });
+
+      // When ENVIRONMENT is production, reports production service and environment
+      const prodRes = await worker.fetch(req, { ...validEnv, ENVIRONMENT: 'production' });
+      const prodBody = await prodRes.json();
+      expect(prodBody.service).toBe('miler-daily-briefing-scheduler-production');
+      expect(prodBody.environment).toBe('production');
 
       // When ALLOW_MANUAL_TRIGGER is missing or not 'true', health reports manualTriggerAllowed: false
       const disabledRes = await worker.fetch(req, { ...validEnv, ALLOW_MANUAL_TRIGGER: undefined });

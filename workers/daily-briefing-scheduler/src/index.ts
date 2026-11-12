@@ -20,6 +20,7 @@
 import { timingSafeEqual, createHash } from 'node:crypto';
 
 export interface Env {
+  ENVIRONMENT?: 'staging' | 'production';
   TARGET_URL: string;
   CRON_SECRET: string;
   VERCEL_PROTECTION_BYPASS_SECRET?: string;
@@ -36,8 +37,9 @@ export interface SchedulerExecutionResult {
   error?: string;
 }
 
-// Strict staging allowlist parameters
+// Strict allowlist parameters
 export const ALLOWED_STAGING_HOST = 'miler-creater-git-feat-daily-briefin-f2acc6-temo-ctrls-projects.vercel.app';
+export const ALLOWED_PRODUCTION_HOST = 'miler-creater.vercel.app';
 export const ALLOWED_CRON_PATH = '/api/cron/daily-briefing';
 export const PRODUCTION_SUPABASE_REF = 'zcpdpizrbaaekteurwup';
 
@@ -48,7 +50,10 @@ export function timingSafeTokenCompare(provided: string | null, expected: string
   return timingSafeEqual(a, b);
 }
 
-export function validateTargetUrl(rawUrl: string): { valid: boolean; error?: string; url?: URL } {
+export function validateTargetUrl(
+  rawUrl: string,
+  environment: 'staging' | 'production' = 'staging'
+): { valid: boolean; error?: string; url?: URL } {
   if (!rawUrl || typeof rawUrl !== 'string') {
     return { valid: false, error: 'TARGET_URL is required' };
   }
@@ -64,8 +69,13 @@ export function validateTargetUrl(rawUrl: string): { valid: boolean; error?: str
     return { valid: false, error: `Disallowed protocol "${parsed.protocol}". Only https: is permitted` };
   }
 
-  if (parsed.hostname !== ALLOWED_STAGING_HOST) {
-    return { valid: false, error: `Disallowed host "${parsed.hostname}". Strictly restricted to ${ALLOWED_STAGING_HOST}` };
+  const expectedHost = environment === 'production' ? ALLOWED_PRODUCTION_HOST : ALLOWED_STAGING_HOST;
+
+  if (parsed.hostname !== expectedHost) {
+    return {
+      valid: false,
+      error: `Disallowed host "${parsed.hostname}". Strictly restricted to ${expectedHost}`,
+    };
   }
 
   if (parsed.pathname !== ALLOWED_CRON_PATH) {
@@ -76,7 +86,7 @@ export function validateTargetUrl(rawUrl: string): { valid: boolean; error?: str
     return { valid: false, error: 'TARGET_URL must not contain query parameters or hash fragments' };
   }
 
-  if (rawUrl.includes(PRODUCTION_SUPABASE_REF)) {
+  if (environment === 'staging' && rawUrl.includes(PRODUCTION_SUPABASE_REF)) {
     return { valid: false, error: 'Refusing to execute against production project reference' };
   }
 
@@ -93,8 +103,10 @@ export async function triggerDailyBriefingCron(
   const bypassSecret = env.VERCEL_PROTECTION_BYPASS_SECRET?.trim();
   const timeoutMs = parseInt(env.REQUEST_TIMEOUT_MS || '20000', 10) || 20000;
 
+  const environment = env.ENVIRONMENT === 'production' ? 'production' : 'staging';
+
   // Strict host, protocol, path, and production isolation validation
-  const validation = validateTargetUrl(env.TARGET_URL);
+  const validation = validateTargetUrl(env.TARGET_URL, environment);
   if (!validation.valid || !validation.url) {
     console.error(`[Daily Briefing Scheduler] [${source}] Configuration/Target Guard Violation: ${validation.error}`);
     return {
@@ -286,7 +298,8 @@ const worker = {
     if (url.pathname === '/health' || url.pathname === '/') {
       return new Response(
         JSON.stringify({
-          service: 'miler-daily-briefing-scheduler',
+          service: env.ENVIRONMENT === 'production' ? 'miler-daily-briefing-scheduler-production' : 'miler-daily-briefing-scheduler',
+          environment: env.ENVIRONMENT === 'production' ? 'production' : 'staging',
           status: 'healthy',
           targetConfigured: Boolean(env.TARGET_URL),
           hasCronSecret: Boolean(env.CRON_SECRET),

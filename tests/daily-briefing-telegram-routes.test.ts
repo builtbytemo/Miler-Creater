@@ -39,6 +39,7 @@ function linkDb() {
 beforeEach(() => {
   process.env.TELEGRAM_WEBHOOK_SECRET = 'whsec';
   process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://prmgrrzqtnygmitplkhn.supabase.co';
+  process.env.VERCEL_ENV = 'preview';
 });
 afterEach(() => { process.env = { ...env }; });
 
