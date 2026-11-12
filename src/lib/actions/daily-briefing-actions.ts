@@ -4,9 +4,8 @@ import { revalidatePath } from 'next/cache';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { createTelegramAdapter, type TelegramDestination } from '@/lib/briefing/channels/telegram';
-import { createEmailAdapter, type EmailDestination } from '@/lib/briefing/channels/email';
-import { createDailyBriefingGenerator } from '@/lib/briefing/daily/generator';
+import { createTelegramAdapter } from '@/lib/briefing/channels/telegram';
+import { createEmailAdapter } from '@/lib/briefing/channels/email';
 import { getDeliveryServiceStatus, getTelegramBotUsername, type DeliveryServiceStatus } from '@/lib/briefing/config';
 import {
   DEFAULT_BRIEFING_LOCAL_TIME,
@@ -15,18 +14,7 @@ import {
   isValidTimeZone,
 } from '@/lib/briefing/timezone';
 import { LINK_TOKEN_TTL_SECONDS, buildDeepLink, generateLinkToken, hashLinkToken } from '@/lib/briefing/telegram-linking';
-import type { BriefingChannel, DeliveryResult } from '@/lib/briefing/types';
-
-import {
-  CONTROLLED_STAGING_TEST_USER_ID,
-  CONTROLLED_STAGING_DATE,
-  CONTROLLED_STAGING_TIMEZONE,
-  isControlledDispatchAllowed,
-  type ControlledDeliveryChannelState,
-  type ControlledDispatchState,
-} from '@/lib/briefing/controlled-dispatch';
-
-export type { ControlledDeliveryChannelState, ControlledDispatchState };
+import type { BriefingChannel } from '@/lib/briefing/types';
 
 export interface DailyBriefingState {
   enabled: boolean;
@@ -37,7 +25,6 @@ export interface DailyBriefingState {
   telegram: { status: 'not_connected' | 'active' | 'blocked'; username: string | null };
   emailAddressVerified: boolean;
   service: DeliveryServiceStatus;
-  controlledDispatch?: ControlledDispatchState;
 }
 
 export interface BriefingActionResult<T = undefined> {
@@ -62,46 +49,6 @@ export async function getDailyBriefingStateAction(): Promise<BriefingActionResul
     ctx.supabase.from('telegram_connections').select('status, telegram_username').eq('user_id', ctx.userId).maybeSingle(),
   ]);
 
-  let controlledDispatch: ControlledDispatchState | undefined = undefined;
-  if (isControlledDispatchAllowed().allowed && ctx.userId === CONTROLLED_STAGING_TEST_USER_ID) {
-    try {
-      const admin = createAdminClient() as unknown as SupabaseClient;
-      const [{ data: deliveries }, { data: authUser }] = await Promise.all([
-        admin
-          .from('briefing_deliveries')
-          .select('id, channel, status, provider_message_id, last_error_code')
-          .eq('user_id', ctx.userId)
-          .eq('local_date', CONTROLLED_STAGING_DATE),
-        admin.auth.admin.getUserById(ctx.userId),
-      ]);
-
-      const tgDelivery = deliveries?.find((d) => d.channel === 'telegram');
-      const emDelivery = deliveries?.find((d) => d.channel === 'email');
-
-      controlledDispatch = {
-        isAvailable: true,
-        targetDate: CONTROLLED_STAGING_DATE,
-        targetTimezone: CONTROLLED_STAGING_TIMEZONE,
-        telegramDestination: conn?.telegram_username ? `@${conn.telegram_username}` : null,
-        emailDestination: authUser?.user?.email ?? null,
-        telegram: {
-          status: (tgDelivery?.status as ControlledDeliveryChannelState['status']) ?? 'idle',
-          deliveryId: tgDelivery?.id ?? null,
-          providerMessageId: tgDelivery?.provider_message_id ?? null,
-          error: tgDelivery?.last_error_code ?? null,
-        },
-        email: {
-          status: (emDelivery?.status as ControlledDeliveryChannelState['status']) ?? 'idle',
-          deliveryId: emDelivery?.id ?? null,
-          providerMessageId: emDelivery?.provider_message_id ?? null,
-          error: emDelivery?.last_error_code ?? null,
-        },
-      };
-    } catch (e) {
-      console.error('[Controlled Dispatch State] Error fetching delivery status:', e);
-    }
-  }
-
   return {
     data: {
       enabled: prefs?.enabled ?? false,
@@ -114,7 +61,6 @@ export async function getDailyBriefingStateAction(): Promise<BriefingActionResul
         : { status: 'not_connected', username: null },
       emailAddressVerified: ctx.emailVerified,
       service: getDeliveryServiceStatus(),
-      controlledDispatch,
     },
   };
 }
@@ -271,283 +217,4 @@ export async function sendTestBriefingMessageAction(channel: BriefingChannel): P
 
   if (!result.ok) return { error: `Test delivery failed (${result.code})` };
   return { success: true };
-}
-
-/**
- * Temporary Preview-Only Controlled Dispatch Action.
- *
- * Exclusively executes in Vercel Preview against staging Supabase (prmgrrzqtnygmitplkhn)
- * for the verified staging test user (b9dffc37-9bb8-422b-ba72-7ab1c3dfb8e3).
- *
- * Reuses the production briefing generator, channel adapters, and finalize_briefing_delivery RPC
- * with an atomic exact-delivery-ID claim mechanism.
- */
-export async function dispatchControlledStagingBriefingAction(
-  channel: BriefingChannel
-): Promise<
-  BriefingActionResult<{
-    deliveryId: string;
-    status: string;
-    outcome: string;
-    providerMessageId?: string;
-    errorCode?: string;
-  }>
-> {
-  // 1. Mandatory Environment & Target Guards
-  const envCheck = isControlledDispatchAllowed();
-  if (!envCheck.allowed) {
-    return { error: envCheck.reason || 'Controlled dispatch is not permitted in this environment.' };
-  }
-
-  if (channel !== 'telegram' && channel !== 'email') {
-    return { error: 'Invalid channel. Only telegram and email are supported.' };
-  }
-
-  // 2. Strict Session Authentication & Ownership Guard
-  const ctx = await requireUser();
-  if (!ctx) {
-    return { error: 'Authentication required.' };
-  }
-
-  if (ctx.userId !== CONTROLLED_STAGING_TEST_USER_ID) {
-    return { error: 'Unauthorized: Controlled staging dispatch is restricted to the authorized staging test user.' };
-  }
-
-  // 3. User Preferences, Verification & Consent Verification
-  const admin = createAdminClient() as unknown as SupabaseClient;
-  const { data: prefs, error: prefErr } = await admin
-    .from('daily_briefing_preferences')
-    .select('*')
-    .eq('user_id', ctx.userId)
-    .maybeSingle();
-
-  if (prefErr || !prefs) {
-    return { error: `Failed to load preferences: ${prefErr?.message || 'Preferences not found'}` };
-  }
-
-  if (!prefs.enabled) {
-    return { error: 'Daily Briefing master switch is disabled. Please enable it in Settings.' };
-  }
-
-  let destination: TelegramDestination | EmailDestination;
-
-  if (channel === 'telegram') {
-    if (!prefs.telegram_enabled) {
-      return { error: 'Telegram delivery is disabled in your preferences.' };
-    }
-    const { data: conn } = await admin
-      .from('telegram_connections')
-      .select('chat_id, status')
-      .eq('user_id', ctx.userId)
-      .maybeSingle();
-    if (!conn || conn.status !== 'active') {
-      return { error: 'Active Telegram connection not found for this account.' };
-    }
-    destination = { chatId: conn.chat_id };
-  } else {
-    if (!prefs.email_enabled || !prefs.email_consent_at) {
-      return { error: 'Email delivery requires email_enabled=true and recorded email consent.' };
-    }
-    if (!ctx.emailVerified) {
-      return { error: 'Your account email address is not verified.' };
-    }
-    const { data: authUser } = await admin.auth.admin.getUserById(ctx.userId);
-    if (!authUser?.user?.email || !authUser.user.email_confirmed_at) {
-      return { error: 'Confirmed email address not found.' };
-    }
-    destination = { to: authUser.user.email };
-  }
-
-  // 4. Check Existing Delivery Slot for November 12
-  const { data: existingDelivery } = await admin
-    .from('briefing_deliveries')
-    .select('*')
-    .eq('user_id', ctx.userId)
-    .eq('channel', channel)
-    .eq('local_date', CONTROLLED_STAGING_DATE)
-    .maybeSingle();
-
-  if (existingDelivery) {
-    if (existingDelivery.status === 'sent') {
-      return {
-        error: `Briefing for ${CONTROLLED_STAGING_DATE} via ${channel} has already been sent successfully. Duplicate sends are prohibited.`,
-        data: {
-          deliveryId: existingDelivery.id,
-          status: 'sent',
-          outcome: 'sent',
-          providerMessageId: existingDelivery.provider_message_id || undefined,
-        },
-      };
-    }
-    if (
-      existingDelivery.status === 'claimed' &&
-      existingDelivery.claim_expires_at &&
-      new Date(existingDelivery.claim_expires_at).getTime() > Date.now()
-    ) {
-      return { error: 'Delivery is currently being processed by an active worker. Please wait.' };
-    }
-    if (existingDelivery.status === 'ambiguous') {
-      return { error: 'Previous delivery outcome was ambiguous. Automatic retries are disabled to prevent duplicate messages.' };
-    }
-  }
-
-  // 5. Enqueue or Resolve Pending Delivery Slot
-  let deliveryId: string;
-  let currentAttemptCount = 0;
-
-  if (!existingDelivery) {
-    const deliverySlot = {
-      user_id: ctx.userId,
-      channel,
-      local_date: CONTROLLED_STAGING_DATE,
-      timezone: CONTROLLED_STAGING_TIMEZONE,
-      scheduled_for: new Date().toISOString(),
-      next_attempt_at: new Date().toISOString(),
-      status: 'pending',
-    };
-
-    const { data: enqueued, error: enqErr } = await admin
-      .from('briefing_deliveries')
-      .insert(deliverySlot)
-      .select('id, status, attempt_count')
-      .single();
-
-    if (enqErr) {
-      if (enqErr.code === '23505') {
-        const { data: refetched } = await admin
-          .from('briefing_deliveries')
-          .select('id, status, attempt_count')
-          .eq('user_id', ctx.userId)
-          .eq('channel', channel)
-          .eq('local_date', CONTROLLED_STAGING_DATE)
-          .single();
-        if (!refetched) return { error: 'Failed to resolve concurrent delivery slot.' };
-        deliveryId = refetched.id;
-        currentAttemptCount = refetched.attempt_count;
-      } else {
-        return { error: `Failed to enqueue delivery: ${enqErr.message}` };
-      }
-    } else {
-      deliveryId = enqueued.id;
-      currentAttemptCount = enqueued.attempt_count;
-    }
-  } else {
-    deliveryId = existingDelivery.id;
-    currentAttemptCount = existingDelivery.attempt_count;
-  }
-
-  // 6. Atomic Exact-Row Claim
-  const claimToken = crypto.randomUUID();
-  const leaseSeconds = 300;
-  const nowIso = new Date().toISOString();
-  const claimExpiresAt = new Date(Date.now() + leaseSeconds * 1000).toISOString();
-
-  const { data: claimedRow, error: claimErr } = await admin
-    .from('briefing_deliveries')
-    .update({
-      status: 'claimed',
-      claim_token: claimToken,
-      claimed_at: nowIso,
-      claim_expires_at: claimExpiresAt,
-      attempt_count: currentAttemptCount + 1,
-      updated_at: nowIso,
-    })
-    .eq('id', deliveryId)
-    .in('status', ['pending', 'retry', 'failed'])
-    .select('id, attempt_count')
-    .maybeSingle();
-
-  if (claimErr || !claimedRow) {
-    return { error: 'Delivery could not be claimed. It may have already been claimed or processed concurrently.' };
-  }
-
-  // 7. Generate Real Briefing Content for November 12
-  const generator = createDailyBriefingGenerator(admin);
-  const contentResult = await generator.generate({
-    userId: ctx.userId,
-    localDate: CONTROLLED_STAGING_DATE,
-    channel,
-  });
-
-  if (contentResult.status !== 'ready') {
-    await admin.rpc('finalize_briefing_delivery', {
-      p_id: deliveryId,
-      p_claim_token: claimToken,
-      p_outcome: 'failed',
-      p_error_code: 'content_generation_failed',
-      p_error_message: 'Content generator returned non-ready status',
-    });
-    return { error: 'Failed to generate briefing content for November 12.' };
-  }
-
-  // 8. Real Channel Dispatch with Adapter
-  let sendResult: DeliveryResult;
-  if (channel === 'telegram') {
-    const adapter = createTelegramAdapter();
-    sendResult = await adapter.send(destination as TelegramDestination, contentResult.message);
-  } else {
-    const adapter = createEmailAdapter();
-    sendResult = await adapter.send(destination as EmailDestination, contentResult.message, {
-      idempotencyKey: `briefing-${deliveryId}`,
-    });
-  }
-
-  // 9. Map DeliveryResult to Outcome
-  let outcome = 'failed';
-  let errorCode: string | null = null;
-  let providerMessageId: string | null = null;
-
-  if (sendResult.ok) {
-    outcome = 'sent';
-    providerMessageId = sendResult.providerMessageId || null;
-  } else {
-    errorCode = sendResult.code || null;
-    if (sendResult.kind === 'ambiguous') {
-      outcome = 'ambiguous';
-    } else if (sendResult.kind === 'rate_limited') {
-      outcome = 'retry';
-    } else {
-      outcome = 'failed';
-    }
-  }
-
-  // 10. Authentic Ledger Finalization via Production RPC
-  const { error: finErr } = await admin.rpc('finalize_briefing_delivery', {
-    p_id: deliveryId,
-    p_claim_token: claimToken,
-    p_outcome: outcome,
-    p_error_code: errorCode,
-    p_error_message: sendResult.ok ? null : `Send failed with code ${errorCode}`,
-    p_provider_message_id: providerMessageId,
-    p_retry_after_seconds:
-      !sendResult.ok && sendResult.kind === 'rate_limited' ? sendResult.retryAfterSeconds || 30 : null,
-  });
-
-  if (finErr) {
-    console.error('[Controlled Dispatch] finalize_briefing_delivery error:', finErr.message);
-  }
-
-  revalidatePath('/settings/notifications');
-
-  if (!sendResult.ok) {
-    return {
-      error: `Delivery attempt finished with outcome '${outcome}' (${errorCode}).`,
-      data: {
-        deliveryId,
-        status: outcome,
-        outcome,
-        errorCode: errorCode || undefined,
-      },
-    };
-  }
-
-  return {
-    success: true,
-    data: {
-      deliveryId,
-      status: 'sent',
-      outcome: 'sent',
-      providerMessageId: providerMessageId || undefined,
-    },
-  };
 }

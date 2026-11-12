@@ -8,7 +8,6 @@ import {
   sendTestBriefingMessageAction,
   startTelegramConnectionAction,
   updateDailyBriefingPreferencesAction,
-  dispatchControlledStagingBriefingAction,
   type DailyBriefingState,
 } from '@/lib/actions/daily-briefing-actions';
 import type { BriefingChannel } from '@/lib/briefing/types';
@@ -78,17 +77,6 @@ export function DailyBriefingSettings() {
 
   const test = (channel: BriefingChannel) =>
     run(() => sendTestBriefingMessageAction(channel), 'Test message sent.');
-
-  const controlledSend = (channel: BriefingChannel) =>
-    run(
-      async () => {
-        const res = await dispatchControlledStagingBriefingAction(channel);
-        if (res.error && !res.data) return { error: res.error };
-        if (res.data?.status === 'sent') return { error: undefined };
-        return { error: res.error };
-      },
-      `Controlled ${channel === 'telegram' ? 'Telegram' : 'Email'} briefing sent successfully.`
-    );
 
   const connect = () =>
     startTransition(async () => {
@@ -242,101 +230,6 @@ export function DailyBriefingSettings() {
           )}
         </div>
       </div>
-
-      {state.controlledDispatch?.isAvailable && (
-        <div className="p-4 rounded-xl bg-purple-950/20 border border-purple-800/60 space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-xs font-semibold text-purple-200 flex items-center gap-2">
-                <span>Staging Preview Controlled Delivery</span>
-                <span className="px-2 py-0.5 rounded text-[10px] bg-purple-900/60 text-purple-300 font-mono">
-                  Preview Only
-                </span>
-              </h3>
-              <p className="text-xs text-purple-300/80 mt-0.5">
-                Send exactly one real-data Daily Briefing for <strong>November 12, 2026</strong> (Africa/Cairo).
-                Reuses the production briefing generator, channel adapters, and authentic delivery ledgers.
-              </p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-neutral-300 bg-neutral-950/60 p-3 rounded-lg border border-neutral-800">
-            <div>
-              <p className="text-neutral-500 text-[11px]">Briefing Date</p>
-              <p className="font-medium text-neutral-200">Thursday, November 12, 2026</p>
-              <p className="text-neutral-500 text-[11px] mt-2">Telegram Destination</p>
-              <p className="font-mono text-neutral-300">
-                {state.controlledDispatch.telegramDestination ?? 'Not connected'}
-              </p>
-            </div>
-            <div>
-              <p className="text-neutral-500 text-[11px]">Timezone</p>
-              <p className="font-medium text-neutral-200">Africa/Cairo</p>
-              <p className="text-neutral-500 text-[11px] mt-2">Email Destination</p>
-              <p className="font-mono text-neutral-300">
-                {state.controlledDispatch.emailDestination ?? 'Not confirmed'}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3 pt-1">
-            <div className="space-y-1">
-              <button
-                type="button"
-                disabled={
-                  pending ||
-                  !state.telegramEnabled ||
-                  state.telegram.status !== 'active' ||
-                  state.controlledDispatch.telegram.status === 'sent' ||
-                  state.controlledDispatch.telegram.status === 'claimed'
-                }
-                onClick={() => controlledSend('telegram')}
-                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:bg-neutral-800 disabled:text-neutral-500 text-xs font-medium text-white transition-colors"
-              >
-                {state.controlledDispatch.telegram.status === 'sent' ? (
-                  <>✓ Telegram briefing sent</>
-                ) : (
-                  <>
-                    <Send className="w-3.5 h-3.5" /> Send controlled Telegram briefing
-                  </>
-                )}
-              </button>
-              {state.controlledDispatch.telegram.status === 'sent' && (
-                <p className="text-[11px] text-emerald-400">
-                  Delivered · Message ID: {state.controlledDispatch.telegram.providerMessageId || 'Confirmed'}
-                </p>
-              )}
-            </div>
-
-            <div className="space-y-1">
-              <button
-                type="button"
-                disabled={
-                  pending ||
-                  !state.emailEnabled ||
-                  state.controlledDispatch.email.status === 'sent' ||
-                  state.controlledDispatch.email.status === 'claimed'
-                }
-                onClick={() => controlledSend('email')}
-                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:bg-neutral-800 disabled:text-neutral-500 text-xs font-medium text-white transition-colors"
-              >
-                {state.controlledDispatch.email.status === 'sent' ? (
-                  <>✓ Email briefing sent</>
-                ) : (
-                  <>
-                    <Mail className="w-3.5 h-3.5" /> Send controlled Email briefing
-                  </>
-                )}
-              </button>
-              {state.controlledDispatch.email.status === 'sent' && (
-                <p className="text-[11px] text-emerald-400">
-                  Delivered · Message ID: {state.controlledDispatch.email.providerMessageId || 'Confirmed'}
-                </p>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </section>
   );
 }
