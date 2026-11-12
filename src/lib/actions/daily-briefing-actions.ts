@@ -90,11 +90,44 @@ export async function updateDailyBriefingPreferencesAction(input: {
   if (input.timezone !== undefined) patch.timezone = input.timezone;
   if (input.deliveryLocalTime !== undefined) patch.delivery_local_time = input.deliveryLocalTime;
 
-  // Own-row upsert through RLS; unspecified columns keep safe defaults (disabled).
-  const { error } = await ctx.supabase
+  // 1. Attempt updating the existing preferences row through authenticated RLS.
+  // We use direct update/insert rather than upsert because PostgREST upsert (INSERT ... ON CONFLICT DO UPDATE)
+  // requires table-level UPDATE privilege in PostgreSQL, whereas our security policy grants column-level
+  // privileges to protect email_consent_at and last_test_sent_at from client tampering.
+  const { data: updated, error: updateErr } = await ctx.supabase
     .from('daily_briefing_preferences')
-    .upsert({ user_id: ctx.userId, ...patch }, { onConflict: 'user_id' });
-  if (error) return { error: 'Could not save Daily Briefing preferences' };
+    .update(patch)
+    .eq('user_id', ctx.userId)
+    .select('user_id');
+
+  if (updateErr) {
+    console.error('[DailyBriefing Preferences] Update error:', updateErr.message, updateErr.code);
+    return { error: 'Could not save Daily Briefing preferences' };
+  }
+
+  // 2. If no row existed yet for this user, insert the initial preferences row
+  if (!updated || updated.length === 0) {
+    const { error: insertErr } = await ctx.supabase
+      .from('daily_briefing_preferences')
+      .insert({ user_id: ctx.userId, ...patch });
+
+    if (insertErr) {
+      if (insertErr.code === '23505') {
+        // Concurrent insert race condition: retry update
+        const { error: retryErr } = await ctx.supabase
+          .from('daily_briefing_preferences')
+          .update(patch)
+          .eq('user_id', ctx.userId);
+        if (retryErr) {
+          console.error('[DailyBriefing Preferences] Retry update error:', retryErr.message, retryErr.code);
+          return { error: 'Could not save Daily Briefing preferences' };
+        }
+      } else {
+        console.error('[DailyBriefing Preferences] Insert error:', insertErr.message, insertErr.code);
+        return { error: 'Could not save Daily Briefing preferences' };
+      }
+    }
+  }
 
   revalidatePath('/settings/notifications');
   return { success: true };
