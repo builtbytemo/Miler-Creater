@@ -4,18 +4,14 @@ compatibility_date = "2026-11-12"
 compatibility_flags = ["nodejs_compat"]
 
 [triggers]
-# INITIAL DEPLOYMENT SAFEGUARD:
-# Deployed with NO active cron triggers to prevent premature execution.
-# The 5-minute schedule ("*/5 * * * *") will be activated only after explicit user approval.
-crons = []
+# Active 5-minute schedule for Miler Staging Daily Briefing delivery
+crons = ["*/5 * * * *"]
 
 [vars]
 TARGET_URL = "https://miler-creater-git-feat-daily-briefin-f2acc6-temo-ctrls-projects.vercel.app/api/cron/daily-briefing"
 REQUEST_TIMEOUT_MS = "20000"
-ALLOW_MANUAL_TRIGGER = "true"
+ALLOW_MANUAL_TRIGGER = "false"
 
-# Note on Secrets:
-# Secrets must NOT be committed to git in plaintext.
-# Set via Cloudflare Dashboard or Wrangler CLI before activation:
-#   npx wrangler secret put CRON_SECRET
-#   npx wrangler secret put VERCEL_PROTECTION_BYPASS_SECRET
+# Encrypted Secrets configured via `wrangler secret put`:
+# - CRON_SECRET: Shared secret matching Vercel Preview
+# - VERCEL_PROTECTION_BYPASS_SECRET: Vercel Automation Bypass secret
