@@ -4,8 +4,8 @@ compatibility_date = "2026-11-12"
 compatibility_flags = ["nodejs_compat"]
 
 [triggers]
-# Deployment safeguard: Initially inactive (crons = []) until explicit production activation
-crons = []
+# 5-minute cron schedule active; delivery remains gated by DAILY_BRIEFING_DELIVERY_ENABLED in Vercel Production
+crons = ["*/5 * * * *"]
 
 [vars]
 ENVIRONMENT = "production"
