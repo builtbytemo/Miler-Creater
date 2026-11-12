@@ -2,7 +2,7 @@
 
 import { useState, useId } from 'react';
 import { useDialog } from '@/lib/hooks/use-dialog';
-import { X, Calendar, Clock, AlertCircle } from 'lucide-react';
+import { X, Calendar, Clock, AlertCircle, CheckSquare } from 'lucide-react';
 import { createTaskAction } from '@/lib/actions/task-actions';
 import type { TaskWithMeta } from '@/lib/services/task-service';
 import { toLocalDatetimeString, parseLocalDatetimeString } from '@/lib/temporal/calendar';
@@ -16,6 +16,7 @@ interface ProjectOption {
 
 interface CreateTaskModalProps {
   createdFrom?: 'tasks' | 'calendar';
+  initialEntryType?: 'task' | 'calendar_block';
   workspaceId: string;
   projects: ProjectOption[];
   parentTaskId?: string | null;
@@ -29,6 +30,7 @@ interface CreateTaskModalProps {
 
 export function CreateTaskModal({
   createdFrom = 'tasks',
+  initialEntryType = 'task',
   workspaceId,
   projects,
   parentTaskId,
@@ -39,6 +41,7 @@ export function CreateTaskModal({
   initialScheduledEnd = null,
   userTimeZone = DEFAULT_TIMEZONE,
 }: CreateTaskModalProps) {
+  const [entryType, setEntryType] = useState<'task' | 'calendar_block'>(initialEntryType);
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isAllDay, setIsAllDay] = useState(false);
@@ -60,12 +63,13 @@ export function CreateTaskModal({
   );
 
   // Sync state whenever modal opens or scheduling props change
-  const syncKey = `${isOpen}:${initialScheduledStart ?? ''}:${initialScheduledEnd ?? ''}:${userTimeZone}`;
+  const syncKey = `${isOpen}:${initialScheduledStart ?? ''}:${initialScheduledEnd ?? ''}:${initialEntryType ?? 'task'}:${userTimeZone}`;
   const [prevSyncKey, setPrevSyncKey] = useState(syncKey);
   if (prevSyncKey !== syncKey) {
     setPrevSyncKey(syncKey);
     if (isOpen) {
-      setIsScheduled(Boolean(initialScheduledStart));
+      setEntryType(initialEntryType ?? 'task');
+      setIsScheduled(Boolean(initialScheduledStart) || initialEntryType === 'calendar_block');
       const initStartStr = initialScheduledStart
         ? toLocalDatetimeString(initialScheduledStart, userTimeZone)
         : '';
@@ -109,10 +113,16 @@ export function CreateTaskModal({
     const form = e.currentTarget;
     const formData = new FormData(form);
     if (createdFrom === 'calendar') formData.set('created_from', createdFrom);
+    formData.set('entry_type', entryType);
 
     const title = ((formData.get('title') as string) || '').trim();
     if (!title) {
-      setError('Task title is required');
+      setError(entryType === 'calendar_block' ? 'Calendar block title is required' : 'Task title is required');
+      return;
+    }
+
+    if (entryType === 'calendar_block' && !scheduledStart.trim()) {
+      setError('Please specify a scheduled start time for the calendar block.');
       return;
     }
 
@@ -253,12 +263,18 @@ export function CreateTaskModal({
         <div className="flex items-start justify-between gap-3 border-b border-[var(--border-subtle)] px-5 sm:px-6 py-4 shrink-0">
           <div className="space-y-0.5 min-w-0">
             <h2 id={titleId} className="heading-section text-base sm:text-lg">
-              {parentTaskId ? 'Add Subtask' : 'Create New Task'}
+              {parentTaskId
+                ? 'Add Subtask'
+                : entryType === 'calendar_block'
+                  ? 'Create Calendar Block'
+                  : 'Create New Task'}
             </h2>
             <p className="text-xs text-[var(--text-muted)]">
               {parentTaskId
                 ? 'Attach a child deliverable to this task.'
-                : 'Define actionable work with optional scheduling and recurrence.'}
+                : entryType === 'calendar_block'
+                  ? 'Reserve a dedicated time block on your calendar timeline.'
+                  : 'Define actionable work with optional scheduling and recurrence.'}
             </p>
           </div>
           <button
@@ -276,6 +292,59 @@ export function CreateTaskModal({
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-5 sm:px-6 py-5 space-y-5">
           <input type="hidden" name="workspace_id" value={workspaceId} />
           {parentTaskId && <input type="hidden" name="parent_task_id" value={parentTaskId} />}
+
+          {/* Entry Type Selector (Top-level tasks only) */}
+          {!parentTaskId && (
+            <div className="space-y-1.5" data-testid="entry-type-selector">
+              <label className="block text-xs font-medium text-[var(--text-secondary)]">
+                Entry Type
+              </label>
+              <div
+                role="radiogroup"
+                aria-label="Entry Type"
+                className="grid grid-cols-2 gap-2 p-1 rounded-xl bg-[var(--bg-surface-muted)] border border-[var(--border-subtle)]"
+              >
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={entryType === 'task'}
+                  data-testid="entry-type-task"
+                  onClick={() => setEntryType('task')}
+                  className={`flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                    entryType === 'task'
+                      ? 'bg-[var(--bg-surface-elevated)] text-[var(--text-primary)] shadow-xs font-semibold'
+                      : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                  }`}
+                >
+                  <CheckSquare className="w-3.5 h-3.5" />
+                  <span>Actionable Task</span>
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={entryType === 'calendar_block'}
+                  data-testid="entry-type-calendar-block"
+                  onClick={() => {
+                    setEntryType('calendar_block');
+                    setIsScheduled(true);
+                  }}
+                  className={`flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                    entryType === 'calendar_block'
+                      ? 'bg-[var(--bg-surface-elevated)] text-[var(--text-primary)] shadow-xs font-semibold'
+                      : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                  }`}
+                >
+                  <Calendar className="w-3.5 h-3.5" />
+                  <span>Calendar Block</span>
+                </button>
+              </div>
+              <p className="text-[11px] text-[var(--text-muted)]">
+                {entryType === 'task'
+                  ? 'Appears in Tasks and Daily Briefing task list. Can have deadlines and subtasks.'
+                  : 'Appears on the calendar timeline and Day Finder. Great for lectures, workouts, or events.'}
+              </p>
+            </div>
+          )}
 
           {error && (
             <div
@@ -300,7 +369,11 @@ export function CreateTaskModal({
               name="title"
               type="text"
               required
-              placeholder="e.g. Draft Q4 architecture proposal"
+              placeholder={
+                entryType === 'calendar_block'
+                  ? 'e.g. Gym session, Lecture, Lunch, Doctor appointment'
+                  : 'e.g. Draft Q4 architecture proposal'
+              }
               className={inputBaseClass}
             />
           </div>

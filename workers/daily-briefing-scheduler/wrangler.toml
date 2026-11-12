@@ -1,0 +1,17 @@
+name = "miler-daily-briefing-scheduler"
+main = "src/index.ts"
+compatibility_date = "2026-11-12"
+compatibility_flags = ["nodejs_compat"]
+
+[triggers]
+# Active 5-minute schedule for Miler Staging Daily Briefing delivery
+crons = ["*/5 * * * *"]
+
+[vars]
+TARGET_URL = "https://miler-creater-git-feat-daily-briefin-f2acc6-temo-ctrls-projects.vercel.app/api/cron/daily-briefing"
+REQUEST_TIMEOUT_MS = "20000"
+ALLOW_MANUAL_TRIGGER = "false"
+
+# Encrypted Secrets configured via `wrangler secret put`:
+# - CRON_SECRET: Shared secret matching Vercel Preview
+# - VERCEL_PROTECTION_BYPASS_SECRET: Vercel Automation Bypass secret

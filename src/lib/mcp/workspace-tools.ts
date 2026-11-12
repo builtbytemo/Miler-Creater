@@ -20,7 +20,8 @@ export const WORKSPACE_TOOLS: Record<string, ToolDefinition> = {
   create_calendar_entry: {
     name: 'create_calendar_entry', description: 'Create an event or time block directly on the calendar, without adding it to the Tasks tab or left assignment panel. Use this for appointments, meetings, and calendar events. Requires a start time; accepts end time, all-day flag, priority, recurrence, and notes in description.',
     category: 'write', requiredScopes: ['task:write'], schema: createCalendarEntryInputSchema,
-    execute: (c, v: z.infer<typeof createCalendarEntryInputSchema>) => createTask(c.supabase, c.workspaceId, { ...v, created_from: 'calendar' }, c.userId),
+    execute: (c, v: z.infer<typeof createCalendarEntryInputSchema>) =>
+      createTask(c.supabase, c.workspaceId, { ...v, created_from: 'calendar', entry_type: v.entry_type ?? 'calendar_block' }, c.userId),
   },
   get_calendar: {
     name: 'get_calendar', description: 'Read scheduled tasks, content, and deadlines in a UTC date range of up to 120 days, using the account timezone for display.',

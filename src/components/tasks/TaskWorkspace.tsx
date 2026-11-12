@@ -81,7 +81,7 @@ export function TaskWorkspace({
 }: TaskWorkspaceProps) {
   const router = useRouter();
   const [tasks, setTasks] = useState<TaskWithMeta[]>(() =>
-    initialTasks.filter((task) => task.created_from !== 'calendar')
+    initialTasks.filter((task) => task.entry_type !== 'calendar_block' && task.created_from !== 'calendar')
   );
   const [search, setSearch] = useState('');
   const [dateFilter, setDateFilter] = useState<TaskDateFilter>('all');
@@ -107,7 +107,7 @@ export function TaskWorkspace({
   const [prevInitialTasks, setPrevInitialTasks] = useState(initialTasks);
   if (prevInitialTasks !== initialTasks) {
     setPrevInitialTasks(initialTasks);
-    setTasks(initialTasks.filter((task) => task.created_from !== 'calendar'));
+    setTasks(initialTasks.filter((task) => task.entry_type !== 'calendar_block' && task.created_from !== 'calendar'));
   }
 
   // Auto-dismiss success message after 5 seconds

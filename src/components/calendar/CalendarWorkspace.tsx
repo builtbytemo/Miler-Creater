@@ -680,11 +680,11 @@ export function CalendarWorkspace({
   // Split items & tasks between Workspace-Assigned (created_from !== 'calendar')
   // and Calendar-Scheduled (created_from === 'calendar') for Week & Month views
   const assignedTasksForView = useMemo(
-    () => visibleScheduledTasks.filter((t) => t.created_from !== 'calendar'),
+    () => visibleScheduledTasks.filter((t) => t.created_from !== 'calendar' && t.entry_type !== 'calendar_block'),
     [visibleScheduledTasks]
   );
   const calendarTasksForView = useMemo(
-    () => visibleScheduledTasks.filter((t) => t.created_from === 'calendar'),
+    () => visibleScheduledTasks.filter((t) => t.created_from === 'calendar' || t.entry_type === 'calendar_block'),
     [visibleScheduledTasks]
   );
   const assignedContentForView = useMemo(

@@ -118,6 +118,7 @@ export type ListScheduledContentInput = z.infer<typeof listScheduledContentInput
 export const createTaskInputSchema = z
   .object({
     created_from: z.enum(['tasks', 'calendar']).optional().describe('Use calendar to appear only on the calendar; omit or use tasks for the Tasks tab and calendar left panel.'),
+    entry_type: z.enum(['task', 'calendar_block']).default('task').describe('Use calendar_block for dedicated time blocks (meetings, lectures, gym); task for actionable work.'),
     parent_task_id: z.string().uuid().optional().nullable(),
     milestone_id: z.string().uuid().optional().nullable(),
     recurrence: recurrenceInputSchema.optional().nullable(),
@@ -151,6 +152,7 @@ export type CreateTaskInput = z.infer<typeof createTaskInputSchema>;
 /** A dedicated calendar action makes placement unambiguous for MCP clients. */
 export const createCalendarEntryInputSchema = createTaskInputSchema.safeExtend({
   created_from: z.literal('calendar').default('calendar'),
+  entry_type: z.enum(['task', 'calendar_block']).default('calendar_block'),
   scheduled_start: z.string().datetime().describe('Required start time as an ISO 8601 timestamp with a timezone offset.'),
 });
 
@@ -163,6 +165,7 @@ export const createCalendarEntryInputSchema = createTaskInputSchema.safeExtend({
  */
 export const updateTaskInputSchema = z
   .object({
+    entry_type: z.enum(['task', 'calendar_block']).optional().describe('Entry type: task or calendar_block.'),
     is_all_day: z.boolean().optional(),
     milestone_id: z.string().uuid().optional().nullable(),
     parent_task_id: z.string().uuid().optional().nullable(),

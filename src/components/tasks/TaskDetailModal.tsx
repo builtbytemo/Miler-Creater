@@ -68,6 +68,7 @@ export function TaskDetailModal({
   // Edit Task (This Occurrence Only) State
   const [isEditingTask, setIsEditingTask] = useState(false);
   const [editTitle, setEditTitle] = useState(task.title);
+  const [editEntryType, setEditEntryType] = useState<'task' | 'calendar_block'>(task.entry_type || 'task');
   const [editDescription, setEditDescription] = useState(task.description || '');
   const [editPriority, setEditPriority] = useState<TaskPriority>(task.priority);
   const [editScheduledStart, setEditScheduledStart] = useState(
@@ -121,6 +122,7 @@ export function TaskDetailModal({
     setIsStopConfirmOpen(false);
 
     setEditTitle(task.title);
+    setEditEntryType(task.entry_type || 'task');
     setEditDescription(task.description || '');
     setEditPriority(task.priority);
     setEditScheduledStart(
@@ -314,6 +316,7 @@ export function TaskDetailModal({
       const formData = new FormData();
       formData.set('workspace_id', workspaceId);
       formData.set('task_id', currentTask.id);
+      formData.set('entry_type', editEntryType);
       formData.set('title', editTitle.trim());
       formData.set('description', editDescription.trim());
       formData.set('priority', editPriority);
@@ -355,6 +358,7 @@ export function TaskDetailModal({
         const updated = res.data as TaskWithMeta;
         setCurrentTask((prev) => ({
           ...prev,
+          entry_type: updated.entry_type,
           title: updated.title,
           description: updated.description,
           priority: updated.priority,
@@ -561,6 +565,17 @@ export function TaskDetailModal({
                   )}
                 >
                   {currentTask.priority}
+                </span>
+
+                <span
+                  className={clsx(
+                    'px-2.5 py-0.5 rounded-full text-[11px] font-medium border',
+                    currentTask.entry_type === 'calendar_block'
+                      ? 'badge-editorial'
+                      : 'bg-[var(--bg-surface-muted)] text-[var(--text-secondary)] border-[var(--border-subtle)]'
+                  )}
+                >
+                  {currentTask.entry_type === 'calendar_block' ? 'Calendar Block' : 'Task'}
                 </span>
 
                 {currentTask.project && (
@@ -781,7 +796,22 @@ export function TaskDetailModal({
                   />
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="space-y-1">
+                    <label htmlFor="edit-task-entry-type" className="block text-[11px] font-medium text-[var(--text-secondary)]">
+                      Entry Type
+                    </label>
+                    <select
+                      id="edit-task-entry-type"
+                      value={editEntryType}
+                      onChange={(e) => setEditEntryType(e.target.value as 'task' | 'calendar_block')}
+                      className="w-full h-8 px-3 text-xs rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)]"
+                    >
+                      <option value="task">Actionable Task</option>
+                      <option value="calendar_block">Calendar Block</option>
+                    </select>
+                  </div>
+
                   <div className="space-y-1">
                     <label htmlFor="edit-task-priority" className="block text-[11px] font-medium text-[var(--text-secondary)]">
                       Priority

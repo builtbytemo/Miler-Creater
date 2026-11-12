@@ -331,6 +331,7 @@ export interface Database {
       tasks: {
         Row: {
           created_from?: 'tasks' | 'calendar';
+          entry_type: 'task' | 'calendar_block';
           id: string;
           workspace_id: string;
           parent_task_id: string | null;
@@ -356,6 +357,7 @@ export interface Database {
         };
         Insert: {
           created_from?: 'tasks' | 'calendar';
+          entry_type?: 'task' | 'calendar_block';
           id?: string;
           workspace_id: string;
           parent_task_id?: string | null;
@@ -381,6 +383,7 @@ export interface Database {
         };
         Update: {
           created_from?: 'tasks' | 'calendar';
+          entry_type?: 'task' | 'calendar_block';
           id?: string;
           workspace_id?: string;
           parent_task_id?: string | null;
