@@ -291,7 +291,7 @@ const worker = {
           targetConfigured: Boolean(env.TARGET_URL),
           hasCronSecret: Boolean(env.CRON_SECRET),
           hasBypassSecret: Boolean(env.VERCEL_PROTECTION_BYPASS_SECRET),
-          manualTriggerAllowed: env.ALLOW_MANUAL_TRIGGER !== 'false',
+          manualTriggerAllowed: env.ALLOW_MANUAL_TRIGGER === 'true',
         }),
         {
           status: 200,
@@ -302,8 +302,8 @@ const worker = {
 
     // Manual test trigger endpoint
     if (url.pathname === '/trigger') {
-      // 1. Safeguard: Check whether manual trigger is disabled
-      if (env.ALLOW_MANUAL_TRIGGER === 'false') {
+      // 1. Safeguard: Strictly require ALLOW_MANUAL_TRIGGER === 'true' (fail-closed if missing, false, or unexpected)
+      if (env.ALLOW_MANUAL_TRIGGER !== 'true') {
         return new Response(JSON.stringify({ error: 'Manual trigger is disabled' }), {
           status: 403,
           headers: { 'Content-Type': 'application/json' },

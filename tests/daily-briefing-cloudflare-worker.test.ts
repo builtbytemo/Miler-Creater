@@ -257,6 +257,11 @@ describe('Cloudflare Worker Daily Briefing Scheduler Suite', () => {
         hasBypassSecret: true,
         manualTriggerAllowed: true,
       });
+
+      // When ALLOW_MANUAL_TRIGGER is missing or not 'true', health reports manualTriggerAllowed: false
+      const disabledRes = await worker.fetch(req, { ...validEnv, ALLOW_MANUAL_TRIGGER: undefined });
+      const disabledBody = await disabledRes.json();
+      expect(disabledBody.manualTriggerAllowed).toBe(false);
     });
 
     it('rejects GET on /trigger with HTTP 405 Method Not Allowed', async () => {
@@ -268,17 +273,21 @@ describe('Cloudflare Worker Daily Briefing Scheduler Suite', () => {
       expect(body.error).toContain('Method Not Allowed');
     });
 
-    it('rejects /trigger when ALLOW_MANUAL_TRIGGER is false with HTTP 403', async () => {
-      const disabledEnv: Env = { ...validEnv, ALLOW_MANUAL_TRIGGER: 'false' };
-      const req = new Request('https://worker.local/trigger', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${validEnv.CRON_SECRET}` },
-      });
-      const res = await worker.fetch(req, disabledEnv);
+    it('rejects /trigger when ALLOW_MANUAL_TRIGGER is false, undefined, or unexpected with HTTP 403', async () => {
+      const invalidValues = ['false', undefined, '', '1', 'yes', 'TRUE', '0', 'disabled'];
 
-      expect(res.status).toBe(403);
-      const body = await res.json();
-      expect(body.error).toContain('Manual trigger is disabled');
+      for (const val of invalidValues) {
+        const testEnv: Env = { ...validEnv, ALLOW_MANUAL_TRIGGER: val };
+        const req = new Request('https://worker.local/trigger', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${validEnv.CRON_SECRET}` },
+        });
+        const res = await worker.fetch(req, testEnv);
+
+        expect(res.status).toBe(403);
+        const body = await res.json();
+        expect(body.error).toContain('Manual trigger is disabled');
+      }
     });
 
     it('rejects unauthenticated or invalid /trigger request with HTTP 401', async () => {
