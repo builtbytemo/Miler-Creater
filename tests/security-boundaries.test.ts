@@ -122,4 +122,61 @@ describe('Security Boundaries & Isolation Tests', () => {
       expect(simulateNotificationPreferencePolicy(null, userA, 'member')).toBe(false);
     });
   });
+
+  describe('Task Completion RPC Fail-Closed Security Policy (Migration 20261112000002)', () => {
+    function simulateCompleteTaskAuth(
+      callerRole: 'anon' | 'authenticated' | 'service_role' | null,
+      authUid: string | null,
+      userWorkspaceRole: 'owner' | 'admin' | 'member' | 'viewer' | null
+    ): { allowed: boolean; error?: string } {
+      // 1. Trusted backend execution (service_role)
+      if (callerRole === 'service_role') {
+        return { allowed: true };
+      }
+      // 2. Authenticated user with active session
+      if (authUid !== null && callerRole === 'authenticated') {
+        const isMember = simulateIsWorkspaceMember(userWorkspaceRole, 'member');
+        if (!isMember) {
+          return { allowed: false, error: 'Access denied: not an authorized member of workspace' };
+        }
+        return { allowed: true };
+      }
+      // 3. Fail closed on anonymous or missing session
+      return { allowed: false, error: 'Access denied: authenticated user session required' };
+    }
+
+    it('rejects anonymous callers unconditionally regardless of parameters', () => {
+      const res = simulateCompleteTaskAuth('anon', null, null);
+      expect(res.allowed).toBe(false);
+      expect(res.error).toMatch(/authenticated user session required/);
+    });
+
+    it('rejects missing or null auth callers without a valid session', () => {
+      const res = simulateCompleteTaskAuth(null, null, null);
+      expect(res.allowed).toBe(false);
+      expect(res.error).toMatch(/authenticated user session required/);
+    });
+
+    it('rejects authenticated users who are not members of the target workspace', () => {
+      const res = simulateCompleteTaskAuth('authenticated', 'user-123', null);
+      expect(res.allowed).toBe(false);
+      expect(res.error).toMatch(/not an authorized member of workspace/);
+    });
+
+    it('rejects authenticated users who only hold viewer role (insufficient privilege)', () => {
+      const res = simulateCompleteTaskAuth('authenticated', 'user-123', 'viewer');
+      expect(res.allowed).toBe(false);
+      expect(res.error).toMatch(/not an authorized member of workspace/);
+    });
+
+    it('allows authenticated members, admins, and owners of the target workspace', () => {
+      expect(simulateCompleteTaskAuth('authenticated', 'user-123', 'member').allowed).toBe(true);
+      expect(simulateCompleteTaskAuth('authenticated', 'user-123', 'admin').allowed).toBe(true);
+      expect(simulateCompleteTaskAuth('authenticated', 'user-123', 'owner').allowed).toBe(true);
+    });
+
+    it('allows service_role for legitimate background operations without user session', () => {
+      expect(simulateCompleteTaskAuth('service_role', null, null).allowed).toBe(true);
+    });
+  });
 });
