@@ -36,5 +36,8 @@ Alternative provider: implement `ChannelAdapter<EmailDestination>` in `channels/
 - With providers configured, use the "Send test" buttons in settings (user-triggered, 1/min, own destination only).
 - Apply migration `20261111000003_daily_briefing_delivery.sql` to a staging DB first.
 
+## Production Release & Safe Recovery
+For production deployment procedures, non-destructive incident recovery, disaster recovery limitations, and dual-channel configuration, see [PRODUCTION_RELEASE_PLAN.md](./PRODUCTION_RELEASE_PLAN.md).
+
 ## Activation checklist
 1. Apply migration. 2. Configure Telegram and/or email. 3. Implement and register a content generator (`registerBriefingContentGenerator`). 4. Schedule the cron every 5 min. 5. Set `DAILY_BRIEFING_DELIVERY_ENABLED=true`. 6. Users opt in via settings.
