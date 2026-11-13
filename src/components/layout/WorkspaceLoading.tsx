@@ -5,10 +5,10 @@ export function WorkspaceLoading() {
       aria-label="Loading workspace"
       className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] flex flex-col md:flex-row"
     >
-      {/* Desktop Sidebar Skeleton */}
+      {/* Desktop Left Sidebar Skeleton */}
       <div
         aria-hidden="true"
-        className="hidden md:flex md:w-[228px] md:shrink-0 md:flex-col md:justify-between border-r border-[var(--border-subtle)] bg-[var(--bg-sidebar)] px-3 py-3.5"
+        className="hidden md:flex md:w-[240px] md:shrink-0 md:flex-col md:justify-between border-r border-[var(--border-subtle)] bg-[var(--bg-sidebar)] px-3 py-3.5"
       >
         <div className="space-y-4 motion-safe:animate-pulse">
           <div className="flex items-center justify-between px-1">
@@ -58,6 +58,14 @@ export function WorkspaceLoading() {
             <div className="surface-card h-32" />
           </div>
         </div>
+      </div>
+
+      {/* Desktop Right Assistant Rail Skeleton */}
+      <div
+        aria-hidden="true"
+        className="hidden md:flex md:w-[42px] md:shrink-0 md:flex-col md:items-center md:justify-between border-l border-[var(--border-subtle)] bg-[var(--bg-sidebar)]/85 py-3 px-1.5"
+      >
+        <div className="h-8 w-8 rounded-[var(--radius-sm)] bg-[var(--bg-surface-muted)] motion-safe:animate-pulse" />
       </div>
     </div>
   );

@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation';
 import { connection } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getContentItems, getIdeaInboxItems, getSocialAccounts } from '@/lib/services/content-service';
-import { AppNavigation } from '@/components/layout/AppNavigation';
+import { WorkspaceShell } from '@/components/layout/WorkspaceShell';
 import { ContentWorkspace } from '@/components/content/ContentWorkspace';
 
 export const instant = false;
@@ -25,17 +25,14 @@ export default async function ContentPage({ searchParams }: ContentPageProps = {
 
   if (!isEnvConfigured) {
     return (
-      <div className="min-h-screen bg-neutral-900 text-neutral-100 flex flex-col font-sans">
-        <AppNavigation />
-        <main id="main-content" tabIndex={-1} className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
-          <div className="p-6 rounded-xl bg-amber-950/30 border border-amber-800 text-amber-200">
-            <h2 className="text-base font-semibold mb-1">Configuration Required</h2>
-            <p className="text-xs text-amber-300/80">
-              Please configure your live Supabase credentials in .env.local to manage editorial content.
-            </p>
-          </div>
-        </main>
-      </div>
+      <WorkspaceShell maxWidth="7xl" mainClassName="space-y-6">
+        <div className="surface-card p-6 sm:p-8 badge-warning border space-y-1.5">
+          <h2 className="heading-section text-base">Configuration Required</h2>
+          <p className="text-xs sm:text-sm opacity-90">
+            Please configure your live Supabase credentials in .env.local to manage editorial content.
+          </p>
+        </div>
+      </WorkspaceShell>
     );
   }
 
@@ -65,14 +62,11 @@ export default async function ContentPage({ searchParams }: ContentPageProps = {
 
   if (!memberData) {
     return (
-      <div className="min-h-screen bg-neutral-900 text-neutral-100 flex flex-col font-sans">
-        <AppNavigation />
-        <main id="main-content" tabIndex={-1} className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
-          <div className="p-6 rounded-xl bg-neutral-950 border border-neutral-800 text-center">
-            <p className="text-sm text-neutral-400">No workspace membership found.</p>
-          </div>
-        </main>
-      </div>
+      <WorkspaceShell maxWidth="7xl">
+        <div className="surface-card p-8 text-center">
+          <p className="text-sm text-[var(--text-secondary)]">No workspace membership found.</p>
+        </div>
+      </WorkspaceShell>
     );
   }
 
@@ -95,11 +89,8 @@ export default async function ContentPage({ searchParams }: ContentPageProps = {
   const projects = projectsResult.data || [];
 
   return (
-    <div className="min-h-screen bg-neutral-900 text-neutral-100 flex flex-col font-sans">
-      <AppNavigation />
-
-      <main id="main-content" tabIndex={-1} className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
-        <ContentWorkspace
+    <WorkspaceShell workspaceName={workspace.name} maxWidth="wide" mainClassName="space-y-6">
+      <ContentWorkspace
           initialItems={initialItems}
           initialIdeas={initialIdeas}
           workspaceId={workspace.id}
@@ -111,7 +102,6 @@ export default async function ContentPage({ searchParams }: ContentPageProps = {
           initialStatusFilter={resolvedParams.status}
           initialContentId={resolvedParams.contentId}
         />
-      </main>
-    </div>
+    </WorkspaceShell>
   );
 }

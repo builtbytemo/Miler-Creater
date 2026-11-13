@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation';
 import { connection } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { resolveAuthorizedWorkspace } from '@/lib/actions/content-actions';
-import { AppNavigation } from '@/components/layout/AppNavigation';
+import { WorkspaceShell } from '@/components/layout/WorkspaceShell';
 import { NotificationCenter } from '@/components/notifications/NotificationCenter';
 import { DEFAULT_TIMEZONE } from '@/lib/temporal/timezone';
 
@@ -31,17 +31,14 @@ export default async function NotificationsPage({ searchParams }: NotificationsP
 
   if (wsError || !workspaceId) {
     return (
-      <div className="min-h-screen bg-neutral-900 text-neutral-100 flex flex-col font-sans">
-        <AppNavigation />
-        <main id="main-content" tabIndex={-1} className="flex-1 max-w-5xl w-full mx-auto p-4 sm:p-6 lg:p-8">
-          <div className="p-6 rounded-xl bg-amber-950/40 border border-amber-900/60 text-amber-200">
-            <h2 className="text-base font-semibold mb-1">Workspace Required</h2>
-            <p className="text-xs text-amber-300/80">
-              No active workspace membership found. Please create or join a workspace to view notifications.
-            </p>
-          </div>
-        </main>
-      </div>
+      <WorkspaceShell maxWidth="5xl">
+        <div className="surface-card p-6 sm:p-8 badge-warning border space-y-1.5">
+          <h2 className="heading-section text-base">Workspace Required</h2>
+          <p className="text-xs sm:text-sm opacity-90">
+            No active workspace membership found. Please create or join a workspace to view notifications.
+          </p>
+        </div>
+      </WorkspaceShell>
     );
   }
 
@@ -54,17 +51,13 @@ export default async function NotificationsPage({ searchParams }: NotificationsP
   const userTimeZone = profile?.timezone || DEFAULT_TIMEZONE;
 
   return (
-    <div className="min-h-screen bg-neutral-900 text-neutral-100 flex flex-col font-sans">
-      <AppNavigation />
-
-      <main id="main-content" tabIndex={-1} className="flex-1 max-w-5xl w-full mx-auto p-4 sm:p-6 lg:p-8">
-        <NotificationCenter
-          workspaceId={workspaceId}
-          workspaceName={wsData?.name}
-          userTimeZone={userTimeZone}
-          initialReadFilter={resolvedParams.filter === 'unread' ? 'unread' : 'all'}
-        />
-      </main>
-    </div>
+    <WorkspaceShell workspaceName={wsData?.name} maxWidth="5xl">
+      <NotificationCenter
+        workspaceId={workspaceId}
+        workspaceName={wsData?.name}
+        userTimeZone={userTimeZone}
+        initialReadFilter={resolvedParams.filter === 'unread' ? 'unread' : 'all'}
+      />
+    </WorkspaceShell>
   );
 }

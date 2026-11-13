@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation';
 import { connection } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getTasks } from '@/lib/services/task-service';
-import { AppNavigation } from '@/components/layout/AppNavigation';
+import { WorkspaceShell } from '@/components/layout/WorkspaceShell';
 import { TaskWorkspace } from '@/components/tasks/TaskWorkspace';
 import type { Database } from '@/types/database';
 
@@ -28,24 +28,14 @@ export default async function TasksPage({ searchParams }: TasksPageProps) {
 
   if (!isEnvConfigured) {
     return (
-      <div
-        data-workspace-shell="v2"
-        className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] flex flex-col md:flex-row font-sans"
-      >
-        <AppNavigation />
-        <main
-          id="main-content"
-          tabIndex={-1}
-          className="flex-1 min-w-0 max-w-6xl w-full mx-auto px-5 py-7 sm:px-8 sm:py-10 lg:px-12 lg:py-12 space-y-6"
-        >
-          <div className="surface-card p-6 sm:p-8 badge-warning border space-y-1.5">
-            <h2 className="heading-section text-base">Configuration Required</h2>
-            <p className="text-xs sm:text-sm opacity-90">
-              Please configure your live Supabase credentials in .env.local to manage persisted tasks.
-            </p>
-          </div>
-        </main>
-      </div>
+      <WorkspaceShell maxWidth="6xl" mainClassName="space-y-6">
+        <div className="surface-card p-6 sm:p-8 badge-warning border space-y-1.5">
+          <h2 className="heading-section text-base">Configuration Required</h2>
+          <p className="text-xs sm:text-sm opacity-90">
+            Please configure your live Supabase credentials in .env.local to manage persisted tasks.
+          </p>
+        </div>
+      </WorkspaceShell>
     );
   }
 
@@ -66,24 +56,14 @@ export default async function TasksPage({ searchParams }: TasksPageProps) {
 
   if (!memberData) {
     return (
-      <div
-        data-workspace-shell="v2"
-        className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] flex flex-col md:flex-row font-sans"
-      >
-        <AppNavigation />
-        <main
-          id="main-content"
-          tabIndex={-1}
-          className="flex-1 min-w-0 max-w-6xl w-full mx-auto px-5 py-7 sm:px-8 sm:py-10 lg:px-12 lg:py-12 flex items-center justify-center"
-        >
-          <div className="surface-card max-w-md w-full p-8 text-center space-y-2">
-            <h2 className="heading-section text-lg">No Active Workspace</h2>
-            <p className="text-sm text-[var(--text-secondary)]">
-              No workspace membership found.
-            </p>
-          </div>
-        </main>
-      </div>
+      <WorkspaceShell maxWidth="6xl" mainClassName="flex items-center justify-center">
+        <div className="surface-card max-w-md w-full p-8 text-center space-y-2">
+          <h2 className="heading-section text-lg">No Active Workspace</h2>
+          <p className="text-sm text-[var(--text-secondary)]">
+            No workspace membership found.
+          </p>
+        </div>
+      </WorkspaceShell>
     );
   }
 
@@ -114,17 +94,7 @@ export default async function TasksPage({ searchParams }: TasksPageProps) {
   const completedCount = tasks.filter((t) => t.status === 'done').length;
 
   return (
-    <div
-      data-workspace-shell="v2"
-      className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] flex flex-col md:flex-row font-sans"
-    >
-      <AppNavigation />
-
-      <main
-        id="main-content"
-        tabIndex={-1}
-        className="flex-1 min-w-0 max-w-6xl w-full mx-auto px-5 py-7 sm:px-8 sm:py-10 lg:px-12 lg:py-12 space-y-8"
-      >
+    <WorkspaceShell workspaceName={workspace.name} maxWidth="wide" mainClassName="space-y-6">
         {/* Quiet Top Meta Row */}
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-xs text-[var(--text-muted)] min-w-0">
           <div className="flex items-center gap-2 font-mono min-w-0 max-w-full">
@@ -174,7 +144,6 @@ export default async function TasksPage({ searchParams }: TasksPageProps) {
           initialDateFilter={resolvedParams.dateFilter}
           initialTaskId={resolvedParams.taskId}
         />
-      </main>
-    </div>
+    </WorkspaceShell>
   );
 }

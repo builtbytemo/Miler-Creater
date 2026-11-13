@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { resolveAuthorizedWorkspace } from '@/lib/auth/workspace';
 import { getDashboardSummary, type DashboardSummary } from '@/lib/services/dashboard-service';
 import { signOutAction } from '@/lib/auth/actions';
-import { AppNavigation } from '@/components/layout/AppNavigation';
+import { WorkspaceShell } from '@/components/layout/WorkspaceShell';
 import { DashboardKpiCard } from '@/components/dashboard/DashboardKpiCard';
 import { DashboardActionNeeded } from '@/components/dashboard/DashboardActionNeeded';
 import { DashboardContentPipeline } from '@/components/dashboard/DashboardContentPipeline';
@@ -63,17 +63,12 @@ export default async function DashboardPage() {
 
       if (wsError || !workspaceId) {
         return (
-          <div
-            data-workspace-shell="v2"
-            className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] flex flex-col md:flex-row font-sans"
+          <WorkspaceShell
+            maxWidth="narrow"
+            padded={false}
+            mainClassName="px-6 py-12 sm:px-10 flex items-center justify-center"
           >
-            <AppNavigation />
-            <main
-              id="main-content"
-              tabIndex={-1}
-              className="flex-1 min-w-0 max-w-4xl w-full mx-auto px-6 py-12 sm:px-10 flex items-center justify-center"
-            >
-              <div className="surface-card zahi-khatam-accent max-w-md w-full p-7 sm:p-9 text-center space-y-4">
+            <div className="surface-card zahi-khatam-accent max-w-md w-full p-7 sm:p-9 text-center space-y-4">
                 <div className="space-y-2">
                   <div className="flex justify-center">
                     <ZahiMascot size={48} />
@@ -95,8 +90,7 @@ export default async function DashboardPage() {
                   </Link>
                 </div>
               </div>
-            </main>
-          </div>
+          </WorkspaceShell>
         );
       }
 
@@ -230,19 +224,14 @@ export default async function DashboardPage() {
   }
 
   return (
-    <div
-      data-workspace-shell="v2"
-      className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] flex flex-col md:flex-row font-sans"
+    <WorkspaceShell
+      workspaceName={workspace?.name}
+      userLabel={displayName}
+      maxWidth="wide"
+      mainClassName="space-y-5"
     >
-      <AppNavigation workspaceName={workspace?.name} userLabel={displayName} />
-
-      <main
-        id="main-content"
-        tabIndex={-1}
-        className="flex-1 min-w-0 max-w-[1440px] w-full px-4 py-4 sm:px-6 sm:py-5 lg:px-8 lg:py-6 space-y-5"
-      >
         {/* Compact Command Header */}
-        <header className="flex flex-col lg:flex-row lg:items-end justify-between gap-3 pb-4 border-b border-[var(--border-subtle)] min-w-0">
+        <header className="flex flex-col @3xl:flex-row @3xl:items-end justify-between gap-3 pb-4 border-b border-[var(--border-subtle)] min-w-0">
           <div className="space-y-1 min-w-0">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] font-mono text-[var(--text-muted)]">
               <span className="font-medium text-[var(--text-secondary)]">
@@ -317,9 +306,9 @@ export default async function DashboardPage() {
 
         {summary && (
           <>
-            {/* Unified Segmented Telemetry Ledger (seamless 1px grid across all breakpoints) */}
+            {/* Unified Segmented Telemetry Ledger (seamless 1px grid adapted to container width) */}
             <section aria-label="Workspace pulse" className="min-w-0">
-              <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-7 gap-px rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--border-subtle)] overflow-hidden">
+              <div className="grid grid-cols-2 @md:grid-cols-4 @4xl:grid-cols-7 gap-px rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--border-subtle)] overflow-hidden">
                 <DashboardKpiCard
                   title="Overdue Tasks"
                   count={summary.tasks.overdueCount}
@@ -375,15 +364,15 @@ export default async function DashboardPage() {
                   variant="info"
                   tier="compact"
                   subtitle={summary.notifications.unreadCount > 0 ? 'Unread feed' : 'Caught up'}
-                  className="col-span-2 sm:col-span-2 xl:col-span-1"
+                  className="col-span-2 @md:col-span-2 @4xl:col-span-1"
                 />
               </div>
             </section>
 
             {/* Asymmetric Operational Body */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start min-w-0">
+            <div className="grid grid-cols-1 @3xl:grid-cols-12 gap-5 items-start min-w-0">
               {/* Primary Execution Stream */}
-              <div className="lg:col-span-7 space-y-5 min-w-0">
+              <div className="@3xl:col-span-7 space-y-5 min-w-0">
                 <DashboardActionNeeded
                   workspaceId={summary.workspaceId}
                   urgentTasks={summary.tasks.urgentTasks}
@@ -399,7 +388,7 @@ export default async function DashboardPage() {
               </div>
 
               {/* Right Operational Rail */}
-              <div className="lg:col-span-5 space-y-5 min-w-0">
+              <div className="@3xl:col-span-5 space-y-5 min-w-0">
                 <DashboardContentPipeline
                   content={summary.content}
                   timeZone={summary.timeZone}
@@ -467,7 +456,6 @@ export default async function DashboardPage() {
             </div>
           </>
         )}
-      </main>
-    </div>
+    </WorkspaceShell>
   );
 }

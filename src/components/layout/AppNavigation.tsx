@@ -26,19 +26,33 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   LogOut,
+  Sparkles,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { ThemeToggle } from '@/components/layout/ThemeToggle';
 import { ZahiLogoMark, ZahiWordmark } from '@/components/brand/ZahiBrand';
+import { ZahiAiMobileTrigger } from '@/components/layout/ZahiAiRail';
 import {
   CommandPalette,
   dispatchOpenCommandPalette,
 } from '@/components/ui/CommandPalette';
+import {
+  SIDEBAR_STORAGE_KEY,
+  getSavedSidebarCollapsed,
+  setSidebarCollapsed,
+  toggleSidebarCollapsed,
+  toggleAiRailOpen,
+  subscribeToSidebarStore,
+} from '@/lib/layout/rail-preferences';
 import { getUnreadNotificationCountAction } from '@/lib/actions/notification-actions';
 
-export const SIDEBAR_STORAGE_KEY = 'zahi:sidebar-collapsed';
-const SIDEBAR_CHANGE_EVENT = 'zahi:sidebar-change';
+export {
+  SIDEBAR_STORAGE_KEY,
+  getSavedSidebarCollapsed,
+  setSidebarCollapsed,
+  toggleSidebarCollapsed,
+};
 
 export const primaryLinks = [
   { href: '/dashboard', label: 'Overview', icon: LayoutDashboard },
@@ -79,51 +93,8 @@ function isRouteActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function getSavedSidebarCollapsed(): boolean {
-  if (typeof window === 'undefined') return false;
-  try {
-    return window.localStorage.getItem(SIDEBAR_STORAGE_KEY) === 'true';
-  } catch {
-    return false;
-  }
-}
-
-export function setSidebarCollapsed(collapsed: boolean): void {
-  try {
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem(SIDEBAR_STORAGE_KEY, collapsed ? 'true' : 'false');
-      window.dispatchEvent(new CustomEvent(SIDEBAR_CHANGE_EVENT));
-    }
-  } catch {
-    // Ignore storage access errors
-  }
-}
-
-export function toggleSidebarCollapsed(): boolean {
-  const next = !getSavedSidebarCollapsed();
-  setSidebarCollapsed(next);
-  return next;
-}
-
 function getServerSidebarCollapsed(): boolean {
   return false;
-}
-
-function subscribeToSidebarStore(onStoreChange: () => void): () => void {
-  if (typeof window === 'undefined') {
-    return () => {};
-  }
-  const handleStorage = (e: StorageEvent) => {
-    if (e.key === null || e.key === SIDEBAR_STORAGE_KEY) {
-      onStoreChange();
-    }
-  };
-  window.addEventListener('storage', handleStorage);
-  window.addEventListener(SIDEBAR_CHANGE_EVENT, onStoreChange);
-  return () => {
-    window.removeEventListener('storage', handleStorage);
-    window.removeEventListener(SIDEBAR_CHANGE_EVENT, onStoreChange);
-  };
 }
 
 function useSyncedUnreadCount(): number {
@@ -299,22 +270,41 @@ function MobileMenuSheet({
               </div>
             )}
 
-            <button
-              type="button"
-              onClick={() => {
-                setOpenPathname(null);
-                dispatchOpenCommandPalette();
-              }}
-              className="flex w-full items-center justify-between rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-secondary)] hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]"
-            >
-              <span className="flex items-center gap-2">
-                <Search className="h-3.5 w-3.5 text-[var(--text-muted)]" aria-hidden="true" />
-                <span>Jump to page or action…</span>
-              </span>
-              <kbd className="font-mono text-[10px] px-1.5 py-0.5 rounded-[4px] border border-[var(--border-subtle)] bg-[var(--bg-canvas)] text-[var(--text-muted)]">
-                ⌘K
-              </kbd>
-            </button>
+            <div className="space-y-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setOpenPathname(null);
+                  dispatchOpenCommandPalette();
+                }}
+                className="flex w-full items-center justify-between rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-secondary)] hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]"
+              >
+                <span className="flex items-center gap-2">
+                  <Search className="h-3.5 w-3.5 text-[var(--text-muted)]" aria-hidden="true" />
+                  <span>Jump to page or action…</span>
+                </span>
+                <kbd className="font-mono text-[10px] px-1.5 py-0.5 rounded-[4px] border border-[var(--border-subtle)] bg-[var(--bg-canvas)] text-[var(--text-muted)]">
+                  ⌘K
+                </kbd>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setOpenPathname(null);
+                  toggleAiRailOpen();
+                }}
+                className="flex w-full items-center justify-between rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-secondary)] hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]"
+              >
+                <span className="flex items-center gap-2">
+                  <Sparkles className="h-3.5 w-3.5 text-[var(--accent-text)]" aria-hidden="true" />
+                  <span>Open Zahi Assistant Dock</span>
+                </span>
+                <kbd className="font-mono text-[10px] px-1.5 py-0.5 rounded-[4px] border border-[var(--border-subtle)] bg-[var(--bg-canvas)] text-[var(--text-muted)]">
+                  ]
+                </kbd>
+              </button>
+            </div>
 
             <div className="space-y-0.5">
               <p className="px-2.5 pb-1 text-[10px] font-mono uppercase tracking-[0.08em] text-[var(--text-muted)]">
@@ -764,9 +754,9 @@ function DesktopSidebar({
                 type="button"
                 onClick={dispatchOpenCommandPalette}
                 className="font-mono text-[10px] hover:text-[var(--text-primary)] transition-colors"
-                title="Command Palette (⌘K) · Toggle sidebar ([)"
+                title="Left rail ([) · Assistant dock (]) · Command Palette (⌘K)"
               >
-                [ · ⌘K
+                [ · ] · ⌘K
               </button>
             </div>
           </>
@@ -798,7 +788,7 @@ function MobileNavigationBar({
             <ZahiWordmark className="text-sm leading-none" />
           </Link>
 
-          <div className="flex shrink-0 items-center gap-1.5">
+          <div className="flex shrink-0 items-center gap-1">
             <button
               type="button"
               onClick={dispatchOpenCommandPalette}
@@ -807,6 +797,7 @@ function MobileNavigationBar({
             >
               <Search className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
+            <ZahiAiMobileTrigger />
             <ThemeToggle variant="compact" />
             <NotificationBell panelAlign="right" />
             <MobileMenuSheet

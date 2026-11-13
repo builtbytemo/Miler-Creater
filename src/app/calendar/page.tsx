@@ -8,7 +8,7 @@ import {
 import { getTasks } from '@/lib/services/task-service';
 import { getWeekRange, getMonthGrid } from '@/lib/temporal/calendar';
 import { DEFAULT_TIMEZONE, isValidTimeZone, normalizeTimeZone } from '@/lib/temporal/timezone';
-import { AppNavigation } from '@/components/layout/AppNavigation';
+import { WorkspaceShell } from '@/components/layout/WorkspaceShell';
 import { CalendarWorkspace } from '@/components/calendar/CalendarWorkspace';
 
 export const instant = false;
@@ -21,24 +21,14 @@ export default async function CalendarPage() {
 
   if (!isEnvConfigured) {
     return (
-      <div
-        data-workspace-shell="v2"
-        className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] flex flex-col md:flex-row font-sans"
-      >
-        <AppNavigation />
-        <main
-          id="main-content"
-          tabIndex={-1}
-          className="flex-1 min-w-0 max-w-6xl w-full mx-auto px-5 py-7 sm:px-8 sm:py-10 lg:px-12 lg:py-12 space-y-6"
-        >
-          <div className="surface-card p-6 sm:p-8 badge-warning border space-y-1.5">
-            <h2 className="heading-section text-base">Configuration Required</h2>
-            <p className="text-xs sm:text-sm opacity-90">
-              Please configure your live Supabase credentials in .env.local to access the editorial calendar.
-            </p>
-          </div>
-        </main>
-      </div>
+      <WorkspaceShell maxWidth="6xl" mainClassName="space-y-6">
+        <div className="surface-card p-6 sm:p-8 badge-warning border space-y-1.5">
+          <h2 className="heading-section text-base">Configuration Required</h2>
+          <p className="text-xs sm:text-sm opacity-90">
+            Please configure your live Supabase credentials in .env.local to access the editorial calendar.
+          </p>
+        </div>
+      </WorkspaceShell>
     );
   }
 
@@ -75,21 +65,11 @@ export default async function CalendarPage() {
 
   if (!memberData) {
     return (
-      <div
-        data-workspace-shell="v2"
-        className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] flex flex-col md:flex-row font-sans"
-      >
-        <AppNavigation />
-        <main
-          id="main-content"
-          tabIndex={-1}
-          className="flex-1 min-w-0 max-w-6xl w-full mx-auto px-5 py-7 sm:px-8 sm:py-10 lg:px-12 lg:py-12"
-        >
-          <div className="surface-card p-8 text-center">
-            <p className="text-sm text-[var(--text-secondary)]">No workspace membership found.</p>
-          </div>
-        </main>
-      </div>
+      <WorkspaceShell maxWidth="6xl">
+        <div className="surface-card p-8 text-center">
+          <p className="text-sm text-[var(--text-secondary)]">No workspace membership found.</p>
+        </div>
+      </WorkspaceShell>
     );
   }
 
@@ -131,18 +111,8 @@ export default async function CalendarPage() {
   const projects = projectsResult.data || [];
 
   return (
-    <div
-      data-workspace-shell="v2"
-      className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] flex flex-col md:flex-row font-sans"
-    >
-      <AppNavigation />
-
-      <main
-        id="main-content"
-        tabIndex={-1}
-        className="flex-1 min-w-0 max-w-7xl w-full mx-auto px-4 py-6 sm:px-6 sm:py-8 lg:px-10 lg:py-10 space-y-6"
-      >
-        <CalendarWorkspace
+    <WorkspaceShell workspaceName={workspace.name} maxWidth="wide" mainClassName="space-y-6">
+      <CalendarWorkspace
           initialScheduledItems={scheduledItems}
           initialScheduledTasks={scheduledTasks}
           initialUnscheduledItems={unscheduledItems}
@@ -154,7 +124,6 @@ export default async function CalendarPage() {
           initialWeekRange={currentWeek}
           initialLoadedRange={{ startIso: scheduledFromIso, endIso: scheduledToIso }}
         />
-      </main>
-    </div>
+    </WorkspaceShell>
   );
 }

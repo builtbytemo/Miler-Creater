@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { AlertCircle, RotateCcw, ArrowUpRight } from 'lucide-react';
-import { AppNavigation } from '@/components/layout/AppNavigation';
+import { WorkspaceShell } from '@/components/layout/WorkspaceShell';
 
 export function WorkspaceError({
   reset,
@@ -11,20 +11,15 @@ export function WorkspaceError({
   reset: () => void;
 }) {
   return (
-    <div
-      data-workspace-shell="v2"
-      className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] flex flex-col md:flex-row font-sans"
+    <WorkspaceShell
+      maxWidth="wide"
+      padded={false}
+      mainClassName="min-h-[75vh] flex items-center justify-center p-6"
     >
-      <AppNavigation />
-      <main
-        id="main-content"
-        tabIndex={-1}
-        className="flex flex-1 min-w-0 min-h-[75vh] items-center justify-center p-6"
+      <div
+        role="alert"
+        className="surface-card w-full max-w-md p-6 sm:p-8 text-center space-y-4"
       >
-        <div
-          role="alert"
-          className="surface-card w-full max-w-md p-6 sm:p-8 text-center space-y-4"
-        >
           <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-[var(--radius-sm)] badge-warning border">
             <AlertCircle aria-hidden="true" className="h-5 w-5" />
           </div>
@@ -54,7 +49,6 @@ export function WorkspaceError({
             </Link>
           </div>
         </div>
-      </main>
-    </div>
+    </WorkspaceShell>
   );
 }

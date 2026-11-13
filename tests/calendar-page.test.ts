@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import CalendarPage from '../src/app/calendar/page';
 import type { ContentItemWithMeta } from '../src/lib/services/content-service';
 
@@ -137,9 +138,11 @@ describe('CalendarPage Server Component (Phase 4, Step 2)', () => {
     process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://your-project-ref.supabase.co';
 
     const result = await CalendarPage();
+    const html = renderToStaticMarkup(result);
 
     expect(result).toBeDefined();
-    expect(result.props.className).toContain('bg-[var(--bg-canvas)]');
+    expect(html).toContain('bg-[var(--bg-canvas)]');
+    expect(html).toContain('Configuration Required');
     expect(mockGetUser).not.toHaveBeenCalled();
   });
 

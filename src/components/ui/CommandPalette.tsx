@@ -22,14 +22,17 @@ import {
   Monitor,
   Search,
   CornerDownLeft,
+  PanelLeft,
+  PanelRight,
   X,
 } from 'lucide-react';
 import { setThemePreference } from '@/components/layout/ThemeToggle';
+import { toggleSidebarCollapsed, toggleAiRailOpen } from '@/lib/layout/rail-preferences';
 
 export interface CommandPaletteItem {
   id: string;
   label: string;
-  group: 'Navigate' | 'Settings' | 'Appearance';
+  group: 'Navigate' | 'Workspace' | 'Settings' | 'Appearance';
   keywords: string;
   shortcut?: string;
   href?: string;
@@ -98,6 +101,24 @@ export const COMMAND_PALETTE_ITEMS: readonly CommandPaletteItem[] = [
     keywords: 'cli miler oauth claude ai integrations api keys',
     href: '/settings/tokens',
     icon: KeyRound,
+  },
+  {
+    id: 'workspace-toggle-left-sidebar',
+    label: 'Toggle Left Navigation Sidebar',
+    group: 'Workspace',
+    keywords: 'sidebar nav collapse expand panel left',
+    shortcut: '[',
+    action: () => toggleSidebarCollapsed(),
+    icon: PanelLeft,
+  },
+  {
+    id: 'workspace-toggle-ai-rail',
+    label: 'Toggle Zahi Assistant Dock',
+    group: 'Workspace',
+    keywords: 'ai assistant right sidebar dock panel',
+    shortcut: ']',
+    action: () => toggleAiRailOpen(),
+    icon: PanelRight,
   },
   {
     id: 'theme-light',
@@ -278,6 +299,11 @@ function CommandPaletteDialog({ onClose }: { onClose: () => void }) {
                     <span className="truncate font-medium">{item.label}</span>
                   </span>
                   <span className="flex items-center gap-2 shrink-0">
+                    {item.shortcut && (
+                      <kbd className="font-mono text-[10px] rounded-[4px] border border-[var(--border-subtle)] bg-[var(--bg-surface-muted)] px-1.5 py-0.5 text-[var(--text-muted)] leading-none">
+                        {item.shortcut}
+                      </kbd>
+                    )}
                     <span className="text-[10px] font-mono uppercase tracking-wider text-[var(--text-muted)]">
                       {item.group}
                     </span>

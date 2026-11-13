@@ -318,9 +318,8 @@ describe('Notification UI Components & Route Integration (Phase 5, Step 4)', () 
 
       const page = await NotificationsPage();
       expect(page).toBeDefined();
-      // Inspect element for Workspace Required banner
-      const mainProps = (page as any).props.children[1].props;
-      expect(JSON.stringify(mainProps)).toContain('Workspace Required');
+      const html = renderToStaticMarkup(page);
+      expect(html).toContain('Workspace Required');
     });
 
     it('/notifications renders NotificationCenter when authenticated and authorized', async () => {
@@ -333,8 +332,9 @@ describe('Notification UI Components & Route Integration (Phase 5, Step 4)', () 
 
       const page = await NotificationsPage();
       expect(page).toBeDefined();
-      const mainProps = (page as any).props.children[1].props;
-      expect(JSON.stringify(mainProps)).toContain('Engineering Workspace');
+      expect(
+        JSON.stringify((page as React.ReactElement<Record<string, unknown>>).props)
+      ).toContain('Engineering Workspace');
     });
   });
 });
