@@ -378,20 +378,20 @@ export function CalendarDayView({
   return (
     <div className="space-y-5" data-testid="calendar-day-view">
       {/* 1. Day Header & Quick Time-Block Scheduler */}
-      <section className="surface-card p-5 sm:p-6 space-y-5">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+      <section className="surface-card p-4 sm:p-5 space-y-5">
+        <div className="flex flex-col @3xl:flex-row @3xl:items-center @3xl:justify-between gap-4">
           <div className="space-y-1.5 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-tertiary)]">
                 Daily Brief &amp; Agenda
               </span>
               {isToday && (
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-[var(--accent)] text-[var(--accent-ink)]">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[var(--radius-xs)] text-[11px] font-semibold bg-[var(--accent)] text-[var(--accent-ink)]">
                   <Sparkles className="w-3 h-3" />
                   Today
                 </span>
               )}
-              <span className="text-[11px] font-mono text-[var(--text-tertiary)] px-2.5 py-0.5 rounded-full bg-[var(--bg-subtle)] border border-[var(--border-subtle)]">
+              <span className="text-[11px] font-mono text-[var(--text-tertiary)] px-2 py-0.5 rounded-[var(--radius-xs)] bg-[var(--bg-surface-muted)] border border-[var(--border-subtle)]">
                 {userTimeZone}
               </span>
             </div>
@@ -437,7 +437,7 @@ export function CalendarDayView({
               {overlappingEventsCount > 0 && (
                 <>
                   <span className="text-[var(--border-strong)]" aria-hidden="true">·</span>
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold badge-warning border">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[var(--radius-xs)] text-[11px] font-semibold badge-warning border">
                     <AlertTriangle className="w-3 h-3" />
                     {overlappingEventsCount} overlapping
                   </span>
@@ -448,11 +448,11 @@ export function CalendarDayView({
 
           {/* Accessible Time Picker & Primary Schedule Action */}
           {(onScheduleAtHour || onScheduleAtTime) && (
-            <div className="flex flex-wrap items-center gap-2 shrink-0 bg-[var(--bg-subtle)]/75 p-2 rounded-2xl border border-[var(--border-subtle)]">
+            <div className="flex flex-wrap items-center gap-2 shrink-0 bg-[var(--bg-surface-muted)]/75 p-1.5 rounded-[var(--radius-md)] border border-[var(--border-subtle)]">
               <label htmlFor="day-quick-time-input" className="sr-only">
                 Select time to schedule on {dayRange.label}
               </label>
-              <div className="flex items-center gap-1.5 pl-2">
+              <div className="flex items-center gap-1.5 pl-1.5">
                 <Clock className="w-3.5 h-3.5 text-[var(--text-tertiary)] shrink-0" />
                 <input
                   id="day-quick-time-input"
@@ -461,7 +461,7 @@ export function CalendarDayView({
                   onChange={(e) => setCustomTime(e.target.value)}
                   aria-label="Select time to schedule"
                   data-testid="day-schedule-time-input"
-                  className="bg-[var(--bg-surface)] border border-[var(--border-default)] rounded-xl px-2.5 py-1.5 text-xs font-mono font-semibold text-[var(--text-primary)] focus:outline-none focus:border-[var(--border-strong)]"
+                  className="input-control px-2.5 py-1.5 text-xs font-mono font-semibold"
                 />
               </div>
 
@@ -469,7 +469,7 @@ export function CalendarDayView({
                 type="button"
                 onClick={() => handleTriggerScheduleAtTime(customTime)}
                 data-testid="day-quick-schedule-btn"
-                className="btn-accent px-4 py-2 text-xs font-semibold"
+                className="btn-accent px-3.5 py-2 text-xs font-semibold"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Schedule block</span>
@@ -480,7 +480,7 @@ export function CalendarDayView({
 
         {/* 2. Compact Full-Day 24-Hour Overview Strip (12:00 AM – 11:59 PM) */}
         <div
-          className="rounded-2xl bg-[var(--bg-subtle)]/65 border border-[var(--border-subtle)] p-3.5 sm:p-4 space-y-3"
+          className="rounded-[var(--radius-md)] bg-[var(--bg-subtle)]/65 border border-[var(--border-subtle)] p-3.5 sm:p-4 space-y-3"
           data-testid="day-overview-strip"
         >
           <div className="flex flex-wrap items-center justify-between gap-2 text-[11px]">
@@ -496,7 +496,7 @@ export function CalendarDayView({
             <div className="flex items-center gap-2 flex-wrap">
               {earlyEvents.length > 0 && (
                 <span
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[var(--accent)] text-[var(--accent-ink)]"
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[var(--radius-xs)] text-[10px] font-semibold bg-[var(--accent)] text-[var(--accent-ink)]"
                   data-testid="day-early-indicator"
                 >
                   <Moon className="w-3 h-3" />
@@ -505,7 +505,7 @@ export function CalendarDayView({
               )}
               {lateEvents.length > 0 && (
                 <span
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[var(--accent)] text-[var(--accent-ink)]"
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[var(--radius-xs)] text-[10px] font-semibold bg-[var(--accent)] text-[var(--accent-ink)]"
                   data-testid="day-late-indicator"
                 >
                   <Moon className="w-3 h-3" />
@@ -522,7 +522,7 @@ export function CalendarDayView({
 
           {/* Proportional 24-Hour Visual Track */}
           <div
-            className="relative w-full rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] overflow-hidden"
+            className="relative w-full rounded-[var(--radius-sm)] bg-[var(--bg-surface)] border border-[var(--border-subtle)] overflow-hidden"
             style={{ height: Math.max(44, maxLanes * 26 + 12) }}
           >
             {/* Subtle Daypart Shading: Early (0-7), Core Workday (7-19), Night (19-24) */}
@@ -589,9 +589,9 @@ export function CalendarDayView({
             })}
           </div>
 
-          {/* 24 Compact Interactive Hour Cells (Keyboard & Mouse Accessible) */}
+          {/* 24 Compact Interactive Hour Cells (Keyboard & Mouse Accessible, @container responsive) */}
           <div
-            className="grid grid-cols-6 sm:grid-cols-12 lg:grid-cols-24 gap-1"
+            className="grid grid-cols-6 @md:grid-cols-12 @4xl:grid-cols-24 gap-1"
             role="group"
             aria-label="Schedule by hour of day"
           >
@@ -606,7 +606,7 @@ export function CalendarDayView({
                   onClick={() => onScheduleAtHour?.(hour)}
                   aria-label={`Schedule item at ${formatHourLabel(hour)}${count > 0 ? ` (${count} scheduled)` : ''}`}
                   title={`Schedule at ${formatHourLabel(hour)}`}
-                  className={`h-7 rounded-lg text-[10px] font-mono transition-colors flex flex-col items-center justify-center border focus:outline-none focus:ring-2 focus:ring-[var(--text-primary)] ${
+                  className={`h-7 rounded-[var(--radius-xs)] text-[10px] font-mono transition-colors flex flex-col items-center justify-center border focus:outline-none focus:ring-2 focus:ring-[var(--text-primary)] ${
                     count > 0
                       ? 'bg-[var(--accent-subtle)] border-[var(--accent)] text-[var(--text-primary)] font-bold'
                       : isCoreHour
@@ -622,14 +622,14 @@ export function CalendarDayView({
         </div>
       </section>
 
-      {/* 3. Main Two-Column Daily Planning Layout: Workspace-Assigned (Left) + Scheduled Agenda (Right) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-        {/* Left Column (lg:col-span-5): Workspace-Assigned Items (from Tasks & Content tabs) */}
+      {/* 3. Main Two-Column Daily Planning Layout (@container responsive): Workspace-Assigned (Left) + Scheduled Agenda (Right) */}
+      <div className="grid grid-cols-1 @3xl:grid-cols-12 gap-5 items-start">
+        {/* Left Column (@3xl:col-span-5): Workspace-Assigned Items (from Tasks & Content tabs) */}
         <aside
           aria-label="Tasks and content assigned to this day"
-          className="lg:col-span-5 surface-card overflow-hidden flex flex-col"
+          className="@3xl:col-span-5 surface-card overflow-hidden flex flex-col"
         >
-          <div className="px-5 py-4 border-b border-[var(--border-subtle)] flex items-center justify-between gap-2 bg-[var(--bg-subtle)]/50">
+          <div className="px-5 py-3.5 border-b border-[var(--border-subtle)] flex items-center justify-between gap-2 bg-[var(--bg-subtle)]/50">
             <div className="space-y-0.5 min-w-0">
               <div className="flex items-center gap-2">
                 <Layers className="w-4 h-4 text-[var(--text-secondary)] shrink-0" />
@@ -641,14 +641,14 @@ export function CalendarDayView({
                 Items added from the Tasks or Content tabs for {dayRange.dayInfo.weekdayName}
               </p>
             </div>
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold font-mono bg-[var(--bg-surface)] text-[var(--text-primary)] border border-[var(--border-subtle)] shrink-0">
+            <span className="px-2 py-0.5 rounded-[var(--radius-xs)] text-xs font-semibold font-mono bg-[var(--bg-surface)] text-[var(--text-primary)] border border-[var(--border-subtle)] shrink-0 tabular-nums">
               {dayListTotal}
             </span>
           </div>
 
           <div className="p-4 sm:p-5 space-y-4">
             {dayListTotal === 0 ? (
-              <div className="py-8 px-4 text-center rounded-2xl border border-dashed border-[var(--border-default)] bg-[var(--bg-subtle)]/35 space-y-1.5">
+              <div className="py-8 px-4 text-center rounded-[var(--radius-md)] border border-dashed border-[var(--border-default)] bg-[var(--bg-subtle)]/35 space-y-1.5">
                 <p className="text-xs font-semibold text-[var(--text-secondary)]">
                   No workspace-assigned items for {dayRange.dayInfo.weekdayName}
                 </p>
@@ -702,7 +702,7 @@ export function CalendarDayView({
                             onClick={() => onSelectTask(task)}
                             data-testid={`day-task-list-${task.id}`}
                             data-cal-color={colorToken.name}
-                            className={`w-full text-left p-3.5 rounded-2xl border border-l-4 transition-all space-y-2 group focus:outline-none focus:ring-2 focus:ring-[var(--text-primary)] ${colorToken.colorClass} cal-card-surface`}
+                            className={`w-full text-left p-3.5 rounded-[var(--radius-sm)] border border-l-4 transition-all space-y-2 group focus:outline-none focus:ring-2 focus:ring-[var(--text-primary)] ${colorToken.colorClass} cal-card-surface`}
                           >
                             <div className="flex items-center justify-between gap-2 flex-wrap">
                               <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-secondary)]">
@@ -722,7 +722,7 @@ export function CalendarDayView({
                                 <span className="font-mono text-[var(--text-secondary)]">{timeLabel}</span>
                               </span>
                               <span
-                                className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${priorityInfo.badgeClass}`}
+                                className={`px-1.5 py-0.5 rounded-[var(--radius-xs)] text-[10px] font-semibold border ${priorityInfo.badgeClass}`}
                               >
                                 {priorityInfo.label}
                               </span>
@@ -789,7 +789,7 @@ export function CalendarDayView({
                             onClick={() => onSelectContent(item)}
                             data-testid={`day-content-list-${item.id}`}
                             data-cal-color={colorToken.name}
-                            className={`w-full text-left p-3.5 rounded-2xl border border-l-4 transition-all space-y-2 group focus:outline-none focus:ring-2 focus:ring-[var(--text-primary)] ${colorToken.colorClass} cal-card-surface`}
+                            className={`w-full text-left p-3.5 rounded-[var(--radius-sm)] border border-l-4 transition-all space-y-2 group focus:outline-none focus:ring-2 focus:ring-[var(--text-primary)] ${colorToken.colorClass} cal-card-surface`}
                           >
                             <div className="flex items-center justify-between gap-2 flex-wrap">
                               <div className="flex items-center gap-1.5">
@@ -798,7 +798,7 @@ export function CalendarDayView({
                                   aria-hidden="true"
                                 />
                                 <span
-                                  className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${platformPill.pillClass}`}
+                                  className={`px-1.5 py-0.5 rounded-[var(--radius-xs)] text-[10px] font-semibold border ${platformPill.pillClass}`}
                                 >
                                   {platformPill.label}
                                 </span>
@@ -834,13 +834,13 @@ export function CalendarDayView({
           </div>
         </aside>
 
-        {/* Right/Primary Column (lg:col-span-7): Chronological Scheduled Agenda (Calendar items) */}
+        {/* Right/Primary Column (@3xl:col-span-7): Chronological Scheduled Agenda (Calendar items) */}
         <section
           aria-label="Day timeline"
-          className="lg:col-span-7 surface-card overflow-hidden flex flex-col"
+          className="@3xl:col-span-7 surface-card overflow-hidden flex flex-col"
           data-testid="day-chronological-agenda"
         >
-          <div className="px-5 py-4 border-b border-[var(--border-subtle)] bg-[var(--bg-subtle)]/50 flex items-center justify-between gap-3">
+          <div className="px-5 py-3.5 border-b border-[var(--border-subtle)] bg-[var(--bg-subtle)]/50 flex items-center justify-between gap-3">
             <div className="space-y-0.5 min-w-0">
               <div className="flex items-center gap-2">
                 <CalendarClock className="w-4 h-4 text-[var(--text-secondary)] shrink-0" />
@@ -852,7 +852,7 @@ export function CalendarDayView({
                 Chronological time blocks scheduled on the calendar for {dayRange.dayInfo.weekdayName}
               </p>
             </div>
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold font-mono bg-[var(--bg-surface)] text-[var(--text-primary)] border border-[var(--border-subtle)] shrink-0">
+            <span className="px-2 py-0.5 rounded-[var(--radius-xs)] text-xs font-semibold font-mono bg-[var(--bg-surface)] text-[var(--text-primary)] border border-[var(--border-subtle)] shrink-0 tabular-nums">
               {events.length + calendarAllDayTasks.length}
             </span>
           </div>
@@ -873,7 +873,7 @@ export function CalendarDayView({
                         onClick={() => onSelectTask(task)}
                         data-testid={`day-calendar-allday-${task.id}`}
                         data-cal-color={colorToken.name}
-                        className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-l-4 text-xs font-semibold transition-all ${colorToken.colorClass} cal-card-surface`}
+                        className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-[var(--radius-sm)] border border-l-4 text-xs font-semibold transition-all ${colorToken.colorClass} cal-card-surface`}
                       >
                         <span
                           className="w-2 h-2 rounded-full shrink-0 cal-swatch-dot"
@@ -889,7 +889,7 @@ export function CalendarDayView({
             )}
 
             {events.length === 0 ? (
-              <div className="py-8 px-4 text-center rounded-2xl border border-dashed border-[var(--border-default)] bg-[var(--bg-subtle)]/35 space-y-3">
+              <div className="py-8 px-4 text-center rounded-[var(--radius-md)] border border-dashed border-[var(--border-default)] bg-[var(--bg-subtle)]/35 space-y-3">
                 <div className="space-y-1">
                   <p className="text-sm font-semibold text-[var(--text-primary)]">
                     No time blocks scheduled on the agenda
@@ -911,7 +911,7 @@ export function CalendarDayView({
                         key={slot.hour}
                         type="button"
                         onClick={() => onScheduleAtHour(slot.hour)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-[var(--bg-surface)] hover:bg-[var(--accent)] text-[var(--text-primary)] hover:text-[var(--accent-ink)] border border-[var(--border-default)] hover:border-transparent transition-colors"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--radius-sm)] text-xs font-semibold bg-[var(--bg-surface)] hover:bg-[var(--accent)] text-[var(--text-primary)] hover:text-[var(--accent-ink)] border border-[var(--border-default)] hover:border-transparent transition-colors"
                       >
                         <Plus className="w-3 h-3" />
                         <span>{slot.label}</span>
@@ -937,12 +937,12 @@ export function CalendarDayView({
                         if (event.task) onSelectTask(event.task);
                         if (event.content) onSelectContent(event.content);
                       }}
-                      className={`w-full text-left p-4 rounded-2xl border border-l-4 transition-all group focus:outline-none focus:ring-2 focus:ring-[var(--text-primary)] ${event.colorToken.colorClass} cal-card-surface`}
+                      className={`w-full text-left p-4 rounded-[var(--radius-md)] border border-l-4 transition-all group focus:outline-none focus:ring-2 focus:ring-[var(--text-primary)] ${event.colorToken.colorClass} cal-card-surface`}
                     >
                       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2.5">
                         {/* Left: Time Window & Duration */}
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[var(--bg-surface)] text-xs font-mono font-semibold text-[var(--text-primary)] border border-[var(--border-subtle)] shadow-2xs">
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[var(--radius-sm)] bg-[var(--bg-surface)] text-xs font-mono font-semibold text-[var(--text-primary)] border border-[var(--border-subtle)] shadow-2xs">
                             <span
                               className="w-2 h-2 rounded-full shrink-0 cal-swatch-dot"
                               aria-hidden="true"
@@ -958,7 +958,7 @@ export function CalendarDayView({
                           </span>
 
                           {periodTag.isOffHours && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[var(--accent-subtle)] text-[var(--text-primary)] border border-[var(--accent)]">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[var(--radius-xs)] text-[10px] font-semibold bg-[var(--accent-subtle)] text-[var(--text-primary)] border border-[var(--accent)]">
                               <Moon className="w-2.5 h-2.5" />
                               {periodTag.label}
                             </span>
@@ -966,7 +966,7 @@ export function CalendarDayView({
 
                           {event.overlapCount > 0 && (
                             <span
-                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold badge-warning border"
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[var(--radius-xs)] text-[10px] font-semibold badge-warning border"
                               data-testid={`day-overlap-${event.id}`}
                             >
                               <AlertTriangle className="w-2.5 h-2.5" />
@@ -977,7 +977,7 @@ export function CalendarDayView({
 
                         {/* Right: Type, Subtitle & Status Badges */}
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border cal-badge-tint">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[var(--radius-xs)] text-[10px] font-bold uppercase tracking-wider border cal-badge-tint">
                             {isTask ? (
                               <CheckSquare className="w-3 h-3 shrink-0" />
                             ) : (
@@ -987,7 +987,7 @@ export function CalendarDayView({
                           </span>
 
                           <span
-                            className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${event.statusBadgeClass}`}
+                            className={`px-2 py-0.5 rounded-[var(--radius-xs)] text-[10px] font-semibold border ${event.statusBadgeClass}`}
                           >
                             {event.statusLabel}
                           </span>
@@ -1026,7 +1026,7 @@ export function CalendarDayView({
 
                     {/* Gap Indicator between agenda blocks */}
                     {gapAfter && (
-                      <div className="flex items-center justify-between gap-2 px-3.5 py-2 rounded-xl bg-[var(--bg-subtle)]/50 border border-dashed border-[var(--border-subtle)] text-[11px] text-[var(--text-tertiary)]">
+                      <div className="flex items-center justify-between gap-2 px-3.5 py-2 rounded-[var(--radius-sm)] bg-[var(--bg-subtle)]/50 border border-dashed border-[var(--border-subtle)] text-[11px] text-[var(--text-tertiary)]">
                         <span className="inline-flex items-center gap-1.5 font-mono">
                           <Sun className="w-3 h-3 text-[var(--text-tertiary)]" />
                           <span>
@@ -1044,7 +1044,7 @@ export function CalendarDayView({
                                 `${String(gapHour).padStart(2, '0')}:${String(gapMin).padStart(2, '0')}`
                               );
                             }}
-                            className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold text-[var(--text-primary)] bg-[var(--bg-surface)] hover:bg-[var(--accent)] hover:text-[var(--accent-ink)] border border-[var(--border-subtle)] transition-colors"
+                            className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-[var(--radius-xs)] text-[11px] font-semibold text-[var(--text-primary)] bg-[var(--bg-surface)] hover:bg-[var(--accent)] hover:text-[var(--accent-ink)] border border-[var(--border-subtle)] transition-colors"
                           >
                             <Plus className="w-3 h-3" />
                             <span>Schedule in gap</span>

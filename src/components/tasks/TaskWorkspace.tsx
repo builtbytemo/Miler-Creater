@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { getCalendarDateKey } from '@/lib/temporal/calendar';
 import { matchesTaskDate, sortTaskView, type TaskDateFilter, type TaskSort } from '@/lib/tasks/task-view';
@@ -18,6 +18,7 @@ import {
 import { clsx } from 'clsx';
 import type { TaskWithMeta, TaskDetail } from '@/lib/services/task-service';
 import { completeTaskAction, getTaskDetailAction } from '@/lib/actions/task-actions';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { CreateTaskModal } from './CreateTaskModal';
 import { TaskDetailModal } from './TaskDetailModal';
 
@@ -94,6 +95,7 @@ export function TaskWorkspace({
   initialTaskId,
 }: TaskWorkspaceProps) {
   const router = useRouter();
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [tasks, setTasks] = useState<TaskWithMeta[]>(() =>
     initialTasks.filter((task) => task.entry_type !== 'calendar_block' && task.created_from !== 'calendar')
   );
@@ -166,6 +168,37 @@ export function TaskWorkspace({
   const [pendingTaskId, setPendingTaskId] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+
+  // Keyboard-first shortcuts: `/` focuses search, `c` opens task creation
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (isCreateOpen || selectedTaskDetail) return;
+
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable ||
+          target.closest('[role="dialog"]'))
+      ) {
+        return;
+      }
+
+      if (event.key === '/') {
+        event.preventDefault();
+        searchInputRef.current?.focus();
+      } else if (event.key.toLowerCase() === 'c') {
+        event.preventDefault();
+        setIsCreateOpen(true);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isCreateOpen, selectedTaskDetail]);
 
   // Synchronize client state when server revalidates or initialTasks prop updates
   const [prevInitialTasks, setPrevInitialTasks] = useState(initialTasks);
@@ -385,27 +418,43 @@ export function TaskWorkspace({
     }
   };
 
+  const priorityStripeClass = (priority: TaskWithMeta['priority']) => {
+    switch (priority) {
+      case 'urgent':
+        return 'bg-[var(--accent)]';
+      case 'high':
+        return 'bg-[var(--status-warning-text)]';
+      case 'medium':
+        return 'bg-[var(--status-info-text)]/70';
+      default:
+        return 'bg-[var(--border-strong)]';
+    }
+  };
+
   return (
-    <div className="space-y-8 min-w-0">
-      {/* 1. Page Masthead: Confident Title & Primary Action First */}
-      <header className="flex flex-col sm:flex-row sm:items-end justify-between gap-5 border-b border-[var(--border-subtle)] pb-7 min-w-0">
-        <div className="space-y-2 max-w-2xl min-w-0">
-          <h1 className="heading-display text-3xl sm:text-4xl lg:text-[42px] break-words">
+    <div className="space-y-6 min-w-0">
+      {/* 1. Page Masthead: Precision Header & Primary Action */}
+      <header className="flex flex-col @xl:flex-row @xl:items-end justify-between gap-4 border-b border-[var(--border-subtle)] pb-5 min-w-0">
+        <div className="space-y-1 max-w-2xl min-w-0">
+          <h1 className="heading-display text-[22px] sm:text-[26px] break-words">
             Tasks
           </h1>
-          <p className="text-sm sm:text-base text-[var(--text-secondary)] leading-relaxed">
-            Know what to do next. Organize your work, track progress, and plan your day.
+          <p className="text-[13px] text-[var(--text-secondary)] leading-relaxed">
+            Prioritize deliverables, resolve blockers, and keep scheduled work moving.
           </p>
         </div>
 
-        <div className="shrink-0">
+        <div className="shrink-0 flex items-center gap-2">
           <button
             type="button"
             onClick={() => setIsCreateOpen(true)}
-            className="btn-accent px-5 py-2.5 text-xs sm:text-[13px] whitespace-nowrap"
+            className="btn-accent px-4 py-2 text-xs sm:text-[13px] whitespace-nowrap"
           >
-            <Plus className="w-4 h-4 shrink-0" aria-hidden="true" />
+            <Plus className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
             <span>New Task</span>
+            <kbd className="hidden sm:inline-flex items-center justify-center rounded-[3px] border border-white/25 bg-black/15 px-1 py-0.5 text-[10px] font-mono leading-none text-white/90">
+              C
+            </kbd>
           </button>
         </div>
       </header>
@@ -414,14 +463,14 @@ export function TaskWorkspace({
       {actionError && (
         <div
           role="alert"
-          className="flex items-center justify-between gap-3 rounded-2xl border p-4 text-xs sm:text-sm badge-danger"
+          className="flex items-center justify-between gap-3 rounded-[var(--radius-md)] border p-3.5 text-xs sm:text-[13px] badge-danger"
         >
           <span className="min-w-0 break-words">{actionError}</span>
           <button
             type="button"
             aria-label="Dismiss error"
             onClick={() => setActionError(null)}
-            className="shrink-0 rounded-full p-1.5 hover:opacity-80 transition-opacity"
+            className="shrink-0 rounded-[var(--radius-xs)] p-1.5 hover:opacity-80 transition-opacity"
           >
             <X className="h-4 w-4" aria-hidden="true" />
           </button>
@@ -431,7 +480,7 @@ export function TaskWorkspace({
       {successMessage && (
         <div
           role="status"
-          className="flex items-center justify-between gap-3 p-3.5 rounded-2xl border badge-success text-xs"
+          className="flex items-center justify-between gap-3 p-3.5 rounded-[var(--radius-md)] border badge-success text-xs"
         >
           <div className="flex items-center gap-2 min-w-0">
             <CheckCircle2 className="w-4 h-4 shrink-0" aria-hidden="true" />
@@ -440,7 +489,7 @@ export function TaskWorkspace({
           <button
             type="button"
             onClick={() => setSuccessMessage(null)}
-            className="shrink-0 p-1 rounded-full hover:opacity-80 transition-opacity"
+            className="shrink-0 p-1 rounded-[var(--radius-xs)] hover:opacity-80 transition-opacity"
             title="Dismiss notification"
           >
             <X className="w-3.5 h-3.5" aria-hidden="true" />
@@ -448,36 +497,44 @@ export function TaskWorkspace({
         </div>
       )}
 
-      {/* 2. Simplified Search, Filters & Sort Controls */}
-      <section aria-label="Search and filter tasks" className="space-y-3.5 min-w-0">
-        {/* Top Row: Search Input + Status Segment Pills */}
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 min-w-0">
-          <div className="relative w-full lg:max-w-sm">
+      {/* 2. Search, Filters & Sort Controls (@container responsive) */}
+      <section aria-label="Search and filter tasks" className="space-y-3 min-w-0">
+        {/* Top Row: Search Input + Status Segment Tabs */}
+        <div className="flex flex-col @3xl:flex-row @3xl:items-center justify-between gap-3 min-w-0">
+          <div className="relative w-full @3xl:max-w-xs min-w-0">
             <Search
-              className="w-3.5 h-3.5 text-[var(--text-muted)] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"
+              className="w-3.5 h-3.5 text-[var(--text-muted)] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
               aria-hidden="true"
             />
             <input
+              ref={searchInputRef}
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               aria-label="Search tasks"
-              placeholder="Search tasks by title or keyword..."
-              className="w-full h-9 pl-9 pr-8 text-xs rounded-full border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] hover:border-[var(--border-strong)] transition-colors"
+              placeholder="Search tasks..."
+              className="input-control w-full h-9 pl-8.5 pr-12 text-xs"
             />
-            {search && (
+            {search ? (
               <button
                 type="button"
                 onClick={() => setSearch('')}
                 aria-label="Clear search"
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-full text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-[var(--radius-xs)] text-[var(--text-muted)] hover:text-[var(--text-primary)]"
               >
                 <X className="w-3 h-3" aria-hidden="true" />
               </button>
+            ) : (
+              <kbd
+                aria-hidden="true"
+                className="pointer-events-none hidden sm:inline-flex items-center justify-center rounded-[4px] border border-[var(--border-default)] bg-[var(--bg-surface-muted)] px-1.5 py-0.5 text-[10px] font-mono text-[var(--text-muted)] absolute right-2.5 top-1/2 -translate-y-1/2"
+              >
+                /
+              </kbd>
             )}
           </div>
 
-          {/* Status Filter Pills */}
+          {/* Status Filter Tabs */}
           <div className="flex flex-wrap items-center gap-1 text-xs min-w-0">
             {[
               { id: 'all', label: 'All Tasks' },
@@ -494,7 +551,7 @@ export function TaskWorkspace({
                   type="button"
                   onClick={() => setStatusFilter(tab.id)}
                   className={clsx(
-                    'min-h-8 px-3 py-1 rounded-full font-medium whitespace-nowrap transition-colors',
+                    'min-h-8 px-2.5 py-1 rounded-[var(--radius-sm)] font-medium whitespace-nowrap transition-colors',
                     isSelected
                       ? 'bg-[var(--text-primary)] text-[var(--bg-canvas)] font-semibold'
                       : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-muted)]'
@@ -507,10 +564,10 @@ export function TaskWorkspace({
           </div>
         </div>
 
-        {/* Bottom Row: Date Filter Pills + Priority / Project / Sort Controls */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-1 min-w-0">
+        {/* Bottom Row: Date Filter Segment + Priority / Project / Sort Controls */}
+        <div className="flex flex-wrap items-center justify-between gap-2.5 pt-0.5 min-w-0">
           <div
-            className="inline-flex flex-wrap items-center gap-0.5 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-surface-muted)] p-1"
+            className="inline-flex flex-wrap items-center gap-0.5 rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--bg-surface-muted)] p-0.5"
             aria-label="Filter tasks by date"
           >
             {(
@@ -529,7 +586,7 @@ export function TaskWorkspace({
                   aria-pressed={isSelected}
                   onClick={() => setDateFilter(item.id)}
                   className={clsx(
-                    'min-h-7 rounded-full px-3 py-1 text-xs whitespace-nowrap transition-all',
+                    'min-h-7 rounded-[5px] px-2.5 py-1 text-xs whitespace-nowrap transition-all',
                     isSelected
                       ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] font-semibold shadow-2xs ring-1 ring-[var(--border-subtle)]'
                       : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] font-medium'
@@ -547,7 +604,7 @@ export function TaskWorkspace({
               aria-label="Filter by priority"
               value={priorityFilter}
               onChange={(e) => setPriorityFilter(e.target.value)}
-              className="h-8 px-3 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-xs text-[var(--text-secondary)] hover:border-[var(--border-strong)] hover:text-[var(--text-primary)] transition-colors"
+              className="input-control w-auto min-h-8 px-2.5 py-1.5 text-xs leading-tight text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
             >
               <option value="all">All Priorities</option>
               <option value="urgent">Urgent</option>
@@ -562,7 +619,7 @@ export function TaskWorkspace({
                 aria-label="Filter by project"
                 value={projectFilter}
                 onChange={(e) => setProjectFilter(e.target.value)}
-                className="h-8 px-3 max-w-[180px] truncate rounded-full border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-xs text-[var(--text-secondary)] hover:border-[var(--border-strong)] hover:text-[var(--text-primary)] transition-colors"
+                className="input-control w-auto min-h-8 px-2.5 py-1.5 max-w-[180px] truncate text-xs leading-tight text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
               >
                 <option value="all">All Projects</option>
                 {projects.map((p) => (
@@ -578,7 +635,7 @@ export function TaskWorkspace({
               aria-label="Sort tasks"
               value={sort}
               onChange={(e) => setSort(e.target.value as TaskSort)}
-              className="h-8 px-3 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-xs text-[var(--text-secondary)] hover:border-[var(--border-strong)] hover:text-[var(--text-primary)] transition-colors"
+              className="input-control w-auto min-h-8 px-2.5 py-1.5 text-xs leading-tight text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
             >
               <option value="default">Original order</option>
               <option value="due">Due date: soonest</option>
@@ -590,7 +647,7 @@ export function TaskWorkspace({
               <button
                 type="button"
                 onClick={clearAllFilters}
-                className="h-8 px-3 rounded-full text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-muted)] transition-colors whitespace-nowrap"
+                className="h-8 px-2.5 rounded-[var(--radius-sm)] text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-muted)] transition-colors whitespace-nowrap"
               >
                 Clear filters
               </button>
@@ -598,9 +655,9 @@ export function TaskWorkspace({
 
             <span
               role="status"
-              className="text-xs font-mono text-[var(--text-muted)] whitespace-nowrap pl-1"
+              className="text-xs font-mono text-[var(--text-muted)] tabular-nums whitespace-nowrap pl-1"
             >
-              {filteredTasks.length} tasks
+              {filteredTasks.length} {filteredTasks.length === 1 ? 'task' : 'tasks'}
             </span>
           </div>
         </div>
@@ -609,38 +666,37 @@ export function TaskWorkspace({
       {/* 3. Compact, Scannable Task List */}
       <section aria-label="Task list" className="min-w-0">
         {filteredTasks.length === 0 ? (
-          <div className="py-14 px-6 text-center rounded-2xl border border-dashed border-[var(--border-subtle)] bg-[var(--bg-surface)]/50 space-y-3">
-            <div className="w-10 h-10 rounded-full bg-[var(--bg-surface-muted)] text-[var(--text-muted)] flex items-center justify-center mx-auto border border-[var(--border-subtle)]">
-              <CheckCircle2 className="w-4 h-4" aria-hidden="true" />
-            </div>
-            <div className="space-y-1">
-              <h3 className="text-sm font-semibold text-[var(--text-primary)]">No tasks found</h3>
-              <p className="text-xs text-[var(--text-muted)] max-w-sm mx-auto leading-relaxed">
-                {hasActiveFilters
-                  ? 'Try a different search or clear your filters to see more tasks.'
-                  : 'Get started by creating your first task in this workspace.'}
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
-              <button
-                type="button"
-                onClick={() => setIsCreateOpen(true)}
-                className="btn-accent px-4 py-2 text-xs"
-              >
-                <Plus className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>Create Task</span>
-              </button>
-              {hasActiveFilters && (
+          <EmptyState
+            showMascot={!hasActiveFilters}
+            icon={<CheckCircle2 className="h-4 w-4" aria-hidden="true" />}
+            title="No tasks found"
+            description={
+              hasActiveFilters
+                ? 'Try adjusting your search query or clearing your active filters.'
+                : 'Create your first task to start organizing priorities, deadlines, and subtasks.'
+            }
+            action={
+              <>
                 <button
                   type="button"
-                  onClick={clearAllFilters}
-                  className="btn-secondary px-4 py-2 text-xs"
+                  onClick={() => setIsCreateOpen(true)}
+                  className="btn-accent px-4 py-2 text-xs"
                 >
-                  Clear filters
+                  <Plus className="w-3.5 h-3.5" aria-hidden="true" />
+                  <span>Create Task</span>
                 </button>
-              )}
-            </div>
-          </div>
+                {hasActiveFilters && (
+                  <button
+                    type="button"
+                    onClick={clearAllFilters}
+                    className="btn-secondary px-4 py-2 text-xs"
+                  >
+                    Clear filters
+                  </button>
+                )}
+              </>
+            }
+          />
         ) : (
           <div className="surface-card divide-y divide-[var(--border-subtle)] overflow-hidden">
             {filteredTasks.map((task) => {
@@ -665,11 +721,20 @@ export function TaskWorkspace({
                     }
                   }}
                   className={clsx(
-                    'group flex items-start sm:items-center justify-between gap-3 sm:gap-4 px-4 sm:px-5 py-3.5 transition-colors cursor-pointer min-w-0',
-                    'hover:bg-[var(--bg-surface-hover)]',
+                    'group relative flex items-start @lg:items-center justify-between gap-3 @lg:gap-4 px-4 sm:px-5 py-3 transition-colors cursor-pointer min-w-0',
+                    'hover:bg-[var(--bg-surface-hover)] focus-visible:outline-2 focus-visible:outline-[var(--accent)] focus-visible:outline-offset-[-2px]',
                     isCompleted && 'opacity-65 hover:opacity-100'
                   )}
                 >
+                  <span
+                    aria-hidden="true"
+                    className={clsx(
+                      'absolute inset-y-2 left-0 w-[2px] rounded-r-full transition-opacity',
+                      priorityStripeClass(task.priority),
+                      isCompleted ? 'opacity-25' : 'opacity-75 group-hover:opacity-100'
+                    )}
+                  />
+
                   {/* Left: Checkbox + Title + Compact Metadata */}
                   <div className="flex items-start gap-3 flex-1 min-w-0">
                     <button
@@ -698,7 +763,7 @@ export function TaskWorkspace({
                       <div className="flex flex-wrap items-center gap-2 min-w-0">
                         <span
                           className={clsx(
-                            'text-sm font-medium leading-snug line-clamp-2 break-words min-w-0 group-hover:underline',
+                            'text-[13.5px] font-medium leading-snug line-clamp-2 break-words min-w-0 group-hover:underline',
                             isCompleted
                               ? 'line-through text-[var(--text-muted)]'
                               : 'text-[var(--text-primary)]'
@@ -708,14 +773,14 @@ export function TaskWorkspace({
                         </span>
 
                         {task.is_blocked && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold badge-danger border shrink-0">
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[var(--radius-xs)] text-[10px] font-semibold badge-danger border shrink-0">
                             <AlertTriangle className="w-2.5 h-2.5" aria-hidden="true" />
                             <span>Blocked</span>
                           </span>
                         )}
 
                         {task.recurrence_rule_id && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium badge-editorial border shrink-0">
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[var(--radius-xs)] text-[10px] font-medium badge-editorial border shrink-0">
                             <Clock className="w-2.5 h-2.5" aria-hidden="true" />
                             <span>Recurring</span>
                           </span>
@@ -726,7 +791,7 @@ export function TaskWorkspace({
                       <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-[var(--text-muted)]">
                         <span
                           className={clsx(
-                            'px-2 py-0.5 rounded-full text-[10.5px] font-medium capitalize shrink-0',
+                            'px-1.5 py-0.5 rounded-[var(--radius-xs)] text-[10.5px] font-medium capitalize shrink-0',
                             priorityBadgeClass(task.priority)
                           )}
                         >
@@ -761,8 +826,23 @@ export function TaskWorkspace({
                         )}
 
                         {task.subtask_count > 0 && (
-                          <span className="font-mono text-[11px] text-[var(--text-muted)] shrink-0">
-                            {task.completed_subtask_count}/{task.subtask_count} subtasks
+                          <span className="inline-flex items-center gap-1.5 font-mono text-[11px] text-[var(--text-muted)] shrink-0">
+                            <span
+                              aria-hidden="true"
+                              className="h-1 w-8 overflow-hidden rounded-full bg-[var(--bg-surface-muted)]"
+                            >
+                              <span
+                                className="block h-full bg-[var(--accent)] transition-all"
+                                style={{
+                                  width: `${Math.round(
+                                    (task.completed_subtask_count / Math.max(1, task.subtask_count)) * 100
+                                  )}%`,
+                                }}
+                              />
+                            </span>
+                            <span className="tabular-nums">
+                              {task.completed_subtask_count}/{task.subtask_count} subtasks
+                            </span>
                           </span>
                         )}
                       </div>
@@ -773,7 +853,7 @@ export function TaskWorkspace({
                   <div className="flex items-center gap-2 shrink-0">
                     <span
                       className={clsx(
-                        'px-2.5 py-0.5 rounded-full text-[11px] font-mono capitalize whitespace-nowrap',
+                        'px-2 py-0.5 rounded-[var(--radius-xs)] text-[11px] font-mono capitalize whitespace-nowrap',
                         statusPillClass(task.status, task.is_blocked)
                       )}
                     >
@@ -781,7 +861,7 @@ export function TaskWorkspace({
                     </span>
                     <span
                       aria-hidden="true"
-                      className="hidden sm:flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[var(--text-muted)] group-hover:bg-[var(--accent)] group-hover:text-[var(--accent-ink)] transition-colors"
+                      className="hidden sm:flex h-7 w-7 shrink-0 items-center justify-center rounded-[var(--radius-sm)] text-[var(--text-muted)] group-hover:bg-[var(--accent)] group-hover:text-[var(--accent-ink)] transition-colors"
                     >
                       <ArrowUpRight className="w-3.5 h-3.5" />
                     </span>
@@ -798,6 +878,7 @@ export function TaskWorkspace({
         <CreateTaskModal
           workspaceId={workspaceId}
           projects={projects}
+          userTimeZone={userTimeZone}
           isOpen={isCreateOpen}
           onClose={() => setIsCreateOpen(false)}
           onTaskCreated={handleTaskCreated}
@@ -810,6 +891,7 @@ export function TaskWorkspace({
           task={selectedTaskDetail}
           allTasks={tasks}
           workspaceId={workspaceId}
+          userTimeZone={userTimeZone}
           isOpen={Boolean(selectedTaskDetail)}
           onClose={() => setSelectedTaskDetail(null)}
           onTaskUpdated={(updatedStatus) => {

@@ -267,7 +267,7 @@ describe('TasksPage Server Component (Next.js Cache Components & Prerendering)',
     expect(workspaceHtml).toContain('aria-label="Filter by priority"');
     expect(workspaceHtml).toContain('aria-label="Filter by project"');
     expect(workspaceHtml).toContain('aria-label="Sort tasks"');
-    expect(workspaceHtml).toContain('1 tasks');
+    expect(workspaceHtml).toContain('1 task');
     expect(workspaceHtml).toContain(longTitle);
     expect(workspaceHtml).toContain('2/6 subtasks');
     expect(workspaceHtml).toContain('Blocked');
