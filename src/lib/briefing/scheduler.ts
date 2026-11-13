@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { canEnqueueEmailForUser } from './config';
 import { evaluateDue } from './timezone';
 import type { BriefingChannel } from './types';
 
@@ -51,7 +52,9 @@ export async function enqueueDueBriefings(admin: SupabaseClient, now: Date = new
         continue;
       }
       const channels: BriefingChannel[] = [];
-      if (pref.email_enabled && pref.email_consent_at) channels.push('email');
+      if (pref.email_enabled && pref.email_consent_at && canEnqueueEmailForUser(pref.user_id)) {
+        channels.push('email');
+      }
       if (pref.telegram_enabled) channels.push('telegram');
       for (const channel of channels) {
         rows.push({

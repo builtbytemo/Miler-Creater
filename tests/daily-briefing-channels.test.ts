@@ -9,6 +9,10 @@ const resp = (status: number, body: any = {}, headers: Record<string, string> = 
 const env = { ...process.env };
 
 beforeEach(() => {
+  process.env.VERCEL_ENV = 'preview';
+  process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://prmgrrzqtnygmitplkhn.supabase.co';
+  delete process.env.DAILY_BRIEFING_EMAIL_ALLOWED_USER_ID;
+  delete process.env.DAILY_BRIEFING_EMAIL_ALLOWED_RECIPIENT;
   process.env.TELEGRAM_BOT_TOKEN = 'SECRET_TOKEN_VALUE';
   process.env.RESEND_API_KEY = 're_secret';
   process.env.EMAIL_FROM = 'Miler <m@example.com>';

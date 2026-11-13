@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { authorizeEmailDestination, authorizeEmailDispatch } from './config';
 import { getRegisteredBriefingContentGenerator } from './content';
 import { createDailyBriefingGenerator } from './daily/generator';
 import { createEmailAdapter, type EmailDestination } from './channels/email';
@@ -87,8 +88,19 @@ async function decide(admin: SupabaseClient, d: ClaimedDelivery, deps: Required<
   }
   if (d.channel === 'telegram' && !prefs.telegram_enabled) return { outcome: 'skipped', code: 'channel_disabled' };
 
+  if (d.channel === 'email') {
+    const userAuth = authorizeEmailDispatch(d.user_id);
+    if (!userAuth.allowed) return { outcome: 'skipped', code: userAuth.code };
+  }
+
   const destination = await resolveDestination(admin, d.user_id, d.channel);
   if (!destination) return { outcome: 'skipped', code: 'no_verified_destination' };
+
+  if (d.channel === 'email') {
+    const destAuth = authorizeEmailDestination((destination as EmailDestination).to, d.user_id);
+    if (!destAuth.allowed) return { outcome: 'skipped', code: destAuth.code };
+    (destination as EmailDestination).to = destAuth.normalizedTo;
+  }
 
   const content = await deps.generator.generate({ userId: d.user_id, localDate: d.local_date, channel: d.channel });
   if (content.status !== 'ready') return { outcome: 'skipped', code: 'content_not_configured' };
