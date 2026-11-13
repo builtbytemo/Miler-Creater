@@ -70,9 +70,10 @@ describe('Notification Popover Layering & Responsive Coordinates', () => {
       viewportWidth: 1280,
       viewportHeight: 800,
       align: 'responsive',
+      navRightEdge: 68,
     });
     expect(collapsedDesktop.isMobile).toBe(false);
-    expect(collapsedDesktop.left).toBe(60);
+    expect(collapsedDesktop.left).toBe(76);
     expect(collapsedDesktop.top).toBe(52);
 
     const rightAlignedShort = computeNotificationPanelLayout({
