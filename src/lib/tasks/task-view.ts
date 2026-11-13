@@ -3,11 +3,25 @@ import { getCalendarDateKey } from '@/lib/temporal/calendar';
 
 export type TaskDateFilter = 'all' | 'today' | 'overdue' | 'unscheduled';
 export type TaskSort = 'default' | 'due' | 'priority' | 'newest';
-export function matchesTaskDate(task: TaskWithMeta, filter: TaskDateFilter, today: string, timeZone: string) {
+export function matchesTaskDate(
+  task: TaskWithMeta,
+  filter: TaskDateFilter,
+  today: string,
+  timeZone: string,
+  referenceNowMs?: number
+) {
   if (filter === 'all') return true;
   if (filter === 'unscheduled') return !task.scheduled_start && !task.due_date;
   if (task.status === 'done' || task.status === 'cancelled') return false;
-  if (filter === 'overdue') return Boolean(task.due_date && getCalendarDateKey(task.due_date, timeZone) < today);
+  if (filter === 'overdue') {
+    if (!task.due_date) return false;
+    if (getCalendarDateKey(task.due_date, timeZone) < today) return true;
+    if (referenceNowMs !== undefined && Number.isFinite(referenceNowMs)) {
+      const dueMs = Date.parse(task.due_date);
+      return !Number.isNaN(dueMs) && dueMs < referenceNowMs;
+    }
+    return false;
+  }
   return [task.scheduled_start, task.due_date].some((date) => date && getCalendarDateKey(date, timeZone) === today);
 }
 export function sortTaskView(tasks: TaskWithMeta[], sort: TaskSort) {

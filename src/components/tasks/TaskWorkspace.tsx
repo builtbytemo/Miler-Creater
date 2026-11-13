@@ -110,6 +110,7 @@ export function TaskWorkspace({
     return () => clearInterval(timer);
   }, []);
   const todayKey = getCalendarDateKey(clock, userTimeZone);
+  const nowMs = clock.getTime();
   const [statusFilter, setStatusFilter] = useState<string>(() =>
     initialStatusFilter &&
     VALID_STATUS_FILTERS.includes(initialStatusFilter as (typeof VALID_STATUS_FILTERS)[number])
@@ -241,7 +242,7 @@ export function TaskWorkspace({
   const filteredTasks = useMemo(() => {
     return sortTaskView(
       tasks.filter((t) => {
-        if (!matchesTaskDate(t, dateFilter, todayKey, userTimeZone)) return false;
+        if (!matchesTaskDate(t, dateFilter, todayKey, userTimeZone, nowMs)) return false;
         // 1. Search filter
         if (search.trim() !== '') {
           const query = search.trim().toLowerCase();
@@ -282,6 +283,7 @@ export function TaskWorkspace({
     dateFilter,
     sort,
     todayKey,
+    nowMs,
     userTimeZone,
   ]);
 
@@ -648,7 +650,7 @@ export function TaskWorkspace({
                 !isCompleted &&
                 task.status !== 'cancelled' &&
                 Boolean(task.due_date) &&
-                matchesTaskDate(task, 'overdue', todayKey, userTimeZone);
+                matchesTaskDate(task, 'overdue', todayKey, userTimeZone, nowMs);
 
               return (
                 <div

@@ -18,6 +18,15 @@ describe('Task date filters and sorting', () => {
     expect(matchesTaskDate(task(), 'unscheduled', '2026-11-05', 'Africa/Cairo')).toBe(true);
     expect(matchesTaskDate(task({ due_date: '2026-11-06T09:00:00Z' }), 'unscheduled', '2026-11-05', 'Africa/Cairo')).toBe(false);
   });
+  it('matches same-day past-due tasks under Overdue when an exact reference timestamp is provided', () => {
+    const nowMs = Date.parse('2026-11-05T12:00:00Z');
+    expect(
+      matchesTaskDate(task({ due_date: '2026-11-05T09:00:00Z' }), 'overdue', '2026-11-05', 'Africa/Cairo', nowMs)
+    ).toBe(true);
+    expect(
+      matchesTaskDate(task({ due_date: '2026-11-05T15:00:00Z' }), 'overdue', '2026-11-05', 'Africa/Cairo', nowMs)
+    ).toBe(false);
+  });
   it('sorts missing due dates last and leaves the input order intact', () => {
     const input = [task(), task({ id: 'two', due_date: '2026-11-06T09:00:00Z' })];
     expect(sortTaskView(input, 'due').map((item) => item.id)).toEqual(['two', 'one']);
