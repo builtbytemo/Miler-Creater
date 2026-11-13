@@ -47,7 +47,9 @@ describe('Marketing Landing Page & Showcase UI (Stage F)', () => {
     expect(html).toContain('Content');
     expect(html).toContain('CLI &amp; MCP');
     expect(html).toContain('Priority Queue');
-    expect(html).toContain('Studio Workspace');
+    expect(html).toContain('Sample Studio Workspace');
+    expect(html).toContain('Interactive Demo · Sample Data');
+    expect(html).toContain('Sample preview data');
     expect(html).not.toMatch(/neutral-\d{3}|bg-blue-(500|600)/);
     expect(html).not.toMatch(/\bmiler\b/i);
   });

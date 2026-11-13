@@ -5,7 +5,6 @@ import {
   Calendar,
   Check,
   CheckSquare,
-  Command,
   FileText,
   Lock,
   ShieldCheck,
@@ -176,7 +175,7 @@ export function LandingShowcase() {
             <span className="h-2 w-2 rounded-full bg-[var(--accent)]" />
           </div>
           <span className="ml-1.5 truncate text-xs font-medium text-[var(--text-primary)]">
-            Studio Workspace
+            Sample Studio Workspace
           </span>
           <ZahiDiamondMark size="xs" tone="accent" />
           <span className="hidden sm:inline font-mono text-[11px] text-[var(--text-muted)]">
@@ -184,13 +183,9 @@ export function LandingShowcase() {
           </span>
         </div>
 
-        <div className="inline-flex items-center gap-1.5 rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2 py-0.5 text-[11px] font-medium text-[var(--text-secondary)]">
-          <Command className="h-3 w-3 text-[var(--accent-text)]" aria-hidden="true" />
-          <span>Command Bar</span>
-          <kbd className="rounded bg-[var(--bg-surface-muted)] px-1 font-mono text-[10px] text-[var(--text-muted)]">
-            ⌘K
-          </kbd>
-        </div>
+        <span className="badge-editorial border rounded-full px-2 py-0.5 text-[10px] font-medium whitespace-nowrap">
+          Interactive Demo · Sample Data
+        </span>
       </div>
 
       {/* Tab switcher */}
@@ -438,9 +433,9 @@ export function LandingShowcase() {
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border-subtle)] pt-3 text-[11px] text-[var(--text-muted)]">
           <div className="inline-flex items-center gap-1.5">
             <ShieldCheck className="h-3.5 w-3.5 text-[var(--accent-text)]" aria-hidden="true" />
-            <span>Isolated multi-tenant workspace · Light &amp; Dark themes</span>
+            <span>Sample preview data — not connected to a live workspace</span>
           </div>
-          <span className="font-mono text-[10px]">Press / or ⌘K inside app</span>
+          <span className="font-mono text-[10px]">⌘K command bar available inside app</span>
         </div>
       </div>
     </div>
