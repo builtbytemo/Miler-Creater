@@ -10,7 +10,7 @@ import { DashboardKpiCard } from '@/components/dashboard/DashboardKpiCard';
 import { DashboardActionNeeded } from '@/components/dashboard/DashboardActionNeeded';
 import { DashboardContentPipeline } from '@/components/dashboard/DashboardContentPipeline';
 import { DashboardRecentNotifications } from '@/components/dashboard/DashboardRecentNotifications';
-import { ZahiMascot } from '@/components/brand/ZahiBrand';
+import { ZahiDividerRule, ZahiMascot } from '@/components/brand/ZahiBrand';
 import type { Database, WorkspaceRole } from '@/types/database';
 import {
   AlertCircle,
@@ -73,9 +73,12 @@ export default async function DashboardPage() {
               tabIndex={-1}
               className="flex-1 min-w-0 max-w-4xl w-full mx-auto px-6 py-12 sm:px-10 flex items-center justify-center"
             >
-              <div className="surface-card max-w-md w-full p-7 sm:p-9 text-center space-y-4">
-                <div className="flex justify-center">
-                  <ZahiMascot size={48} />
+              <div className="surface-card zahi-khatam-accent max-w-md w-full p-7 sm:p-9 text-center space-y-4">
+                <div className="space-y-2">
+                  <div className="flex justify-center">
+                    <ZahiMascot size={48} />
+                  </div>
+                  <ZahiDividerRule className="max-w-[76px] mx-auto" />
                 </div>
                 <div className="space-y-1.5">
                   <h2 className="heading-section text-base">
@@ -231,7 +234,7 @@ export default async function DashboardPage() {
       data-workspace-shell="v2"
       className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] flex flex-col md:flex-row font-sans"
     >
-      <AppNavigation />
+      <AppNavigation workspaceName={workspace?.name} userLabel={displayName} />
 
       <main
         id="main-content"

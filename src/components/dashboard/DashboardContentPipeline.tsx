@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { ArrowUpRight } from 'lucide-react';
 import type { DashboardContentMetrics } from '@/lib/services/dashboard-service';
 import { formatInTimeZone } from '@/lib/temporal/timezone';
+import { ZahiDiamondMark } from '@/components/brand/ZahiBrand';
 
 interface DashboardContentPipelineProps {
   content: DashboardContentMetrics;
@@ -38,9 +39,12 @@ export function DashboardContentPipeline({
       aria-labelledby="content-pipeline-heading"
     >
       <div className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2.5 border-b border-[var(--border-subtle)] bg-[var(--bg-surface-muted)]/45">
-        <h2 id="content-pipeline-heading" className="heading-section text-[13px]">
-          Content Pipeline &amp; Scheduling
-        </h2>
+        <div className="flex items-center gap-2 min-w-0">
+          <ZahiDiamondMark size="xs" tone="accent" />
+          <h2 id="content-pipeline-heading" className="heading-section text-[13px]">
+            Content Pipeline &amp; Scheduling
+          </h2>
+        </div>
         <Link
           href="/content"
           className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors whitespace-nowrap"

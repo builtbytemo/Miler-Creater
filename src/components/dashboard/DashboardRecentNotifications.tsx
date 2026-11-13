@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { ArrowUpRight, BellOff } from 'lucide-react';
 import type { DashboardNotificationMetrics } from '@/lib/services/dashboard-service';
 import { formatInTimeZone } from '@/lib/temporal/timezone';
+import { ZahiDiamondMark } from '@/components/brand/ZahiBrand';
 
 interface DashboardRecentNotificationsProps {
   notifications: DashboardNotificationMetrics;
@@ -19,6 +20,7 @@ export function DashboardRecentNotifications({
     >
       <div className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2.5 border-b border-[var(--border-subtle)] bg-[var(--bg-surface-muted)]/45">
         <div className="flex items-center gap-2 min-w-0">
+          <ZahiDiamondMark size="xs" tone="accent" />
           <h2 id="notifications-heading" className="heading-section text-[13px]">
             Recent Unread Alerts
           </h2>
