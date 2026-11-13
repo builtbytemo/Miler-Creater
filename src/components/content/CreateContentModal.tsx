@@ -210,7 +210,7 @@ export function CreateContentModal({
   };
 
   const inputBaseClass =
-    'w-full px-3.5 py-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] hover:border-[var(--border-strong)] focus:outline-none focus:border-[var(--border-strong)] text-xs transition-colors';
+    'input-control w-full px-3.5 py-2 text-xs transition-colors';
 
   return (
     <div
@@ -226,7 +226,7 @@ export function CreateContentModal({
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className="w-full max-w-2xl surface-elevated bg-[var(--bg-surface-elevated)] border border-[var(--border-strong)] text-[var(--text-primary)] rounded-3xl p-5 sm:p-6 space-y-5 shadow-[var(--shadow-elevated)] max-h-[90vh] overflow-y-auto focus:outline-none"
+        className="w-full max-w-2xl surface-elevated rounded-[var(--radius-lg)] p-5 sm:p-6 space-y-5 max-h-[90vh] overflow-y-auto focus:outline-none"
       >
         {/* Header */}
         <div className="flex items-start justify-between gap-3 border-b border-[var(--border-subtle)] pb-4">
@@ -245,7 +245,7 @@ export function CreateContentModal({
             onClick={onClose}
             disabled={isPending}
             aria-label="Close dialog"
-            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-muted)] transition-colors"
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-sm)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-muted)] transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
@@ -254,7 +254,7 @@ export function CreateContentModal({
         {error && (
           <div
             role="alert"
-            className="p-3.5 rounded-2xl border badge-danger text-xs flex items-center gap-2.5"
+            className="p-3.5 rounded-[var(--radius-md)] border badge-danger text-xs flex items-center gap-2.5"
           >
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{error}</span>
@@ -274,7 +274,7 @@ export function CreateContentModal({
                     type="button"
                     onClick={() => handlePlatformChange(p)}
                     aria-pressed={platform === p}
-                    className={`py-2 px-2 rounded-xl text-xs font-semibold border text-center transition-colors capitalize ${
+                    className={`py-2 px-2 rounded-[var(--radius-sm)] text-xs font-semibold border text-center transition-colors capitalize ${
                       platform === p
                         ? 'bg-[var(--text-primary)] border-[var(--text-primary)] text-[var(--bg-canvas)] shadow-2xs'
                         : 'bg-[var(--bg-surface)] border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--border-strong)]'
@@ -335,7 +335,7 @@ export function CreateContentModal({
               <div
                 className={`text-[11px] font-mono ${
                   isOverRecommendedLimit
-                    ? 'text-[var(--status-warn-text)] font-semibold'
+                    ? 'text-[var(--status-warning-text)] font-semibold'
                     : 'text-[var(--text-tertiary)]'
                 }`}
               >
@@ -357,7 +357,7 @@ export function CreateContentModal({
           </div>
 
           {/* Contextual Target Reference (Collapsible) */}
-          <div className="border border-[var(--border-subtle)] rounded-2xl bg-[var(--bg-surface-muted)] p-3.5 space-y-2.5">
+          <div className="border border-[var(--border-subtle)] rounded-[var(--radius-md)] bg-[var(--bg-surface-muted)] p-3.5 space-y-2.5">
             <button
               type="button"
               onClick={() => setIsTargetRefOpen((prev) => !prev)}
@@ -434,7 +434,7 @@ export function CreateContentModal({
           </div>
 
           {/* Row 2: Status, Scheduled Date, Duration */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 p-3.5 rounded-2xl bg-[var(--bg-surface-muted)] border border-[var(--border-subtle)]">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 p-3.5 rounded-[var(--radius-md)] bg-[var(--bg-surface-muted)] border border-[var(--border-subtle)]">
             {/* Status */}
             <div className="space-y-1.5">
               <label className="block font-medium text-[var(--text-secondary)]">Status</label>

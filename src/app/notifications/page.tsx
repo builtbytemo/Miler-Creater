@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { resolveAuthorizedWorkspace } from '@/lib/actions/content-actions';
 import { WorkspaceShell } from '@/components/layout/WorkspaceShell';
 import { NotificationCenter } from '@/components/notifications/NotificationCenter';
-import { DEFAULT_TIMEZONE } from '@/lib/temporal/timezone';
+import { DEFAULT_TIMEZONE, isValidTimeZone, normalizeTimeZone } from '@/lib/temporal/timezone';
 
 export const instant = false;
 
@@ -48,7 +48,9 @@ export default async function NotificationsPage({ searchParams }: NotificationsP
     supabase.from('profiles').select('timezone').eq('id', authData.user.id).maybeSingle(),
   ]);
 
-  const userTimeZone = profile?.timezone || DEFAULT_TIMEZONE;
+  const rawTz = profile?.timezone;
+  const userTimeZone =
+    rawTz && isValidTimeZone(rawTz) ? normalizeTimeZone(rawTz) : DEFAULT_TIMEZONE;
 
   return (
     <WorkspaceShell workspaceName={wsData?.name} maxWidth="5xl">
