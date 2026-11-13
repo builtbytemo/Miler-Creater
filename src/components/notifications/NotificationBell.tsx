@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { usePathname } from 'next/navigation';
 import { Bell } from 'lucide-react';
 import { getUnreadNotificationCountAction } from '@/lib/actions/notification-actions';
@@ -23,6 +23,7 @@ export function NotificationBell({
   const pathname = usePathname();
   const [unreadCount, setUnreadCount] = useState<number>(0);
   const [isOpen, setIsOpen] = useState<boolean>(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   // Safety: never render on public or auth pages
   const isPublicOrAuthPage = pathname === '/' || pathname.startsWith('/auth');
@@ -83,6 +84,7 @@ export function NotificationBell({
   return (
     <div className={clsx('relative inline-flex items-center', className)}>
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
         aria-label={ariaLabel}
@@ -103,8 +105,8 @@ export function NotificationBell({
           <span
             data-testid="notification-unread-badge"
             className={clsx(
-              'absolute -top-1 -right-1 flex items-center justify-center',
-              'min-w-4 h-4 px-1 rounded-full text-[10px] font-bold font-mono',
+              'absolute -top-1 -right-1 flex items-center justify-center pointer-events-none',
+              'min-w-4 h-4 px-1 rounded-full text-[10px] font-bold font-mono leading-none',
               'bg-[var(--accent)] text-[var(--accent-ink)] ring-2 ring-[var(--bg-sidebar)]'
             )}
           >
@@ -120,6 +122,7 @@ export function NotificationBell({
         userTimeZone={userTimeZone}
         onNotificationsMutated={fetchUnreadCount}
         align={panelAlign}
+        triggerRef={triggerRef}
       />
     </div>
   );
