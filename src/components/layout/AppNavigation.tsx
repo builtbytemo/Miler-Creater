@@ -173,6 +173,10 @@ function RailTooltip({
 
   const show = () => {
     if (!enabled || !triggerWrapRef.current) return;
+    if (triggerWrapRef.current.querySelector('[aria-expanded="true"]')) {
+      setCoords(null);
+      return;
+    }
     const rect = triggerWrapRef.current.getBoundingClientRect();
     setCoords({
       top: Math.round(rect.top + rect.height / 2),
@@ -204,6 +208,8 @@ function RailTooltip({
       onMouseLeave={hide}
       onFocus={show}
       onBlur={hide}
+      onPointerDown={hide}
+      onClick={hide}
     >
       {children}
       {enabled &&
