@@ -31,6 +31,7 @@ export interface NotificationCenterProps {
   workspaceId: string;
   workspaceName?: string;
   userTimeZone?: string;
+  initialReadFilter?: 'all' | 'unread';
 }
 
 type ReadFilter = 'all' | 'unread';
@@ -40,11 +41,12 @@ export function NotificationCenter({
   workspaceId,
   workspaceName,
   userTimeZone,
+  initialReadFilter = 'all',
 }: NotificationCenterProps) {
   const [notifications, setNotifications] = useState<NotificationRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [readFilter, setReadFilter] = useState<ReadFilter>('all');
+  const [readFilter, setReadFilter] = useState<ReadFilter>(initialReadFilter);
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
   const [page, setPage] = useState<number>(1);
   const [hasMore, setHasMore] = useState<boolean>(false);

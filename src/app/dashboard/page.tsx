@@ -320,16 +320,18 @@ export default async function DashboardPage() {
                 <DashboardKpiCard
                   title="Overdue Tasks"
                   count={summary.tasks.overdueCount}
-                  href="/tasks"
+                  href="/tasks?dateFilter=overdue"
                   variant="danger"
-                  tier="compact"
+                  tier="hero"
+                  subtitle={summary.tasks.overdueCount > 0 ? 'Filter overdue' : 'On schedule'}
                 />
                 <DashboardKpiCard
                   title="Due Today"
                   count={summary.tasks.dueTodayCount}
-                  href="/tasks"
+                  href="/tasks?dateFilter=today"
                   variant="warning"
-                  tier="compact"
+                  tier="hero"
+                  subtitle={summary.tasks.dueTodayCount > 0 ? 'Today queue' : 'Clear today'}
                 />
                 <DashboardKpiCard
                   title="Blocked Tasks"
@@ -337,34 +339,39 @@ export default async function DashboardPage() {
                   href="/tasks?status=blocked"
                   variant="warning"
                   tier="compact"
-                />
-                <DashboardKpiCard
-                  title="Pending Subtasks"
-                  count={summary.tasks.pendingSubtasksCount}
-                  href="/tasks"
-                  variant="info"
-                  tier="compact"
+                  subtitle={summary.tasks.blockedCount > 0 ? 'Blocked view' : 'Unblocked'}
                 />
                 <DashboardKpiCard
                   title="Scheduled (7d)"
                   count={summary.content.scheduledNext7DaysCount}
-                  href="/calendar"
+                  href="/content?tab=scheduled"
                   variant="success"
                   tier="compact"
+                  subtitle={summary.content.scheduledNext7DaysCount > 0 ? 'Publish queue' : 'Queue empty'}
                 />
                 <DashboardKpiCard
                   title="Draft Content"
                   count={summary.content.draftCount}
-                  href="/content"
+                  href="/content?tab=drafts"
                   variant="default"
                   tier="compact"
+                  subtitle={summary.content.draftCount > 0 ? 'Open drafts' : 'None drafted'}
+                />
+                <DashboardKpiCard
+                  title="Pending Subtasks"
+                  count={summary.tasks.pendingSubtasksCount}
+                  href="/tasks?statusFilter=active"
+                  variant="info"
+                  tier="compact"
+                  subtitle="Across tasks"
                 />
                 <DashboardKpiCard
                   title="Unread Alerts"
                   count={summary.notifications.unreadCount}
-                  href="/notifications"
+                  href="/notifications?filter=unread"
                   variant="info"
                   tier="compact"
+                  subtitle={summary.notifications.unreadCount > 0 ? 'Unread feed' : 'Caught up'}
                   className="col-span-2 sm:col-span-2 xl:col-span-1"
                 />
               </div>
@@ -375,6 +382,7 @@ export default async function DashboardPage() {
               {/* Primary Execution Stream */}
               <div className="lg:col-span-7 space-y-5 min-w-0">
                 <DashboardActionNeeded
+                  workspaceId={summary.workspaceId}
                   urgentTasks={summary.tasks.urgentTasks}
                   upcomingContent={summary.content.upcomingItems}
                   timeZone={summary.timeZone}

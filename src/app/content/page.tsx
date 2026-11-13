@@ -7,8 +7,18 @@ import { ContentWorkspace } from '@/components/content/ContentWorkspace';
 
 export const instant = false;
 
-export default async function ContentPage() {
+interface ContentPageProps {
+  searchParams?: Promise<{
+    tab?: string;
+    platform?: string;
+    status?: string;
+    contentId?: string;
+  }>;
+}
+
+export default async function ContentPage({ searchParams }: ContentPageProps = {}) {
   await connection();
+  const resolvedParams = searchParams ? await searchParams : {};
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const isEnvConfigured = supabaseUrl && !supabaseUrl.includes('your-project-ref');
@@ -96,6 +106,10 @@ export default async function ContentPage() {
           socialAccounts={socialAccounts}
           projects={projects}
           userTimeZone={userTimeZone}
+          initialTab={resolvedParams.tab}
+          initialPlatform={resolvedParams.platform}
+          initialStatusFilter={resolvedParams.status}
+          initialContentId={resolvedParams.contentId}
         />
       </main>
     </div>

@@ -23,6 +23,7 @@ vi.mock('next/navigation', () => ({
     throw new Error(`NEXT_REDIRECT: ${url}`);
   },
   usePathname: () => '/dashboard',
+  useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
 }));
 
 vi.mock('@/lib/supabase/server', () => ({

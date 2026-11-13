@@ -50,37 +50,46 @@ export function DashboardContentPipeline({
         </Link>
       </div>
 
-      {/* Compact Stage Summary (No redundant 7-day duplication) */}
+      {/* Compact Stage Summary (Direct queue deep links) */}
       <div className="grid grid-cols-3 divide-x divide-[var(--border-subtle)] border-b border-[var(--border-subtle)]">
         <Link
-          href="/content"
-          className="px-3.5 py-2.5 hover:bg-[var(--bg-surface-hover)] transition-colors min-w-0"
+          href="/content?tab=drafts"
+          className="group px-3.5 py-2.5 hover:bg-[var(--bg-surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--focus-ring)] transition-colors min-w-0"
         >
-          <p className="text-[11px] font-medium text-[var(--text-muted)] truncate">
-            Drafts
-          </p>
+          <div className="flex items-center justify-between gap-1">
+            <p className="text-[11px] font-medium text-[var(--text-muted)] group-hover:text-[var(--text-secondary)] truncate">
+              Drafts
+            </p>
+            <ArrowUpRight className="w-3 h-3 text-[var(--text-muted)] opacity-0 group-hover:opacity-100 transition-opacity shrink-0" aria-hidden="true" />
+          </div>
           <p className="mt-1 text-base font-semibold font-mono tabular-nums text-[var(--text-primary)] leading-none">
             {content.draftCount}
           </p>
         </Link>
         <Link
-          href="/content"
-          className="px-3.5 py-2.5 hover:bg-[var(--bg-surface-hover)] transition-colors min-w-0"
+          href="/content?tab=ideas"
+          className="group px-3.5 py-2.5 hover:bg-[var(--bg-surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--focus-ring)] transition-colors min-w-0"
         >
-          <p className="text-[11px] font-medium text-[var(--text-muted)] truncate">
-            Ideas
-          </p>
+          <div className="flex items-center justify-between gap-1">
+            <p className="text-[11px] font-medium text-[var(--text-muted)] group-hover:text-[var(--text-secondary)] truncate">
+              Ideas
+            </p>
+            <ArrowUpRight className="w-3 h-3 text-[var(--text-muted)] opacity-0 group-hover:opacity-100 transition-opacity shrink-0" aria-hidden="true" />
+          </div>
           <p className="mt-1 text-base font-semibold font-mono tabular-nums text-[var(--text-primary)] leading-none">
             {content.ideaCount}
           </p>
         </Link>
         <Link
-          href="/calendar"
-          className="px-3.5 py-2.5 hover:bg-[var(--bg-surface-hover)] transition-colors min-w-0"
+          href="/content?tab=scheduled"
+          className="group px-3.5 py-2.5 hover:bg-[var(--bg-surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--focus-ring)] transition-colors min-w-0"
         >
-          <p className="text-[11px] font-medium text-[var(--text-muted)] truncate">
-            Next 24h
-          </p>
+          <div className="flex items-center justify-between gap-1">
+            <p className="text-[11px] font-medium text-[var(--text-muted)] group-hover:text-[var(--text-secondary)] truncate">
+              Next 24h
+            </p>
+            <ArrowUpRight className="w-3 h-3 text-[var(--text-muted)] opacity-0 group-hover:opacity-100 transition-opacity shrink-0" aria-hidden="true" />
+          </div>
           <p className="mt-1 text-base font-semibold font-mono tabular-nums text-[var(--text-primary)] leading-none">
             {content.scheduledNext24HoursCount}
           </p>
@@ -88,12 +97,12 @@ export function DashboardContentPipeline({
       </div>
 
       {/* Channel Distribution */}
-      <div className="px-3.5 py-3 border-b border-[var(--border-subtle)] space-y-2 min-w-0">
-        <div className="flex items-center justify-between text-[11px] font-mono uppercase tracking-wider text-[var(--text-muted)]">
+      <div className="px-3.5 py-3 border-b border-[var(--border-subtle)] space-y-1.5 min-w-0">
+        <div className="flex items-center justify-between text-[11px] font-mono uppercase tracking-wider text-[var(--text-muted)] pb-0.5">
           <span>Scheduled by Platform</span>
-          <span>Count</span>
+          <span>Queued</span>
         </div>
-        <div className="space-y-1.5">
+        <div className="-mx-1.5 space-y-0.5">
           {platforms.map((platform) => {
             const count = content.byPlatform[platform];
             const barWidthPercent =
@@ -102,11 +111,12 @@ export function DashboardContentPipeline({
                 : 0;
 
             return (
-              <div
+              <Link
                 key={platform}
-                className="flex items-center justify-between gap-3 py-0.5 text-xs min-w-0"
+                href={`/content?tab=scheduled&platform=${platform}`}
+                className="group flex items-center justify-between gap-3 px-1.5 py-1 rounded-[var(--radius-sm)] text-xs hover:bg-[var(--bg-surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] transition-colors min-w-0"
               >
-                <span className="text-[var(--text-secondary)] truncate min-w-[90px]">
+                <span className="text-[var(--text-secondary)] group-hover:text-[var(--text-primary)] transition-colors truncate min-w-[90px]">
                   {platformNames[platform]}
                 </span>
                 <div className="flex items-center gap-2.5 flex-1 justify-end min-w-0">
@@ -125,7 +135,7 @@ export function DashboardContentPipeline({
                     {count}
                   </span>
                 </div>
-              </div>
+              </Link>
             );
           })}
         </div>
@@ -157,8 +167,8 @@ export function DashboardContentPipeline({
             {content.upcomingItems.slice(0, 4).map((item) => (
               <Link
                 key={item.id}
-                href="/content"
-                className="group flex items-center justify-between gap-2.5 px-3.5 py-2 transition-colors hover:bg-[var(--bg-surface-hover)] min-w-0"
+                href={`/content?tab=scheduled&contentId=${encodeURIComponent(item.id)}`}
+                className="group flex items-center justify-between gap-2.5 px-3.5 py-2 transition-colors hover:bg-[var(--bg-surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--focus-ring)] min-w-0"
               >
                 <div className="flex items-center gap-2 min-w-0 flex-1">
                   <span className="inline-flex shrink-0 items-center justify-center min-w-[24px] rounded-[4px] border badge-neutral px-1 py-0.5 text-[10px] font-mono font-semibold leading-none">
@@ -168,7 +178,7 @@ export function DashboardContentPipeline({
                     {item.title}
                   </p>
                 </div>
-                <span className="text-[11px] font-mono tabular-nums text-[var(--text-muted)] shrink-0 whitespace-nowrap">
+                <span className="text-[11px] font-mono tabular-nums text-[var(--text-muted)] group-hover:text-[var(--text-secondary)] shrink-0 whitespace-nowrap">
                   {item.scheduled_at
                     ? formatInTimeZone(item.scheduled_at, timeZone, {
                         year: undefined,
