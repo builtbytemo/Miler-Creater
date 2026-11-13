@@ -1,6 +1,7 @@
 import { isBriefingContentConfigured } from './content';
 
-const PRODUCTION_SUPABASE_HOST = 'zcpdpizrbaaekteurwup.supabase.co';
+const ZAHI_KNOWN_STAGING_SUPABASE_HOST = 'prmgrrzqtnygmitplkhn.supabase.co';
+const ZAHI_KNOWN_GITHUB_OWNER = 'builtbytemo';
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const EMAIL_RE = /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+$/i;
 
@@ -55,14 +56,42 @@ export function parseValidUuid(raw: string | null | undefined): string | null {
   return UUID_RE.test(trimmed) ? trimmed.toLowerCase() : null;
 }
 
-function isProductionSupabaseTarget(): boolean {
-  const supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '').trim();
-  if (!supabaseUrl) return false;
+function parseStrictHttpsHost(raw: string | undefined): string | null {
+  const trimmed = raw?.trim();
+  if (!trimmed) return null;
   try {
-    return new URL(supabaseUrl).hostname.toLowerCase() === PRODUCTION_SUPABASE_HOST;
+    const parsed = new URL(trimmed);
+    if (
+      parsed.protocol !== 'https:' ||
+      !parsed.hostname ||
+      parsed.username ||
+      parsed.password ||
+      parsed.port
+    ) {
+      return null;
+    }
+    return parsed.hostname.toLowerCase();
   } catch {
+    return null;
+  }
+}
+
+function isKnownZahiStagingTarget(): boolean {
+  if (process.env.VERCEL_ENV?.trim() !== 'preview') return false;
+
+  const publicHost = parseStrictHttpsHost(process.env.NEXT_PUBLIC_SUPABASE_URL);
+  if (publicHost !== ZAHI_KNOWN_STAGING_SUPABASE_HOST) return false;
+
+  const serverUrl = process.env.SUPABASE_URL?.trim();
+  if (serverUrl && parseStrictHttpsHost(serverUrl) !== ZAHI_KNOWN_STAGING_SUPABASE_HOST) {
     return false;
   }
+
+  // Defense in depth: never allow staging bypass if Vercel Git metadata identifies another owner.
+  const repoOwner = process.env.VERCEL_GIT_REPO_OWNER?.trim().toLowerCase();
+  if (repoOwner && repoOwner !== ZAHI_KNOWN_GITHUB_OWNER) return false;
+
+  return true;
 }
 
 export function getResendCredentials(): { apiKey: string; from: string } | null {
@@ -74,10 +103,13 @@ export function getResendCredentials(): { apiKey: string; from: string } | null 
 
 /**
  * Resolves the email delivery policy with fail-closed defaults:
- * - Unrestricted multi-user behavior is preserved ONLY in Vercel Preview staging when not targeting
- *   Production Supabase and when single-user allowlist variables are completely absent.
- * - All other runtimes (including Production and unconfigured/local environments) require BOTH
- *   Resend credentials AND a valid single-user allowlist (allowed Supabase user ID + recipient email).
+ * - Defaults to restricted `single_user` mode across ALL hosting environments, including
+ *   independently hosted Vercel Preview, Vercel Production, and non-Vercel deployments.
+ * - Unrestricted multi-user testing mode is enabled ONLY on Zahi's known staging deployment
+ *   (`VERCEL_ENV=preview` pointing strictly to `https://prmgrrzqtnygmitplkhn.supabase.co`,
+ *   not overridden by third-party repo metadata or single-user allowlist variables).
+ * - In `single_user` mode, delivery requires BOTH Resend credentials AND a valid allowlist
+ *   (`DAILY_BRIEFING_EMAIL_ALLOWED_USER_ID` + `DAILY_BRIEFING_EMAIL_ALLOWED_RECIPIENT`).
  */
 export function getEmailDeliveryPolicy(): EmailDeliveryPolicy {
   const credentialsConfigured = Boolean(getResendCredentials());
@@ -85,10 +117,7 @@ export function getEmailDeliveryPolicy(): EmailDeliveryPolicy {
   const rawAllowedRecipient = process.env.DAILY_BRIEFING_EMAIL_ALLOWED_RECIPIENT;
   const hasAnyRestrictionVar = rawAllowedUserId !== undefined || rawAllowedRecipient !== undefined;
 
-  const isStaging =
-    process.env.VERCEL_ENV?.trim() === 'preview' && !isProductionSupabaseTarget() && !hasAnyRestrictionVar;
-
-  if (isStaging) {
+  if (!hasAnyRestrictionVar && isKnownZahiStagingTarget()) {
     return {
       mode: 'staging',
       credentialsConfigured,

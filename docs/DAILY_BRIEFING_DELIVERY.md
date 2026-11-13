@@ -16,19 +16,22 @@ Infrastructure only. No briefing content exists yet; production delivery is **of
 - Server actions in `src/lib/actions/daily-briefing-actions.ts`; UI in Settings → Notifications.
 
 ## Environment variables
-`DAILY_BRIEFING_DELIVERY_ENABLED`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME`, `TELEGRAM_WEBHOOK_SECRET`, `RESEND_API_KEY`, `EMAIL_FROM`, plus existing `CRON_SECRET`, `SUPABASE_SERVICE_ROLE_KEY`.
+`DAILY_BRIEFING_DELIVERY_ENABLED`, `DAILY_BRIEFING_EXPECTED_SUPABASE_HOST`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME`, `TELEGRAM_WEBHOOK_SECRET`, `RESEND_API_KEY`, `EMAIL_FROM`, `DAILY_BRIEFING_EMAIL_ALLOWED_USER_ID`, `DAILY_BRIEFING_EMAIL_ALLOWED_RECIPIENT`, plus existing `CRON_SECRET`, `SUPABASE_SERVICE_ROLE_KEY`.
 
 ## Telegram setup (manual)
 1. In Telegram, message @BotFather → `/newbot`, choose name/username; copy the token.
 2. Set `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME` (without @), and a long random `TELEGRAM_WEBHOOK_SECRET` (A–Z a–z 0–9 _ -) in server env.
 3. Deploy, then register the webhook (run locally, token from your env):
    `curl -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook" -d "url=https://<your-domain>/api/telegram/webhook" -d "secret_token=$TELEGRAM_WEBHOOK_SECRET" -d 'allowed_updates=["message","my_chat_member"]'`
-4. In Miler → Settings → Notifications, press Connect Telegram, open the link, press Start.
+4. In Zahi → Settings → Notifications, press Connect Telegram, open the link, press Start.
 
-## Email setup (manual)
-No email provider existed in the repo (only Supabase Auth's own mail). A Resend adapter is included.
-1. Create a Resend account (free tier available) and verify a sending domain.
-2. Create an API key; set `RESEND_API_KEY` and `EMAIL_FROM` (e.g. `Miler <briefing@your-domain>`).
+## Email setup & Personal Email Mode (manual)
+No email provider SDK is bundled; a lightweight Resend HTTP adapter is included.
+Email delivery **defaults to fail-closed single-user Personal Mode** across all hosting environments (Vercel Preview, Vercel Production, and non-Vercel hosts).
+1. Create a Resend API key (`RESEND_API_KEY`) and set `EMAIL_FROM` (e.g. `Zahi <onboarding@resend.dev>` for personal use/testing to recipients permitted by your own Resend account, or a sender on your own verified Resend domain).
+2. Set `DAILY_BRIEFING_EMAIL_ALLOWED_USER_ID` (the single Supabase Auth user UUID) and `DAILY_BRIEFING_EMAIL_ALLOWED_RECIPIENT` (that user's verified email address).
+3. For independent or self-hosted deployments calling `/api/cron/daily-briefing`, set `DAILY_BRIEFING_EXPECTED_SUPABASE_HOST` to your Supabase hostname (e.g. `your-project-ref.supabase.co`).
+4. Note: `onboarding@resend.dev` only delivers to recipients permitted by your own Resend account and cannot be used for public SaaS email. See [SELF_HOSTING_PERSONAL_EMAIL.md](./SELF_HOSTING_PERSONAL_EMAIL.md) for complete setup steps.
 Alternative provider: implement `ChannelAdapter<EmailDestination>` in `channels/email.ts`.
 
 ## Verification

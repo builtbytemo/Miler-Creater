@@ -14,15 +14,30 @@ function authorized(header: string | null, secret: string): boolean {
   return timingSafeEqual(a, b);
 }
 
+function parseExpectedSupabaseHost(raw: string): string | null {
+  const trimmed = raw.trim().toLowerCase();
+  if (!trimmed || /[\s/:?#@]/.test(trimmed)) return null;
+  try {
+    const parsed = new URL(`https://${trimmed}`);
+    if (parsed.hostname.toLowerCase() !== trimmed || parsed.port) return null;
+    return trimmed;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Daily Briefing scheduler tick. Invoke every ~5 minutes from an external scheduler with
  * `Authorization: Bearer <CRON_SECRET>` (same convention as /api/cron/reminders).
  * Does nothing unless DAILY_BRIEFING_DELIVERY_ENABLED === 'true' (production kill switch).
  *
  * Environment-aware target guard:
- * - VERCEL_ENV === 'preview': Strictly requires Staging Supabase (prmgrrzqtnygmitplkhn.supabase.co).
- * - VERCEL_ENV === 'production': Strictly requires Production Supabase (zcpdpizrbaaekteurwup.supabase.co).
- * - Any other environment or host mismatch: Fails closed with HTTP 403.
+ * - When DAILY_BRIEFING_EXPECTED_SUPABASE_HOST is set (self-hosted / non-Vercel / independent
+ *   deployments): Strictly requires the Supabase URL hostname to equal that configured host.
+ * - Otherwise on Zahi's Vercel deployments:
+ *   - VERCEL_ENV === 'preview': Strictly requires Staging Supabase (prmgrrzqtnygmitplkhn.supabase.co).
+ *   - VERCEL_ENV === 'production': Strictly requires Production Supabase (zcpdpizrbaaekteurwup.supabase.co).
+ * - Any other environment, malformed host, or host mismatch: Fails closed with HTTP 403.
  */
 async function handle(request: NextRequest) {
   const cronSecret = process.env.CRON_SECRET?.trim();
@@ -35,11 +50,13 @@ async function handle(request: NextRequest) {
 
   // Environment-aware Supabase host isolation safeguard
   const vercelEnv = process.env.VERCEL_ENV?.trim();
+  const explicitExpectedHostRaw = process.env.DAILY_BRIEFING_EXPECTED_SUPABASE_HOST;
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
 
   let hostname: string;
   try {
     hostname = new URL(supabaseUrl).hostname.toLowerCase();
+    if (!hostname) throw new Error('empty hostname');
   } catch {
     console.error('[Daily Briefing Cron] FATAL: Supabase URL is invalid or unparseable');
     return NextResponse.json(
@@ -52,7 +69,17 @@ async function handle(request: NextRequest) {
   const PRODUCTION_HOST = `${PRODUCTION_PROJECT_REF}.supabase.co`;
 
   let expectedHost: string;
-  if (vercelEnv === 'preview') {
+  if (explicitExpectedHostRaw !== undefined) {
+    const parsedExplicitHost = parseExpectedSupabaseHost(explicitExpectedHostRaw);
+    if (!parsedExplicitHost) {
+      console.error('[Daily Briefing Cron] FATAL: Invalid DAILY_BRIEFING_EXPECTED_SUPABASE_HOST configuration');
+      return NextResponse.json(
+        { error: 'Invalid DAILY_BRIEFING_EXPECTED_SUPABASE_HOST configuration' },
+        { status: 403 }
+      );
+    }
+    expectedHost = parsedExplicitHost;
+  } else if (vercelEnv === 'preview') {
     expectedHost = STAGING_HOST;
   } else if (vercelEnv === 'production') {
     expectedHost = PRODUCTION_HOST;
@@ -65,11 +92,12 @@ async function handle(request: NextRequest) {
   }
 
   if (hostname !== expectedHost) {
+    const context = explicitExpectedHostRaw !== undefined ? 'explicit target host' : `${vercelEnv} environment`;
     console.error(
-      `[Daily Briefing Cron] FATAL: Supabase target mismatch for environment "${vercelEnv}": expected "${expectedHost}", got "${hostname}"`
+      `[Daily Briefing Cron] FATAL: Supabase target mismatch for ${context}: expected "${expectedHost}", got "${hostname}"`
     );
     return NextResponse.json(
-      { error: `Supabase target mismatch: ${expectedHost} required for ${vercelEnv} environment` },
+      { error: `Supabase target mismatch: ${expectedHost} required for ${context}` },
       { status: 403 }
     );
   }

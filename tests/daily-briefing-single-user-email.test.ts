@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { NextRequest } from 'next/server';
 import {
+  canEnqueueEmailForUser,
   getDeliveryServiceStatus,
   getEmailDeliveryPolicy,
   normalizeEmailAddress,
@@ -73,8 +74,11 @@ describe('Single-user email delivery mode', () => {
     vi.clearAllMocks();
     process.env = { ...originalEnv };
     delete process.env.VERCEL_ENV;
+    delete process.env.VERCEL_GIT_REPO_OWNER;
+    delete process.env.VERCEL_GIT_REPO_SLUG;
     delete process.env.NEXT_PUBLIC_SUPABASE_URL;
     delete process.env.SUPABASE_URL;
+    delete process.env.DAILY_BRIEFING_EXPECTED_SUPABASE_HOST;
     delete process.env.RESEND_API_KEY;
     delete process.env.EMAIL_FROM;
     delete process.env.DAILY_BRIEFING_EMAIL_ALLOWED_USER_ID;
@@ -104,13 +108,22 @@ describe('Single-user email delivery mode', () => {
       setProductionSingleUserEnv({ DAILY_BRIEFING_EMAIL_ALLOWED_USER_ID: undefined });
       expect(getDeliveryServiceStatus().emailConfigured).toBe(false);
 
+      setProductionSingleUserEnv({ DAILY_BRIEFING_EMAIL_ALLOWED_USER_ID: '   ' });
+      expect(getDeliveryServiceStatus().emailConfigured).toBe(false);
+
       setProductionSingleUserEnv({ DAILY_BRIEFING_EMAIL_ALLOWED_RECIPIENT: undefined });
+      expect(getDeliveryServiceStatus().emailConfigured).toBe(false);
+
+      setProductionSingleUserEnv({ DAILY_BRIEFING_EMAIL_ALLOWED_RECIPIENT: '' });
       expect(getDeliveryServiceStatus().emailConfigured).toBe(false);
 
       setProductionSingleUserEnv({ RESEND_API_KEY: '   ' });
       expect(getDeliveryServiceStatus().emailConfigured).toBe(false);
 
       setProductionSingleUserEnv({ EMAIL_FROM: 'invalid-from' });
+      expect(getDeliveryServiceStatus().emailConfigured).toBe(false);
+
+      setProductionSingleUserEnv({ EMAIL_FROM: 'Zahi <not-an-email>' });
       expect(getDeliveryServiceStatus().emailConfigured).toBe(false);
 
       setProductionSingleUserEnv({ DAILY_BRIEFING_EMAIL_ALLOWED_USER_ID: 'not-a-uuid' });
@@ -120,29 +133,100 @@ describe('Single-user email delivery mode', () => {
       expect(getDeliveryServiceStatus().emailConfigured).toBe(false);
     });
 
-    it('preserves staging multi-user mode when VERCEL_ENV=preview targets staging without restriction vars', () => {
+    it('never enables staging bypass on third-party Vercel Preview deployments or mismatched URLs/forks', () => {
+      // Arbitrary non-production Supabase project on Vercel Preview -> must stay restricted single_user!
       process.env.VERCEL_ENV = 'preview';
-      process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://prmgrrzqtnygmitplkhn.supabase.co';
-      process.env.RESEND_API_KEY = 're_staging';
+      process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://thirdparty-preview-project.supabase.co';
+      process.env.RESEND_API_KEY = 're_thirdparty';
       process.env.EMAIL_FROM = 'onboarding@resend.dev';
 
-      const policy = getEmailDeliveryPolicy();
-      expect(policy.mode).toBe('staging');
-      expect(policy.configured).toBe(true);
+      const thirdPartyPolicy = getEmailDeliveryPolicy();
+      expect(thirdPartyPolicy.mode).toBe('single_user');
+      expect(thirdPartyPolicy.configured).toBe(false);
+      expect(getDeliveryServiceStatus().emailConfigured).toBe(false);
+
+      // Missing Supabase URL on Vercel Preview -> must stay restricted
+      delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+      expect(getEmailDeliveryPolicy()).toMatchObject({ mode: 'single_user', configured: false });
+
+      // Non-HTTPS or lookalike subdomain or custom port targeting Zahi staging -> must stay restricted
+      for (const suspiciousUrl of [
+        'http://prmgrrzqtnygmitplkhn.supabase.co',
+        'https://prmgrrzqtnygmitplkhn.supabase.co.attacker.example',
+        'https://prmgrrzqtnygmitplkhn.supabase.co:8443',
+        'not-a-url',
+      ]) {
+        process.env.NEXT_PUBLIC_SUPABASE_URL = suspiciousUrl;
+        expect(getEmailDeliveryPolicy()).toMatchObject({ mode: 'single_user', configured: false });
+      }
+
+      // Third-party GitHub fork metadata even if URL points to Zahi staging -> must stay restricted
+      process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://prmgrrzqtnygmitplkhn.supabase.co';
+      process.env.VERCEL_GIT_REPO_OWNER = 'someone-else';
+      expect(getEmailDeliveryPolicy()).toMatchObject({ mode: 'single_user', configured: false });
+      delete process.env.VERCEL_GIT_REPO_OWNER;
+
+      // Conflicting SUPABASE_URL -> must stay restricted
+      process.env.SUPABASE_URL = 'https://other-project.supabase.co';
+      expect(getEmailDeliveryPolicy()).toMatchObject({ mode: 'single_user', configured: false });
+      delete process.env.SUPABASE_URL;
+
+      // Production Supabase on Vercel Preview -> must stay restricted
+      process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://zcpdpizrbaaekteurwup.supabase.co';
+      expect(getEmailDeliveryPolicy()).toMatchObject({ mode: 'single_user', configured: false });
     });
 
-    it('never allows staging bypass if preview accidentally points to production Supabase or sets partial allowlist', () => {
+    it('preserves staging multi-user mode ONLY for known Zahi staging when restriction vars are absent', () => {
       process.env.VERCEL_ENV = 'preview';
-      process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://zcpdpizrbaaekteurwup.supabase.co';
+      process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://prmgrrzqtnygmitplkhn.supabase.co';
       process.env.RESEND_API_KEY = 're_staging';
       process.env.EMAIL_FROM = 'onboarding@resend.dev';
-      expect(getEmailDeliveryPolicy().mode).toBe('single_user');
-      expect(getEmailDeliveryPolicy().configured).toBe(false);
 
-      process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://prmgrrzqtnygmitplkhn.supabase.co';
+      expect(getEmailDeliveryPolicy()).toEqual({
+        mode: 'staging',
+        credentialsConfigured: true,
+        configured: true,
+      });
+
+      // Also preserved when Zahi's Vercel Git repo owner metadata is exposed
+      process.env.VERCEL_GIT_REPO_OWNER = 'builtbytemo';
+      expect(getEmailDeliveryPolicy()).toEqual({
+        mode: 'staging',
+        credentialsConfigured: true,
+        configured: true,
+      });
+
+      // Adding even a partial restriction variable overrides staging bypass and fails closed
       process.env.DAILY_BRIEFING_EMAIL_ALLOWED_USER_ID = AUTH_USER_ID;
-      expect(getEmailDeliveryPolicy().mode).toBe('single_user');
-      expect(getEmailDeliveryPolicy().configured).toBe(false);
+      expect(getEmailDeliveryPolicy()).toMatchObject({ mode: 'single_user', configured: false });
+    });
+
+    it('supports independent single-user configuration on third-party Vercel Preview and non-Vercel hosts', () => {
+      // Non-Vercel hosting (no VERCEL_ENV)
+      process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://selfhost-node.supabase.co';
+      process.env.RESEND_API_KEY = 're_selfhost';
+      process.env.EMAIL_FROM = 'Zahi <onboarding@resend.dev>';
+      expect(getEmailDeliveryPolicy()).toMatchObject({ mode: 'single_user', configured: false });
+
+      process.env.DAILY_BRIEFING_EMAIL_ALLOWED_USER_ID = AUTH_USER_ID;
+      process.env.DAILY_BRIEFING_EMAIL_ALLOWED_RECIPIENT = AUTH_EMAIL;
+      expect(getEmailDeliveryPolicy()).toEqual({
+        mode: 'single_user',
+        credentialsConfigured: true,
+        restrictionConfigured: true,
+        configured: true,
+        allowedUserId: AUTH_USER_ID,
+        allowedRecipient: AUTH_EMAIL,
+      });
+
+      // Third-party Vercel Preview with own Supabase + allowlist remains strictly single_user (never staging)
+      process.env.VERCEL_ENV = 'preview';
+      expect(getEmailDeliveryPolicy()).toMatchObject({
+        mode: 'single_user',
+        configured: true,
+        allowedUserId: AUTH_USER_ID,
+        allowedRecipient: AUTH_EMAIL,
+      });
     });
 
     it('accepts onboarding@resend.dev and display-name sender formats without header injection', () => {
@@ -152,7 +236,7 @@ describe('Single-user email delivery mode', () => {
       expect(normalizeEmailAddress(' Owner@Example.COM ')).toBe('owner@example.com');
     });
 
-    it('does not hardcode personal email addresses in briefing source files', () => {
+    it('does not hardcode personal email addresses or authorized user IDs in briefing source or docs', () => {
       const files = [
         'src/lib/briefing/config.ts',
         'src/lib/briefing/channels/email.ts',
@@ -160,10 +244,14 @@ describe('Single-user email delivery mode', () => {
         'src/lib/briefing/dispatcher.ts',
         'src/lib/actions/daily-briefing-actions.ts',
         'src/components/settings/DailyBriefingSettings.tsx',
+        'src/app/api/cron/daily-briefing/route.ts',
+        '.env.example',
+        'docs/SELF_HOSTING_PERSONAL_EMAIL.md',
       ];
       for (const f of files) {
         const src = readFileSync(f, 'utf8');
         expect(src).not.toMatch(/@gmail\.com/i);
+        expect(src).not.toMatch(/eac8058d/i);
         expect(src).not.toContain(AUTH_USER_ID);
       }
     });
@@ -596,6 +684,331 @@ describe('Single-user email delivery mode', () => {
       });
       expect(resendCalls).toHaveLength(1);
       expect(telegramCalls).toHaveLength(2);
+    });
+  });
+
+  describe('independent self-hosted installations, non-Vercel hosting, and third-party preview', () => {
+    function buildMultiUserCronDb(userA: string, emailA: string, userB: string, emailB: string) {
+      const db: any = {
+        tables: {
+          daily_briefing_preferences: [
+            {
+              user_id: userA,
+              enabled: true,
+              email_enabled: true,
+              telegram_enabled: true,
+              timezone: 'UTC',
+              delivery_local_time: '00:00:00',
+              email_consent_at: '2026-11-13T00:01:00Z',
+            },
+            {
+              user_id: userB,
+              enabled: true,
+              email_enabled: true,
+              telegram_enabled: true,
+              timezone: 'UTC',
+              delivery_local_time: '00:00:00',
+              email_consent_at: '2026-11-13T00:01:00Z',
+            },
+          ],
+          telegram_connections: [
+            { user_id: userA, chat_id: 2001, status: 'active' },
+            { user_id: userB, chat_id: 2002, status: 'active' },
+          ],
+          briefing_deliveries: [],
+          tasks: [],
+          content_items: [],
+          calendar_blocks: [],
+          workspaces: [
+            { id: 'w-a', owner_id: userA },
+            { id: 'w-b', owner_id: userB },
+          ],
+        },
+        rpcs: {
+          claim_briefing_deliveries: () => {
+            const pending = db.tables.briefing_deliveries.filter((r: any) => !r.status || ['pending', 'retry'].includes(r.status));
+            for (const row of pending) {
+              row.status = 'claimed';
+              row.claim_token = `claim-${row.id}`;
+              row.attempt_count = (row.attempt_count ?? 0) + 1;
+            }
+            return pending;
+          },
+          finalize_briefing_delivery: (args: any) => {
+            const row = db.tables.briefing_deliveries.find((r: any) => r.id === args.p_id);
+            if (row) {
+              row.status = args.p_outcome;
+              row.provider_message_id = args.p_provider_message_id;
+              row.last_error_code = args.p_error_code;
+            }
+            return true;
+          },
+        },
+      };
+
+      const admin = createFakeAdmin(db, {
+        users: {
+          [userA]: { email: emailA, email_confirmed_at: '2026-11-01T00:00:00Z' },
+          [userB]: { email: emailB, email_confirmed_at: '2026-11-01T00:00:00Z' },
+        },
+      });
+      return { db, admin };
+    }
+
+    it('supports two independent installations with different Supabase projects, Resend credentials, and authorized identities', async () => {
+      const USER_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+      const EMAIL_A = 'alpha@alpha-selfhost.example';
+      const USER_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+      const EMAIL_B = 'beta@beta-custom.example';
+
+      const installations = [
+        {
+          name: 'Non-Vercel Installation A',
+          vercelEnv: undefined,
+          host: 'install-a-ref.supabase.co',
+          resendKey: 're_install_a_secret',
+          from: 'Zahi Personal <onboarding@resend.dev>',
+          allowedUser: USER_A,
+          allowedEmail: EMAIL_A,
+          deniedUser: USER_B,
+          deniedEmail: EMAIL_B,
+          cronUrl: 'https://zahi-a.selfhost.example/api/cron/daily-briefing',
+        },
+        {
+          name: 'Third-Party Vercel Installation B',
+          vercelEnv: 'production',
+          host: 'install-b-ref.supabase.co',
+          resendKey: 're_install_b_secret',
+          from: 'Daily Brief <briefing@beta-custom.example>',
+          allowedUser: USER_B,
+          allowedEmail: EMAIL_B,
+          deniedUser: USER_A,
+          deniedEmail: EMAIL_A,
+          cronUrl: 'https://zahi-b.vercel.app/api/cron/daily-briefing',
+        },
+      ];
+
+      for (const inst of installations) {
+        delete process.env.VERCEL_ENV;
+        if (inst.vercelEnv) process.env.VERCEL_ENV = inst.vercelEnv;
+        process.env.NEXT_PUBLIC_SUPABASE_URL = `https://${inst.host}`;
+        process.env.DAILY_BRIEFING_EXPECTED_SUPABASE_HOST = inst.host;
+        process.env.CRON_SECRET = `cron-${inst.name}`;
+        process.env.DAILY_BRIEFING_DELIVERY_ENABLED = 'true';
+        process.env.TELEGRAM_BOT_TOKEN = `tg-${inst.name}`;
+        process.env.RESEND_API_KEY = inst.resendKey;
+        process.env.EMAIL_FROM = inst.from;
+        process.env.DAILY_BRIEFING_EMAIL_ALLOWED_USER_ID = inst.allowedUser;
+        process.env.DAILY_BRIEFING_EMAIL_ALLOWED_RECIPIENT = inst.allowedEmail;
+
+        const { admin } = buildMultiUserCronDb(USER_A, EMAIL_A, USER_B, EMAIL_B);
+        mockFakeAdmin = admin;
+
+        // UI state shows email enabled ONLY for this installation's authorized user
+        mockGetUser.mockResolvedValue({
+          data: { user: { id: inst.allowedUser, email: inst.allowedEmail, email_confirmed_at: '2026-11-01T00:00:00Z' } },
+        });
+        const allowPrefsQuery = {
+          select: vi.fn().mockReturnThis(),
+          eq: vi.fn().mockReturnThis(),
+          maybeSingle: vi.fn().mockResolvedValue({ data: { enabled: true, email_enabled: true, telegram_enabled: true }, error: null }),
+        };
+        mockUserPrefsDb = allowPrefsQuery;
+        mockTelegramDb = {
+          select: vi.fn().mockReturnThis(),
+          eq: vi.fn().mockReturnThis(),
+          maybeSingle: vi.fn().mockResolvedValue({ data: { status: 'active', telegram_username: 'u' }, error: null }),
+        };
+        const allowedState = await getDailyBriefingStateAction();
+        expect(allowedState.data?.service.emailConfigured).toBe(true);
+        expect(allowedState.data?.emailEnabled).toBe(true);
+
+        mockGetUser.mockResolvedValue({
+          data: { user: { id: inst.deniedUser, email: inst.deniedEmail, email_confirmed_at: '2026-11-01T00:00:00Z' } },
+        });
+        const deniedState = await getDailyBriefingStateAction();
+        expect(deniedState.data?.service.emailConfigured).toBe(false);
+        expect(deniedState.data?.emailEnabled).toBe(false);
+
+        const resendCalls: { auth: string | null; idempotencyKey: string | null; body: any }[] = [];
+        const telegramCalls: any[] = [];
+        global.fetch = vi.fn(async (url: string, init?: RequestInit) => {
+          const headers = new Headers(init?.headers);
+          if (url === 'https://api.resend.com/emails') {
+            resendCalls.push({
+              auth: headers.get('authorization'),
+              idempotencyKey: headers.get('idempotency-key'),
+              body: JSON.parse(String(init?.body)),
+            });
+            return new Response(JSON.stringify({ id: `msg-${inst.host}` }), { status: 200 });
+          }
+          if (url.startsWith('https://api.telegram.org/')) {
+            telegramCalls.push(JSON.parse(String(init?.body)));
+            return new Response(JSON.stringify({ ok: true, result: { message_id: 1 } }), { status: 200 });
+          }
+          throw new Error(`Unexpected fetch URL: ${url}`);
+        }) as any;
+
+        const res = await cronPost(
+          new NextRequest(inst.cronUrl, {
+            method: 'POST',
+            headers: { authorization: `Bearer cron-${inst.name}` },
+          })
+        );
+        expect(res.status).toBe(200);
+        const body = await res.json();
+        expect(body).toMatchObject({
+          success: true,
+          enabled: true,
+          enqueue: { enqueued: 3 },
+          dispatch: { claimed: 3, sent: 3, failed: 0, skipped: 0 },
+        });
+
+        expect(resendCalls).toHaveLength(1);
+        expect(resendCalls[0].auth).toBe(`Bearer ${inst.resendKey}`);
+        expect(resendCalls[0].idempotencyKey).toMatch(/^briefing-/);
+        expect(resendCalls[0].body).toMatchObject({
+          from: inst.from,
+          to: [inst.allowedEmail],
+        });
+        expect(resendCalls[0].body.subject).toMatch(/^Your Zahi briefing · /);
+        expect(telegramCalls).toHaveLength(2);
+      }
+    });
+
+    it('fails closed on non-Vercel hosting when restriction vars or explicit cron host are missing or malformed', async () => {
+      // Simulate non-Vercel platform without allowlist or cron host pin
+      delete process.env.VERCEL_ENV;
+      process.env.FLY_APP_NAME = 'zahi-docker-instance';
+      process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://selfhost-no-allowlist.supabase.co';
+      process.env.CRON_SECRET = 'cron-secret';
+      process.env.DAILY_BRIEFING_DELIVERY_ENABLED = 'true';
+      process.env.RESEND_API_KEY = 're_selfhost';
+      process.env.EMAIL_FROM = 'onboarding@resend.dev';
+
+      expect(getEmailDeliveryPolicy()).toMatchObject({ mode: 'single_user', configured: false });
+      expect(canEnqueueEmailForUser(AUTH_USER_ID)).toBe(false);
+
+      const fetchSpy = vi.fn();
+      global.fetch = fetchSpy as any;
+      const adapterRes = await createEmailAdapter(fetchSpy as any).send(
+        { to: AUTH_EMAIL },
+        { channel: 'email', subject: 's', text: 't' }
+      );
+      expect(adapterRes).toEqual({ ok: false, kind: 'not_configured', code: 'email_restriction_not_configured' });
+      expect(fetchSpy).not.toHaveBeenCalled();
+
+      // Cron fails closed without DAILY_BRIEFING_EXPECTED_SUPABASE_HOST on non-Vercel host
+      const missingHostRes = await cronPost(
+        new NextRequest('https://selfhost.example/api/cron/daily-briefing', {
+          method: 'POST',
+          headers: { authorization: 'Bearer cron-secret' },
+        })
+      );
+      expect(missingHostRes.status).toBe(403);
+
+      // Cron fails closed for malformed or mismatched DAILY_BRIEFING_EXPECTED_SUPABASE_HOST
+      for (const badHost of ['', '   ', 'https://selfhost-no-allowlist.supabase.co', 'wrong.supabase.co', 'bad host']) {
+        process.env.DAILY_BRIEFING_EXPECTED_SUPABASE_HOST = badHost;
+        const badRes = await cronPost(
+          new NextRequest('https://selfhost.example/api/cron/daily-briefing', {
+            method: 'POST',
+            headers: { authorization: 'Bearer cron-secret' },
+          })
+        );
+        expect(badRes.status).toBe(403);
+      }
+    });
+
+    it('enforces single-user mode on third-party Vercel Preview deployments with or without allowlist config', async () => {
+      process.env.VERCEL_ENV = 'preview';
+      process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://thirdparty-preview-999.supabase.co';
+      process.env.CRON_SECRET = 'cron-preview';
+      process.env.DAILY_BRIEFING_DELIVERY_ENABLED = 'true';
+      process.env.TELEGRAM_BOT_TOKEN = 'tg-preview';
+      process.env.RESEND_API_KEY = 're_thirdparty';
+      process.env.EMAIL_FROM = 'Zahi <onboarding@resend.dev>';
+
+      // 1. Without allowlist vars: never infers staging from VERCEL_ENV=preview
+      expect(getEmailDeliveryPolicy()).toMatchObject({ mode: 'single_user', configured: false });
+      const { db, admin } = buildMultiUserCronDb(AUTH_USER_ID, AUTH_EMAIL, OTHER_USER_ID, OTHER_EMAIL);
+      const enqueueBlocked = await enqueueDueBriefings(admin, new Date('2026-11-13T00:05:00Z'));
+      expect(enqueueBlocked.enqueued).toBe(2); // Telegram for both users only; zero emails
+      expect(db.tables.briefing_deliveries.every((r: any) => r.channel === 'telegram')).toBe(true);
+
+      // Cron without DAILY_BRIEFING_EXPECTED_SUPABASE_HOST also blocks unknown preview host
+      const unpinnedCronRes = await cronPost(
+        new NextRequest('https://thirdparty-preview.vercel.app/api/cron/daily-briefing', {
+          method: 'POST',
+          headers: { authorization: 'Bearer cron-preview' },
+        })
+      );
+      expect(unpinnedCronRes.status).toBe(403);
+
+      // 2. With explicit Personal Mode allowlist + target host pin: single_user mode works on third-party Preview
+      process.env.DAILY_BRIEFING_EXPECTED_SUPABASE_HOST = 'thirdparty-preview-999.supabase.co';
+      process.env.DAILY_BRIEFING_EMAIL_ALLOWED_USER_ID = AUTH_USER_ID;
+      process.env.DAILY_BRIEFING_EMAIL_ALLOWED_RECIPIENT = AUTH_EMAIL;
+      expect(getEmailDeliveryPolicy()).toMatchObject({ mode: 'single_user', configured: true });
+
+      const fresh = buildMultiUserCronDb(AUTH_USER_ID, AUTH_EMAIL, OTHER_USER_ID, OTHER_EMAIL);
+      mockFakeAdmin = fresh.admin;
+      const resendCalls: any[] = [];
+      global.fetch = vi.fn(async (url: string, init?: RequestInit) => {
+        if (url === 'https://api.resend.com/emails') {
+          resendCalls.push(JSON.parse(String(init?.body)));
+          return new Response(JSON.stringify({ id: 'tp-email-1' }), { status: 200 });
+        }
+        return new Response(JSON.stringify({ ok: true, result: { message_id: 2 } }), { status: 200 });
+      }) as any;
+
+      const pinnedRes = await cronPost(
+        new NextRequest('https://thirdparty-preview.vercel.app/api/cron/daily-briefing', {
+          method: 'POST',
+          headers: { authorization: 'Bearer cron-preview' },
+        })
+      );
+      expect(pinnedRes.status).toBe(200);
+      expect(resendCalls).toHaveLength(1);
+      expect(resendCalls[0].to).toEqual([AUTH_EMAIL]);
+    });
+
+    it('preserves existing Zahi staging cron and multi-user email delivery without new env vars', async () => {
+      process.env.VERCEL_ENV = 'preview';
+      process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://prmgrrzqtnygmitplkhn.supabase.co';
+      process.env.CRON_SECRET = 'cron-staging';
+      process.env.DAILY_BRIEFING_DELIVERY_ENABLED = 'true';
+      process.env.TELEGRAM_BOT_TOKEN = 'tg-staging';
+      process.env.RESEND_API_KEY = 're_staging';
+      process.env.EMAIL_FROM = 'Zahi <onboarding@resend.dev>';
+
+      const { admin } = buildMultiUserCronDb(AUTH_USER_ID, AUTH_EMAIL, OTHER_USER_ID, OTHER_EMAIL);
+      mockFakeAdmin = admin;
+
+      const resendRecipients: string[] = [];
+      global.fetch = vi.fn(async (url: string, init?: RequestInit) => {
+        if (url === 'https://api.resend.com/emails') {
+          const payload = JSON.parse(String(init?.body));
+          resendRecipients.push(...payload.to);
+          return new Response(JSON.stringify({ id: 'stg-email' }), { status: 200 });
+        }
+        return new Response(JSON.stringify({ ok: true, result: { message_id: 9 } }), { status: 200 });
+      }) as any;
+
+      const res = await cronPost(
+        new NextRequest('https://preview.miler.app/api/cron/daily-briefing', {
+          method: 'POST',
+          headers: { authorization: 'Bearer cron-staging' },
+        })
+      );
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({
+        success: true,
+        enabled: true,
+        enqueue: { enqueued: 4 },
+        dispatch: { claimed: 4, sent: 4, failed: 0, skipped: 0 },
+      });
+      expect(resendRecipients.sort()).toEqual([AUTH_EMAIL, OTHER_EMAIL].sort());
     });
   });
 });
