@@ -8,8 +8,15 @@ import { DEFAULT_TIMEZONE } from '@/lib/temporal/timezone';
 
 export const instant = false;
 
-export default async function NotificationsPage() {
+interface NotificationsPageProps {
+  searchParams?: Promise<{
+    filter?: string;
+  }>;
+}
+
+export default async function NotificationsPage({ searchParams }: NotificationsPageProps = {}) {
   await connection();
+  const resolvedParams = searchParams ? await searchParams : {};
   const supabase = await createClient();
   const { data: authData } = await supabase.auth.getUser();
 
@@ -55,6 +62,7 @@ export default async function NotificationsPage() {
           workspaceId={workspaceId}
           workspaceName={wsData?.name}
           userTimeZone={userTimeZone}
+          initialReadFilter={resolvedParams.filter === 'unread' ? 'unread' : 'all'}
         />
       </main>
     </div>

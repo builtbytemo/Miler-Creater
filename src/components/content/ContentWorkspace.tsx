@@ -39,9 +39,28 @@ interface ContentWorkspaceProps {
   socialAccounts: SocialAccountRow[];
   projects: ProjectOption[];
   userTimeZone: string;
+  initialTab?: string;
+  initialPlatform?: string;
+  initialStatusFilter?: string;
+  initialContentId?: string;
 }
 
 type TabKey = 'all' | 'ideas' | 'drafts' | 'scheduled' | 'archived';
+
+const VALID_TABS: readonly TabKey[] = ['all', 'ideas', 'drafts', 'scheduled', 'archived'];
+const VALID_PLATFORMS = new Set([
+  'x',
+  'linkedin',
+  'reddit',
+  'threads',
+  'instagram',
+  'youtube',
+  'tiktok',
+  'newsletter',
+  'blog',
+  'other',
+]);
+const VALID_CONTENT_STATUSES = new Set(['idea', 'draft', 'scheduled', 'published', 'archived']);
 
 export function ContentWorkspace({
   initialItems,
@@ -50,6 +69,10 @@ export function ContentWorkspace({
   socialAccounts: initialSocialAccounts,
   projects,
   userTimeZone,
+  initialTab,
+  initialPlatform,
+  initialStatusFilter,
+  initialContentId,
 }: ContentWorkspaceProps) {
   const router = useRouter();
 
@@ -65,10 +88,16 @@ export function ContentWorkspace({
   const [socialAccounts, setSocialAccounts] = useState<SocialAccountRow[]>(initialSocialAccounts);
 
   // Tab & Filters
-  const [activeTab, setActiveTab] = useState<TabKey>('all');
+  const [activeTab, setActiveTab] = useState<TabKey>(() =>
+    initialTab && VALID_TABS.includes(initialTab as TabKey) ? (initialTab as TabKey) : 'all'
+  );
   const [search, setSearch] = useState('');
-  const [platformFilter, setPlatformFilter] = useState<string>('all');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [platformFilter, setPlatformFilter] = useState<string>(() =>
+    initialPlatform && VALID_PLATFORMS.has(initialPlatform) ? initialPlatform : 'all'
+  );
+  const [statusFilter, setStatusFilter] = useState<string>(() =>
+    initialStatusFilter && VALID_CONTENT_STATUSES.has(initialStatusFilter) ? initialStatusFilter : 'all'
+  );
   const [actionTypeFilter, setActionTypeFilter] = useState<string>('all');
   const [accountFilter, setAccountFilter] = useState<string>('all');
 
@@ -76,7 +105,9 @@ export function ContentWorkspace({
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [createDefaultStatus, setCreateDefaultStatus] = useState<ContentStatus>('idea');
   const [isCreateAccountOpen, setIsCreateAccountOpen] = useState(false);
-  const [selectedContentDetail, setSelectedContentDetail] = useState<ContentItemWithMeta | null>(null);
+  const [selectedContentDetail, setSelectedContentDetail] = useState<ContentItemWithMeta | null>(() =>
+    initialContentId ? initialMerged.find((item) => item.id === initialContentId) ?? null : null
+  );
 
   // Notifications
   const [successMessage, setSuccessMessage] = useState<string | null>(null);

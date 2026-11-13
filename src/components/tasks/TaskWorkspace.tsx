@@ -32,7 +32,16 @@ interface TaskWorkspaceProps {
   workspaceId: string;
   projects: ProjectOption[];
   userTimeZone: string;
+  initialSearch?: string;
+  initialStatusFilter?: string;
+  initialPriorityFilter?: string;
+  initialDateFilter?: string;
+  initialTaskId?: string;
 }
+
+const VALID_DATE_FILTERS: readonly TaskDateFilter[] = ['all', 'today', 'overdue', 'unscheduled'];
+const VALID_STATUS_FILTERS = ['all', 'active', 'todo', 'in_progress', 'blocked', 'done', 'cancelled'] as const;
+const VALID_PRIORITY_FILTERS = ['all', 'urgent', 'high', 'medium', 'low'] as const;
 
 function formatTaskDueDate(dueDate: string, timeZone?: string): string {
   const date = new Date(dueDate);
@@ -78,13 +87,22 @@ export function TaskWorkspace({
   workspaceId,
   projects,
   userTimeZone,
+  initialSearch,
+  initialStatusFilter,
+  initialPriorityFilter,
+  initialDateFilter,
+  initialTaskId,
 }: TaskWorkspaceProps) {
   const router = useRouter();
   const [tasks, setTasks] = useState<TaskWithMeta[]>(() =>
     initialTasks.filter((task) => task.entry_type !== 'calendar_block' && task.created_from !== 'calendar')
   );
-  const [search, setSearch] = useState('');
-  const [dateFilter, setDateFilter] = useState<TaskDateFilter>('all');
+  const [search, setSearch] = useState(initialSearch ?? '');
+  const [dateFilter, setDateFilter] = useState<TaskDateFilter>(() =>
+    initialDateFilter && VALID_DATE_FILTERS.includes(initialDateFilter as TaskDateFilter)
+      ? (initialDateFilter as TaskDateFilter)
+      : 'all'
+  );
   const [sort, setSort] = useState<TaskSort>('default');
   const [clock, setClock] = useState(() => new Date());
   useEffect(() => {
@@ -92,13 +110,58 @@ export function TaskWorkspace({
     return () => clearInterval(timer);
   }, []);
   const todayKey = getCalendarDateKey(clock, userTimeZone);
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [priorityFilter, setPriorityFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<string>(() =>
+    initialStatusFilter &&
+    VALID_STATUS_FILTERS.includes(initialStatusFilter as (typeof VALID_STATUS_FILTERS)[number])
+      ? initialStatusFilter
+      : 'all'
+  );
+  const [priorityFilter, setPriorityFilter] = useState<string>(() =>
+    initialPriorityFilter &&
+    VALID_PRIORITY_FILTERS.includes(initialPriorityFilter as (typeof VALID_PRIORITY_FILTERS)[number])
+      ? initialPriorityFilter
+      : 'all'
+  );
   const [projectFilter, setProjectFilter] = useState<string>('all');
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [selectedTaskDetail, setSelectedTaskDetail] = useState<TaskDetail | null>(null);
+  const [selectedTaskDetail, setSelectedTaskDetail] = useState<TaskDetail | null>(() => {
+    if (!initialTaskId) return null;
+    const matched = initialTasks.find(
+      (task) =>
+        task.id === initialTaskId &&
+        task.entry_type !== 'calendar_block' &&
+        task.created_from !== 'calendar'
+    );
+    if (!matched) return null;
+    return {
+      ...matched,
+      subtasks: [],
+      dependencies: [],
+    };
+  });
   const [subtasksByParent, setSubtasksByParent] = useState<Record<string, TaskWithMeta[]>>({});
+
+  useEffect(() => {
+    if (!initialTaskId) return;
+    let active = true;
+    getTaskDetailAction(workspaceId, initialTaskId)
+      .then((res) => {
+        if (!active || !res.success || !res.data) return;
+        const fullDetail = res.data as TaskDetail;
+        setSelectedTaskDetail(fullDetail);
+        setSubtasksByParent((prev) => ({
+          ...prev,
+          [initialTaskId]: fullDetail.subtasks,
+        }));
+      })
+      .catch((err) => {
+        console.error('Failed to load initial task details:', err);
+      });
+    return () => {
+      active = false;
+    };
+  }, [initialTaskId, workspaceId]);
   const [pendingTaskId, setPendingTaskId] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);

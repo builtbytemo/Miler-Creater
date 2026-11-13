@@ -11,9 +11,12 @@ export const instant = false;
 interface TasksPageProps {
   searchParams: Promise<{
     status?: string;
+    statusFilter?: string;
+    dateFilter?: string;
     priority?: string;
     project_id?: string;
     search?: string;
+    taskId?: string;
   }>;
 }
 
@@ -165,6 +168,11 @@ export default async function TasksPage({ searchParams }: TasksPageProps) {
           workspaceId={workspace.id}
           projects={projects}
           userTimeZone="Africa/Cairo"
+          initialSearch={resolvedParams.search}
+          initialStatusFilter={resolvedParams.statusFilter ?? resolvedParams.status}
+          initialPriorityFilter={resolvedParams.priority}
+          initialDateFilter={resolvedParams.dateFilter}
+          initialTaskId={resolvedParams.taskId}
         />
       </main>
     </div>
