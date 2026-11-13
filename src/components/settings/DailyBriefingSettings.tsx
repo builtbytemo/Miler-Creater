@@ -29,11 +29,14 @@ function Toggle({
 }) {
   return (
     <div className="flex items-start justify-between gap-4">
-      <div className="space-y-0.5">
-        <label htmlFor={id} className="text-xs font-semibold text-neutral-200 cursor-pointer">
+      <div className="space-y-0.5 min-w-0">
+        <label
+          htmlFor={id}
+          className="text-xs font-semibold text-[var(--text-primary)] cursor-pointer block"
+        >
           {label}
         </label>
-        <p className="text-xs text-neutral-400">{description}</p>
+        <p className="text-xs text-[var(--text-secondary)] leading-relaxed">{description}</p>
       </div>
       <input
         id={id}
@@ -42,7 +45,7 @@ function Toggle({
         checked={checked}
         disabled={disabled}
         onChange={(e) => onChange(e.target.checked)}
-        className="mt-1 h-4 w-4 accent-blue-500 disabled:opacity-40"
+        className="mt-0.5 h-4 w-4 rounded accent-[var(--accent)] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
       />
     </div>
   );
@@ -61,14 +64,27 @@ export function DailyBriefingSettings() {
   }, []);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load();
-  }, [load]);
+    let cancelled = false;
+    getDailyBriefingStateAction().then((res) => {
+      if (cancelled) return;
+      if (res.error) setMessage({ kind: 'error', text: res.error });
+      else if (res.data) setState(res.data);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const run = (fn: () => Promise<{ error?: string }>, okText?: string) =>
     startTransition(async () => {
       const res = await fn();
-      setMessage(res.error ? { kind: 'error', text: res.error } : okText ? { kind: 'ok', text: okText } : null);
+      setMessage(
+        res.error
+          ? { kind: 'error', text: res.error }
+          : okText
+            ? { kind: 'ok', text: okText }
+            : null
+      );
       await load();
     });
 
@@ -87,8 +103,9 @@ export function DailyBriefingSettings() {
 
   if (!state) {
     return (
-      <div className="flex items-center gap-2 py-6 text-xs text-neutral-500">
-        <Loader2 className="w-4 h-4 animate-spin text-blue-500" /> Loading Daily Briefing settings...
+      <div className="surface-card p-6 flex items-center gap-2.5 text-xs text-[var(--text-muted)]">
+        <Loader2 className="w-4 h-4 animate-spin text-[var(--accent)]" />
+        <span>Loading Daily Briefing settings...</span>
       </div>
     );
   }
@@ -97,55 +114,67 @@ export function DailyBriefingSettings() {
   const generatorReady = service.contentConfigured;
 
   return (
-    <section className="space-y-4 max-w-3xl" aria-labelledby="daily-briefing-heading">
+    <section className="space-y-4" aria-labelledby="daily-briefing-heading">
       <div>
-        <h2 id="daily-briefing-heading" className="text-sm font-semibold text-neutral-200 flex items-center gap-2">
-          <CalendarClock className="w-4 h-4 text-blue-400" />
+        <h2
+          id="daily-briefing-heading"
+          className="heading-section text-sm sm:text-base flex items-center gap-2"
+        >
+          <CalendarClock className="w-4 h-4 text-[var(--accent)]" />
           <span>Daily Briefing</span>
         </h2>
-        <p className="text-xs text-neutral-400 mt-0.5">
-          Scheduled delivery to the channels you explicitly enable. Separate from reminder preferences above.
+        <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+          Scheduled digest delivery to the channels you explicitly enable. Separate from reminder
+          preferences above.
         </p>
       </div>
 
-      {!service.schedulerEnabled || !generatorReady ? (
-        <div role="status" className="p-4 rounded-xl bg-amber-950/40 border border-amber-900/60 text-amber-200 text-xs flex gap-2.5">
-          <AlertTriangle className="w-4 h-4 shrink-0" />
+      {(!service.schedulerEnabled || !generatorReady) && (
+        <div
+          role="status"
+          className="p-3.5 rounded-[var(--radius-sm)] border badge-warning text-xs flex items-start gap-2.5"
+        >
+          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
           <span>
             The delivery service is not yet active
             {!service.schedulerEnabled ? ' (scheduler disabled)' : ''}
-            {!generatorReady ? ' (briefing content not available yet)' : ''}. Nothing will be sent automatically.
+            {!generatorReady ? ' (briefing content not available yet)' : ''}. Nothing will be sent
+            automatically.
           </span>
         </div>
-      ) : null}
+      )}
 
       {message && (
         <div
           role={message.kind === 'error' ? 'alert' : 'status'}
-          className={
-            message.kind === 'error'
-              ? 'p-3 rounded-xl bg-rose-950/40 border border-rose-900/60 text-rose-200 text-xs'
-              : 'p-3 rounded-xl bg-emerald-950/40 border border-emerald-800 text-emerald-200 text-xs'
-          }
+          className={`p-3 rounded-[var(--radius-sm)] border text-xs ${
+            message.kind === 'error' ? 'badge-danger' : 'badge-success'
+          }`}
         >
           {message.text}
         </div>
       )}
 
-      <div className="p-4 rounded-xl bg-neutral-950 border border-neutral-800 space-y-4">
-        <Toggle
-          id="toggle-briefing"
-          label="Daily Briefing"
-          description="Master switch. Off by default."
-          checked={state.enabled}
-          disabled={pending}
-          onChange={(v) => update({ enabled: v })}
-        />
-        <p className="text-xs text-neutral-400">
-          Delivery time: <span className="text-neutral-200">{state.deliveryLocalTime}</span> ({state.timezone})
-        </p>
+      <div className="surface-card p-5 space-y-5">
+        <div className="space-y-2">
+          <Toggle
+            id="toggle-briefing"
+            label="Daily Briefing"
+            description="Master switch. Off by default."
+            checked={state.enabled}
+            disabled={pending}
+            onChange={(v) => update({ enabled: v })}
+          />
+          <p className="text-xs text-[var(--text-muted)]">
+            Delivery time:{' '}
+            <span className="font-mono font-medium text-[var(--text-primary)]">
+              {state.deliveryLocalTime}
+            </span>{' '}
+            <span className="font-mono text-[11px]">({state.timezone})</span>
+          </p>
+        </div>
 
-        <div className="border-t border-neutral-800 pt-4 space-y-3">
+        <div className="border-t border-[var(--border-subtle)] pt-4 space-y-3">
           <Toggle
             id="toggle-briefing-email"
             label="Email"
@@ -166,21 +195,28 @@ export function DailyBriefingSettings() {
             type="button"
             disabled={pending || !service.emailConfigured || !state.emailAddressVerified}
             onClick={() => test('email')}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-neutral-700 text-xs text-neutral-200 hover:bg-neutral-800 disabled:opacity-40"
-            title={service.emailConfigured ? 'Send a test email' : 'Email delivery is not configured yet'}
+            className="btn-secondary px-3 py-1.5 text-xs font-medium disabled:opacity-40"
+            title={
+              service.emailConfigured ? 'Send a test email' : 'Email delivery is not configured yet'
+            }
           >
-            <Mail className="w-3.5 h-3.5" /> Send test email
+            <Mail className="w-3.5 h-3.5" />
+            <span>Send test email</span>
           </button>
           {service.emailRecipientMismatch ? (
-            <p className="text-xs text-amber-300/90">
+            <p className="text-xs text-[var(--status-warning-text)]">
               Your verified account email does not match the authorized recipient for this server.
             </p>
           ) : (
-            !service.emailConfigured && <p className="text-xs text-neutral-500">Email delivery is not configured on this server yet.</p>
+            !service.emailConfigured && (
+              <p className="text-xs text-[var(--text-muted)]">
+                Email delivery is not configured on this server yet.
+              </p>
+            )
           )}
         </div>
 
-        <div className="border-t border-neutral-800 pt-4 space-y-3">
+        <div className="border-t border-[var(--border-subtle)] pt-4 space-y-3">
           <Toggle
             id="toggle-briefing-telegram"
             label="Telegram"
@@ -200,9 +236,14 @@ export function DailyBriefingSettings() {
               type="button"
               disabled={pending || !service.telegramConfigured}
               onClick={connect}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-xs text-white disabled:opacity-40"
+              className="btn-accent px-3 py-1.5 text-xs font-semibold disabled:opacity-40"
             >
-              <Send className="w-3.5 h-3.5" /> {state.telegram.status === 'not_connected' ? 'Connect Telegram' : 'Reconnect Telegram'}
+              <Send className="w-3.5 h-3.5" />
+              <span>
+                {state.telegram.status === 'not_connected'
+                  ? 'Connect Telegram'
+                  : 'Reconnect Telegram'}
+              </span>
             </button>
             {state.telegram.status !== 'not_connected' && (
               <>
@@ -210,30 +251,45 @@ export function DailyBriefingSettings() {
                   type="button"
                   disabled={pending || state.telegram.status !== 'active' || !service.telegramConfigured}
                   onClick={() => test('telegram')}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-neutral-700 text-xs text-neutral-200 hover:bg-neutral-800 disabled:opacity-40"
+                  className="btn-secondary px-3 py-1.5 text-xs font-medium disabled:opacity-40"
                 >
-                  <Send className="w-3.5 h-3.5" /> Send test message
+                  <Send className="w-3.5 h-3.5" />
+                  <span>Send test message</span>
                 </button>
                 <button
                   type="button"
                   disabled={pending}
                   onClick={() => run(disconnectTelegramAction, 'Telegram disconnected.')}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-rose-900/60 text-xs text-rose-300 hover:bg-rose-950/40 disabled:opacity-40"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--radius-sm)] border badge-danger text-xs font-medium transition-opacity hover:opacity-85 disabled:opacity-40"
                 >
-                  <Unplug className="w-3.5 h-3.5" /> Disconnect
+                  <Unplug className="w-3.5 h-3.5" />
+                  <span>Disconnect</span>
                 </button>
               </>
             )}
           </div>
-          {!service.telegramConfigured && <p className="text-xs text-neutral-500">Telegram is not configured on this server yet.</p>}
+          {!service.telegramConfigured && (
+            <p className="text-xs text-[var(--text-muted)]">
+              Telegram is not configured on this server yet.
+            </p>
+          )}
           {deepLink && (
-            <p className="text-xs text-neutral-300">
+            <p className="text-xs text-[var(--text-secondary)]">
               Open{' '}
-              <a href={deepLink} target="_blank" rel="noopener noreferrer" className="text-blue-400 underline">
+              <a
+                href={deepLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[var(--accent-text)] font-medium underline"
+              >
                 this link in Telegram
               </a>{' '}
               and press Start. It expires in 10 minutes and works once.{' '}
-              <button type="button" onClick={load} className="text-blue-400 underline">
+              <button
+                type="button"
+                onClick={load}
+                className="text-[var(--accent-text)] font-medium underline"
+              >
                 Refresh status
               </button>
             </p>

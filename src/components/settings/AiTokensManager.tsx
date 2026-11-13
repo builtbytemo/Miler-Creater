@@ -1,12 +1,9 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import Link from 'next/link';
 import {
   AlertTriangle,
-  Bell,
   Check,
-  ChevronLeft,
   Clock,
   Copy,
   KeyRound,
@@ -34,7 +31,6 @@ import {
   revokeAiTokenAction,
 } from '@/lib/actions/ai-token-actions';
 import { formatInTimeZone, DEFAULT_TIMEZONE } from '@/lib/temporal/timezone';
-import clsx from 'clsx';
 
 export interface RevealedTokenSecret {
   token: string;
@@ -65,21 +61,21 @@ export function OneTimeTokenRevealBanner({
       role="region"
       aria-label="New API Token Secret"
       data-testid="one-time-token-reveal"
-      className="p-5 rounded-xl bg-emerald-950/30 border border-emerald-700/70 text-emerald-100 space-y-4 shadow-lg animate-in fade-in duration-200"
+      className="surface-card zahi-khatam-accent p-5 space-y-4 border-[var(--status-success-border)]"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-2.5">
-          <div className="p-2 rounded-lg bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 shrink-0 mt-0.5">
+          <div className="p-2 rounded-[var(--radius-sm)] badge-success border shrink-0 mt-0.5">
             <KeyRound className="w-4 h-4" />
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-emerald-100">
+            <h3 className="text-sm font-semibold text-[var(--text-primary)]">
               Token Created: {revealed.tokenName}
             </h3>
-            <p className="text-xs text-emerald-200/90 mt-0.5">
+            <p className="text-xs text-[var(--text-secondary)] mt-0.5 leading-relaxed">
               Copy your bearer token now. For your security, this raw secret is shown{' '}
-              <strong className="font-semibold text-white">only once</strong> and cannot be
-              retrieved again after you leave or dismiss this banner.
+              <strong className="font-semibold text-[var(--text-primary)]">only once</strong> and
+              cannot be retrieved again after you leave or dismiss this banner.
             </p>
           </div>
         </div>
@@ -87,7 +83,7 @@ export function OneTimeTokenRevealBanner({
         <button
           type="button"
           onClick={onDismiss}
-          className="p-1.5 rounded-lg text-emerald-300/80 hover:text-white hover:bg-emerald-900/50 transition-colors shrink-0"
+          className="btn-ghost p-1.5 text-[var(--text-muted)] hover:text-[var(--text-primary)] shrink-0"
           title="Dismiss secret banner"
           aria-label="Dismiss secret banner"
         >
@@ -96,7 +92,7 @@ export function OneTimeTokenRevealBanner({
       </div>
 
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-        <div className="flex-1 px-3.5 py-2.5 rounded-lg bg-neutral-950 border border-emerald-800/80 font-mono text-xs text-emerald-300 select-all overflow-x-auto whitespace-nowrap">
+        <div className="flex-1 px-3.5 py-2 rounded-[var(--radius-sm)] bg-[var(--bg-surface-muted)] border border-[var(--border-strong)] font-mono text-xs text-[var(--text-primary)] select-all overflow-x-auto whitespace-nowrap">
           <span data-testid="revealed-raw-token">{revealed.token}</span>
         </div>
 
@@ -104,12 +100,7 @@ export function OneTimeTokenRevealBanner({
           type="button"
           onClick={onCopy}
           data-testid="copy-token-button"
-          className={clsx(
-            'inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg text-xs font-semibold transition-all shrink-0',
-            copied
-              ? 'bg-emerald-600 text-white'
-              : 'bg-emerald-500 hover:bg-emerald-400 text-neutral-950'
-          )}
+          className="btn-accent px-4 py-2 text-xs font-semibold shrink-0"
         >
           {copied ? (
             <>
@@ -125,18 +116,26 @@ export function OneTimeTokenRevealBanner({
         </button>
       </div>
 
-      <div className="flex items-center justify-between pt-1 text-[11px] text-emerald-300/80">
+      <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-[11px] text-[var(--text-secondary)]">
         <span className="flex items-center gap-1.5">
-          <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+          <AlertTriangle className="w-3.5 h-3.5 text-[var(--status-warning-text)] shrink-0" />
           <span>
-            Use as <code className="font-mono text-emerald-200">Authorization: Bearer ctc_live_...</code> when connecting Claude or MCP clients to <code className="font-mono text-emerald-200">/api/mcp</code>.
+            Use as{' '}
+            <code className="font-mono text-[var(--text-primary)] bg-[var(--bg-surface-muted)] px-1 py-0.5 rounded-[4px]">
+              Authorization: Bearer ctc_live_...
+            </code>{' '}
+            when connecting Claude or MCP clients to{' '}
+            <code className="font-mono text-[var(--text-primary)] bg-[var(--bg-surface-muted)] px-1 py-0.5 rounded-[4px]">
+              /api/mcp
+            </code>
+            .
           </span>
         </span>
 
         <button
           type="button"
           onClick={onDismiss}
-          className="text-xs font-medium text-emerald-300 hover:text-white underline shrink-0 ml-4"
+          className="text-xs font-medium text-[var(--accent-text)] hover:underline shrink-0"
         >
           I&apos;ve saved this token
         </button>
@@ -162,18 +161,18 @@ const STATUS_BADGE_STYLES: Record<
 > = {
   active: {
     label: 'Active',
-    className: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/25',
-    dotClassName: 'bg-emerald-400',
+    className: 'badge badge-success',
+    dotClassName: 'bg-[var(--status-success-text)]',
   },
   revoked: {
     label: 'Revoked',
-    className: 'bg-rose-500/10 text-rose-400 border-rose-500/25',
-    dotClassName: 'bg-rose-400',
+    className: 'badge badge-danger',
+    dotClassName: 'bg-[var(--status-danger-text)]',
   },
   expired: {
     label: 'Expired',
-    className: 'bg-amber-500/10 text-amber-400 border-amber-500/25',
-    dotClassName: 'bg-amber-400',
+    className: 'badge badge-warning',
+    dotClassName: 'bg-[var(--status-warning-text)]',
   },
 };
 
@@ -219,33 +218,24 @@ export function AiTokenRow({
   return (
     <div
       data-testid={`ai-token-row-${token.id}`}
-      className={clsx(
-        'p-4 rounded-xl border transition-all flex flex-col md:flex-row md:items-center justify-between gap-4',
-        status === 'active'
-          ? 'bg-neutral-950 border-neutral-800'
-          : 'bg-neutral-950/60 border-neutral-800/60 opacity-80'
-      )}
+      className={`surface-card p-4 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 ${
+        status === 'active' ? '' : 'opacity-75'
+      }`}
     >
       <div className="space-y-2 min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm font-semibold text-neutral-100 truncate">
+          <span className="text-sm font-semibold text-[var(--text-primary)] truncate">
             {token.name}
           </span>
 
-          <span
-            data-testid={`ai-token-status-${token.id}`}
-            className={clsx(
-              'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium border',
-              badge.className
-            )}
-          >
-            <span className={clsx('w-1.5 h-1.5 rounded-full', badge.dotClassName)} />
+          <span data-testid={`ai-token-status-${token.id}`} className={badge.className}>
+            <span className={`w-1.5 h-1.5 rounded-full ${badge.dotClassName}`} />
             <span>{badge.label}</span>
           </span>
 
           <code
             data-testid={`ai-token-prefix-${token.id}`}
-            className="px-2 py-0.5 rounded bg-neutral-900 border border-neutral-800 font-mono text-[11px] text-neutral-300"
+            className="px-2 py-0.5 rounded-[4px] bg-[var(--bg-surface-muted)] border border-[var(--border-subtle)] font-mono text-[11px] text-[var(--text-secondary)]"
             title="Token identifier prefix (secret hidden)"
           >
             {token.tokenPrefix}...
@@ -255,32 +245,30 @@ export function AiTokenRow({
         {/* Granted Scopes */}
         <div className="flex flex-wrap items-center gap-1.5">
           {token.scopes.map((scope) => (
-            <span
-              key={scope}
-              className="px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-blue-500/10 text-blue-300 border border-blue-500/20"
-            >
+            <span key={scope} className="badge badge-info font-mono text-[10px]">
               {scope}
             </span>
           ))}
         </div>
 
         {/* Timestamps */}
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-neutral-400">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] font-mono text-[var(--text-muted)]">
           <span>Created: {createdFormatted}</span>
           <span>
             Expires:{' '}
             <strong
-              className={clsx(
-                'font-normal',
-                status === 'expired' ? 'text-amber-400 font-medium' : 'text-neutral-300'
-              )}
+              className={
+                status === 'expired'
+                  ? 'text-[var(--status-warning-text)] font-semibold'
+                  : 'text-[var(--text-secondary)] font-normal'
+              }
             >
               {expiresFormatted}
             </strong>
           </span>
           <span>Last used: {lastUsedFormatted}</span>
           {token.isRevoked && token.revokedAt && (
-            <span className="text-rose-400">
+            <span className="text-[var(--status-danger-text)]">
               Revoked:{' '}
               {formatInTimeZone(token.revokedAt, userTimeZone, {
                 month: 'short',
@@ -299,17 +287,15 @@ export function AiTokenRow({
           isConfirmingRevoke ? (
             <div
               data-testid={`revoke-confirm-controls-${token.id}`}
-              className="flex items-center gap-2 bg-rose-950/40 border border-rose-800/70 rounded-lg p-1.5"
+              className="flex flex-wrap items-center gap-2 badge-danger border rounded-[var(--radius-sm)] p-1.5"
             >
-              <span className="text-[11px] text-rose-200 px-1.5 font-medium">
-                Revoke permanently?
-              </span>
+              <span className="text-[11px] px-1.5 font-semibold">Revoke permanently?</span>
               <button
                 type="button"
                 disabled={isRevoking}
                 onClick={() => onConfirmRevoke(token.id)}
                 data-testid={`confirm-revoke-btn-${token.id}`}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-rose-600 hover:bg-rose-500 text-white transition-colors disabled:opacity-50"
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[5px] text-xs font-semibold bg-[var(--status-danger-text)] text-white hover:opacity-90 transition-opacity disabled:opacity-50"
               >
                 {isRevoking ? (
                   <>
@@ -325,7 +311,7 @@ export function AiTokenRow({
                 disabled={isRevoking}
                 onClick={onCancelRevoke}
                 data-testid={`cancel-revoke-btn-${token.id}`}
-                className="px-2 py-1 rounded-md text-xs text-neutral-300 hover:text-white hover:bg-neutral-800 transition-colors disabled:opacity-50"
+                className="btn-secondary px-2 py-1 text-xs disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -335,14 +321,14 @@ export function AiTokenRow({
               type="button"
               onClick={() => onRequestRevoke(token.id)}
               data-testid={`revoke-token-btn-${token.id}`}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-neutral-900 hover:bg-rose-950/60 text-neutral-300 hover:text-rose-300 border border-neutral-800 hover:border-rose-800/70 transition-colors"
+              className="btn-secondary px-3 py-1.5 text-xs font-medium hover:text-[var(--status-danger-text)] hover:border-[var(--status-danger-border)]"
             >
               <Trash2 className="w-3.5 h-3.5" />
               <span>Revoke</span>
             </button>
           )
         ) : (
-          <span className="text-xs text-neutral-500 italic px-2">Revoked</span>
+          <span className="text-xs text-[var(--text-muted)] italic px-2">Revoked</span>
         )}
       </div>
     </div>
@@ -377,7 +363,6 @@ export function AiTokensManager({
   const [error, setError] = useState<string | null>(initialError);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  // Token Creation Form State
   const [name, setName] = useState<string>('');
   const [selectedScopes, setSelectedScopes] = useState<ToolScope[]>([
     'task:read',
@@ -389,13 +374,11 @@ export function AiTokensManager({
   const [creating, setCreating] = useState<boolean>(false);
   const [formError, setFormError] = useState<string | null>(null);
 
-  // Ephemeral One-Time Secret State (never persisted to storage)
   const [revealedSecret, setRevealedSecret] = useState<RevealedTokenSecret | null>(
     initialRevealedSecret
   );
   const [copied, setCopied] = useState<boolean>(false);
 
-  // Revocation Confirmation State
   const [confirmRevokeId, setConfirmRevokeId] = useState<string | null>(initialConfirmRevokeId);
   const [revokingId, setRevokingId] = useState<string | null>(null);
 
@@ -503,7 +486,6 @@ export function AiTokensManager({
       if (res.error) {
         setFormError(res.error);
       } else if (res.data) {
-        // Store raw token strictly in ephemeral React state for one-time reveal
         setRevealedSecret({
           token: res.data.token,
           tokenName: res.data.tokenMetadata.name,
@@ -513,7 +495,6 @@ export function AiTokensManager({
         setCopied(false);
         setName('');
 
-        // Prepend safe metadata to token list and refresh from server
         setTokens((prev) => [
           res.data!.tokenMetadata,
           ...prev.filter((t) => t.id !== res.data!.tokenMetadata.id),
@@ -535,7 +516,7 @@ export function AiTokensManager({
         setTimeout(() => setCopied(false), 3000);
       }
     } catch {
-      // Clipboard API unavailable or blocked; user can still select-all from the monospace box
+      // Clipboard API unavailable or blocked; user can select-all from the monospace box
     }
   };
 
@@ -556,7 +537,6 @@ export function AiTokensManager({
         setError(res.error);
       } else {
         setConfirmRevokeId(null);
-        // If the revoked token was currently displayed in the one-time banner, clear it
         if (revealedSecret?.tokenId === tokenId) {
           setRevealedSecret(null);
         }
@@ -574,54 +554,7 @@ export function AiTokensManager({
   const activeCount = tokens.filter((t) => getTokenLifecycleStatus(t) === 'active').length;
 
   return (
-    <div className="space-y-8 max-w-4xl">
-      {/* Settings Navigation & Page Header */}
-      <div className="pb-4 border-b border-neutral-800 space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <Link
-            href="/dashboard"
-            className="inline-flex items-center gap-1 text-xs text-neutral-400 hover:text-neutral-200 transition-colors"
-          >
-            <ChevronLeft className="w-3.5 h-3.5" />
-            <span>Back to Overview</span>
-          </Link>
-
-          {/* Settings Sub-Navigation */}
-          <div className="flex items-center gap-1 p-1 rounded-lg bg-neutral-950 border border-neutral-800 text-xs">
-            <Link
-              href="/settings/notifications"
-              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-neutral-400 hover:text-neutral-200 transition-colors"
-            >
-              <Bell className="w-3.5 h-3.5" />
-              <span>Notifications</span>
-            </Link>
-            <Link
-              href="/settings/tokens"
-              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-neutral-800 text-neutral-100 font-medium shadow-xs"
-            >
-              <KeyRound className="w-3.5 h-3.5 text-blue-400" />
-              <span>AI &amp; API Tokens</span>
-            </Link>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400">
-            <KeyRound className="w-5 h-5" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold tracking-tight text-neutral-100">
-              AI &amp; MCP API Tokens
-            </h1>
-            <p className="text-xs text-neutral-400">
-              Generate scoped bearer tokens to connect Claude or Model Context Protocol (MCP)
-              clients to {workspaceName ? <strong className="text-neutral-200">{workspaceName}</strong> : 'your workspace'}.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* One-Time Secret Reveal Banner */}
+    <div className="space-y-6">
       {revealedSecret && (
         <OneTimeTokenRevealBanner
           revealed={revealedSecret}
@@ -631,32 +564,30 @@ export function AiTokensManager({
         />
       )}
 
-      {/* Global Success Banner */}
       {successMessage && (
         <div
           role="status"
-          className="p-4 rounded-xl bg-emerald-950/40 border border-emerald-800 text-emerald-200 text-xs flex items-center gap-2.5"
+          className="p-3.5 rounded-[var(--radius-sm)] border badge-success text-xs flex items-center gap-2.5"
         >
-          <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+          <Check className="w-4 h-4 shrink-0" />
           <span>{successMessage}</span>
         </div>
       )}
 
-      {/* Global Error Banner */}
       {error && (
         <div
           role="alert"
           data-testid="ai-tokens-error-banner"
-          className="p-4 rounded-xl bg-rose-950/40 border border-rose-900/60 text-rose-200 text-xs flex items-center justify-between gap-2"
+          className="p-3.5 rounded-[var(--radius-sm)] border badge-danger text-xs flex items-center justify-between gap-2"
         >
           <div className="flex items-center gap-2">
-            <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0" />
+            <ShieldAlert className="w-4 h-4 shrink-0" />
             <span>{error}</span>
           </div>
           <button
             type="button"
             onClick={loadTokens}
-            className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-rose-900/50 hover:bg-rose-900 text-rose-100 shrink-0"
+            className="btn-secondary px-2.5 py-1 text-xs shrink-0"
           >
             <RefreshCw className="w-3 h-3" />
             <span>Retry</span>
@@ -664,42 +595,41 @@ export function AiTokensManager({
         </div>
       )}
 
-      {/* Section 1: Create New API Token */}
-      <form
-        onSubmit={handleCreateToken}
-        className="p-5 rounded-xl bg-neutral-950 border border-neutral-800 space-y-5"
-      >
-        <div className="flex items-center justify-between border-b border-neutral-800 pb-3">
-          <div>
-            <h2 className="text-sm font-semibold text-neutral-100 flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-blue-400" />
-              <span>Create New API Token</span>
-            </h2>
-            <p className="text-xs text-neutral-400 mt-0.5">
-              Tokens inherit your workspace membership permissions and are restricted to the scopes
-              selected below.
-            </p>
-          </div>
+      {/* Create New API Token */}
+      <form onSubmit={handleCreateToken} className="surface-card p-5 sm:p-6 space-y-5">
+        <div className="border-b border-[var(--border-subtle)] pb-3.5">
+          <h2 className="heading-section text-base flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-[var(--accent)]" />
+            <span>Create New API Token</span>
+          </h2>
+          <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+            Bearer tokens for scripts or MCP clients connecting to{' '}
+            {workspaceName ? (
+              <strong className="font-semibold text-[var(--text-primary)]">{workspaceName}</strong>
+            ) : (
+              'your workspace'
+            )}
+            , restricted to the scopes selected below.
+          </p>
         </div>
 
         {formError && (
           <div
             role="alert"
             data-testid="create-token-form-error"
-            className="p-3 rounded-lg bg-rose-950/40 border border-rose-900/60 text-rose-200 text-xs"
+            className="p-3 rounded-[var(--radius-sm)] border badge-danger text-xs"
           >
             {formError}
           </div>
         )}
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Token Name Input */}
           <div className="md:col-span-2 space-y-1.5">
             <label
               htmlFor="token-name-input"
-              className="block text-xs font-medium text-neutral-300"
+              className="block text-xs font-medium text-[var(--text-secondary)]"
             >
-              Token Name <span className="text-rose-400">*</span>
+              Token Name <span className="text-[var(--status-danger-text)]">*</span>
             </label>
             <input
               id="token-name-input"
@@ -711,21 +641,20 @@ export function AiTokensManager({
               onChange={(e) => setName(e.target.value)}
               disabled={creating}
               placeholder="e.g., Claude Desktop — MacBook Pro"
-              className="w-full px-3 py-2 text-xs rounded-lg bg-neutral-900 border border-neutral-700 text-neutral-100 placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+              className="input-control px-3 py-2 text-xs disabled:opacity-50"
             />
-            <p className="text-[11px] text-neutral-500">
-              A recognizable label to identify which AI client or device uses this token (1–100
+            <p className="text-[11px] text-[var(--text-muted)]">
+              A recognizable label to identify which AI client or script uses this token (1–100
               characters).
             </p>
           </div>
 
-          {/* Expiration Preset Selector */}
           <div className="space-y-1.5">
             <label
               htmlFor="token-expiration-select"
-              className="block text-xs font-medium text-neutral-300 flex items-center gap-1.5"
+              className="text-xs font-medium text-[var(--text-secondary)] flex items-center gap-1.5"
             >
-              <Clock className="w-3.5 h-3.5 text-amber-400" />
+              <Clock className="w-3.5 h-3.5 text-[var(--status-warning-text)]" />
               <span>Expiration</span>
             </label>
             <select
@@ -734,7 +663,7 @@ export function AiTokensManager({
               value={expirationDays === null ? 'never' : expirationDays.toString()}
               onChange={(e) => handleExpirationChange(e.target.value)}
               disabled={creating}
-              className="w-full px-3 py-2 text-xs rounded-lg bg-neutral-900 border border-neutral-700 text-neutral-100 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+              className="input-control py-1.5 px-3 min-h-9 text-xs leading-tight appearance-auto disabled:opacity-50"
             >
               {AI_TOKEN_EXPIRATION_PRESETS.map((preset) => (
                 <option
@@ -745,8 +674,8 @@ export function AiTokensManager({
                 </option>
               ))}
             </select>
-            <p className="text-[11px] text-neutral-500">
-              Expired tokens are automatically rejected by the MCP gateway.
+            <p className="text-[11px] text-[var(--text-muted)]">
+              Expired tokens are rejected by the MCP gateway.
             </p>
           </div>
         </div>
@@ -754,26 +683,26 @@ export function AiTokensManager({
         {/* Permission Scopes */}
         <div className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="text-xs font-medium text-neutral-300 flex items-center gap-1.5">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="text-xs font-medium text-[var(--text-secondary)] flex items-center gap-1.5">
+              <ShieldCheck className="w-3.5 h-3.5 text-[var(--status-success-text)]" />
               <span>Permission Scopes</span>
             </span>
 
-            <div className="flex items-center gap-2 text-[11px]">
+            <div className="flex items-center gap-2 text-xs">
               <button
                 type="button"
                 onClick={selectReadOnlyScopes}
                 disabled={creating}
-                className="text-blue-400 hover:text-blue-300 hover:underline"
+                className="text-[var(--accent-text)] hover:underline font-medium"
               >
                 Read-only
               </button>
-              <span className="text-neutral-700">|</span>
+              <span className="text-[var(--border-strong)]">|</span>
               <button
                 type="button"
                 onClick={selectAllScopes}
                 disabled={creating}
-                className="text-blue-400 hover:text-blue-300 hover:underline"
+                className="text-[var(--accent-text)] hover:underline font-medium"
               >
                 Select all
               </button>
@@ -787,12 +716,11 @@ export function AiTokensManager({
                 <label
                   key={item.scope}
                   htmlFor={`scope-${item.scope}`}
-                  className={clsx(
-                    'p-3 rounded-lg border cursor-pointer transition-colors flex items-start gap-3',
+                  className={`p-3 rounded-[var(--radius-sm)] border cursor-pointer transition-colors flex items-start gap-3 ${
                     isChecked
-                      ? 'bg-blue-950/20 border-blue-500/40'
-                      : 'bg-neutral-900/50 border-neutral-800 hover:border-neutral-700'
-                  )}
+                      ? 'bg-[var(--accent-soft)] border-[var(--accent)]/40'
+                      : 'bg-[var(--bg-surface-muted)]/50 border-[var(--border-subtle)] hover:border-[var(--border-strong)]'
+                  }`}
                 >
                   <input
                     id={`scope-${item.scope}`}
@@ -800,16 +728,18 @@ export function AiTokensManager({
                     checked={isChecked}
                     onChange={() => toggleScope(item.scope)}
                     disabled={creating}
-                    className="w-4 h-4 rounded text-blue-600 bg-neutral-900 border-neutral-700 focus:ring-blue-500 mt-0.5 cursor-pointer"
+                    className="w-4 h-4 rounded accent-[var(--accent)] mt-0.5 cursor-pointer shrink-0"
                   />
                   <div className="space-y-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-semibold text-neutral-100">{item.label}</span>
-                      <code className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-neutral-900 text-blue-300 border border-neutral-800">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-xs font-semibold text-[var(--text-primary)]">
+                        {item.label}
+                      </span>
+                      <code className="px-1.5 py-0.5 rounded-[4px] text-[10px] font-mono bg-[var(--bg-surface)] text-[var(--text-secondary)] border border-[var(--border-subtle)]">
                         {item.scope}
                       </code>
                     </div>
-                    <p className="text-[11px] text-neutral-400 leading-relaxed">
+                    <p className="text-[11px] text-[var(--text-secondary)] leading-relaxed">
                       {item.description}
                     </p>
                   </div>
@@ -819,9 +749,8 @@ export function AiTokensManager({
           </div>
         </div>
 
-        {/* Submit Button */}
-        <div className="flex items-center justify-between pt-3 border-t border-neutral-800">
-          <span className="text-[11px] text-neutral-500">
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-[var(--border-subtle)]">
+          <span className="text-[11px] text-[var(--text-muted)]">
             Destructive delete operations are never exposed to AI tokens.
           </span>
 
@@ -829,7 +758,7 @@ export function AiTokensManager({
             type="submit"
             disabled={creating || selectedScopes.length === 0}
             data-testid="generate-token-submit-btn"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            className="btn-accent px-4 py-2 text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {creating ? (
               <>
@@ -846,12 +775,12 @@ export function AiTokensManager({
         </div>
       </form>
 
-      {/* Section 2: Existing Workspace Tokens List */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <h2 className="text-sm font-semibold text-neutral-100">Issued Workspace Tokens</h2>
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-neutral-900 text-neutral-400 border border-neutral-800">
+      {/* Existing Workspace Tokens List */}
+      <section className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h2 className="heading-section text-sm sm:text-base">Issued Workspace Tokens</h2>
+            <span className="badge badge-neutral font-mono tabular-nums text-[10px]">
               {activeCount} active / {tokens.length} total
             </span>
           </div>
@@ -860,10 +789,10 @@ export function AiTokensManager({
             type="button"
             onClick={loadTokens}
             disabled={loading}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs text-neutral-400 hover:text-neutral-200 hover:bg-neutral-900 transition-colors disabled:opacity-50"
+            className="btn-secondary px-2.5 py-1 text-xs disabled:opacity-50"
             title="Refresh token list"
           >
-            <RefreshCw className={clsx('w-3.5 h-3.5', loading && 'animate-spin')} />
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
             <span>Refresh</span>
           </button>
         </div>
@@ -871,21 +800,23 @@ export function AiTokensManager({
         {loading ? (
           <div
             data-testid="ai-tokens-loading-state"
-            className="flex flex-col items-center justify-center py-16 rounded-xl bg-neutral-950 border border-neutral-800 text-neutral-500 gap-2.5"
+            className="surface-card flex flex-col items-center justify-center py-16 text-[var(--text-muted)] gap-2.5"
           >
-            <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
-            <span className="text-xs">Loading workspace API tokens...</span>
+            <Loader2 className="w-5 h-5 animate-spin text-[var(--accent)]" />
+            <span className="text-xs font-medium">Loading workspace API tokens...</span>
           </div>
         ) : tokens.length === 0 ? (
           <div
             data-testid="ai-tokens-empty-state"
-            className="flex flex-col items-center justify-center py-14 px-4 rounded-xl bg-neutral-950 border border-neutral-800 text-center space-y-2"
+            className="surface-card flex flex-col items-center justify-center py-12 px-4 text-center space-y-2"
           >
-            <div className="w-10 h-10 rounded-full bg-neutral-900 border border-neutral-800 flex items-center justify-center text-neutral-400">
+            <div className="w-10 h-10 rounded-[var(--radius-md)] bg-[var(--bg-surface-muted)] border border-[var(--border-subtle)] flex items-center justify-center text-[var(--text-muted)]">
               <KeyRound className="w-5 h-5" />
             </div>
-            <h3 className="text-xs font-semibold text-neutral-200">No API tokens created yet</h3>
-            <p className="text-[11px] text-neutral-400 max-w-sm">
+            <h3 className="text-xs font-semibold text-[var(--text-primary)]">
+              No API tokens created yet
+            </h3>
+            <p className="text-xs text-[var(--text-secondary)] max-w-sm">
               Generate an API token above to connect Claude or another Model Context Protocol (MCP)
               client to your workspace.
             </p>
@@ -906,7 +837,7 @@ export function AiTokensManager({
             ))}
           </div>
         )}
-      </div>
+      </section>
     </div>
   );
 }

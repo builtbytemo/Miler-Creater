@@ -1,27 +1,22 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import Link from 'next/link';
 import {
   Bell,
   Check,
-  ChevronLeft,
   Clock,
   Info,
-  KeyRound,
   Loader2,
   Mail,
   RefreshCw,
   Save,
   ShieldCheck,
-  Sliders,
 } from 'lucide-react';
 import type { NotificationPreferencesWithDefaults } from '@/lib/services/notification-service';
 import {
   getNotificationPreferencesAction,
   updateNotificationPreferencesAction,
 } from '@/lib/actions/notification-actions';
-import clsx from 'clsx';
 
 export interface NotificationPreferencesFormProps {
   workspaceId: string;
@@ -42,15 +37,13 @@ const PRESET_LEAD_TIMES = [
 
 export function NotificationPreferencesForm({
   workspaceId,
-  workspaceName,
 }: NotificationPreferencesFormProps) {
-  const [preferences, setPreferences] = useState<NotificationPreferencesWithDefaults | null>(null);
+  const [, setPreferences] = useState<NotificationPreferencesWithDefaults | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  // Form State
   const [inAppEnabled, setInAppEnabled] = useState<boolean>(true);
   const [notifyUpcomingTasks, setNotifyUpcomingTasks] = useState<boolean>(true);
   const [notifyOverdueTasks, setNotifyOverdueTasks] = useState<boolean>(true);
@@ -58,6 +51,21 @@ export function NotificationPreferencesForm({
   const [notifyStatusChanges, setNotifyStatusChanges] = useState<boolean>(true);
   const [leadTimeMinutes, setLeadTimeMinutes] = useState<number>(60);
   const [isCustomLeadTime, setIsCustomLeadTime] = useState<boolean>(false);
+
+  const applyLoadedPreferences = useCallback((data: NotificationPreferencesWithDefaults) => {
+    setPreferences(data);
+    setInAppEnabled(data.in_app_notifications_enabled);
+    setNotifyUpcomingTasks(data.notify_upcoming_tasks);
+    setNotifyOverdueTasks(data.notify_overdue_tasks);
+    setNotifyUpcomingContent(data.notify_upcoming_content);
+    setNotifyStatusChanges(data.notify_status_changes);
+    setLeadTimeMinutes(data.reminder_lead_minutes);
+
+    const isStandard = PRESET_LEAD_TIMES.some(
+      (p) => p.value === data.reminder_lead_minutes
+    );
+    setIsCustomLeadTime(!isStandard);
+  }, []);
 
   const loadPreferences = useCallback(async () => {
     setLoading(true);
@@ -67,29 +75,40 @@ export function NotificationPreferencesForm({
       if (res.error) {
         setError(res.error);
       } else if (res.data) {
-        setPreferences(res.data);
-        setInAppEnabled(res.data.in_app_notifications_enabled);
-        setNotifyUpcomingTasks(res.data.notify_upcoming_tasks);
-        setNotifyOverdueTasks(res.data.notify_overdue_tasks);
-        setNotifyUpcomingContent(res.data.notify_upcoming_content);
-        setNotifyStatusChanges(res.data.notify_status_changes);
-        setLeadTimeMinutes(res.data.reminder_lead_minutes);
-
-        const isStandard = PRESET_LEAD_TIMES.some(
-          (p) => p.value === res.data!.reminder_lead_minutes
-        );
-        setIsCustomLeadTime(!isStandard);
+        applyLoadedPreferences(res.data);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load preferences');
     } finally {
       setLoading(false);
     }
-  }, [workspaceId]);
+  }, [applyLoadedPreferences, workspaceId]);
 
   useEffect(() => {
-    loadPreferences();
-  }, [loadPreferences]);
+    let cancelled = false;
+    getNotificationPreferencesAction(workspaceId)
+      .then((res) => {
+        if (cancelled) return;
+        if (res.error) {
+          setError(res.error);
+        } else if (res.data) {
+          applyLoadedPreferences(res.data);
+        }
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : 'Failed to load preferences');
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [applyLoadedPreferences, workspaceId]);
 
   const handleLeadTimePresetChange = (valStr: string) => {
     const val = parseInt(valStr, 10);
@@ -113,7 +132,6 @@ export function NotificationPreferencesForm({
     setError(null);
     setSuccessMessage(null);
 
-    // Validate reminder lead time boundary [0, 10080]
     if (leadTimeMinutes < 0 || leadTimeMinutes > 10080) {
       setError('Reminder lead time must be between 0 and 10,080 minutes (max 7 days)');
       return;
@@ -154,113 +172,98 @@ export function NotificationPreferencesForm({
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 text-neutral-500 gap-3">
-        <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
-        <span className="text-sm">Loading notification preferences...</span>
+      <div className="surface-card flex flex-col items-center justify-center py-16 text-[var(--text-muted)] gap-2.5">
+        <Loader2 className="w-5 h-5 animate-spin text-[var(--accent)]" />
+        <span className="text-xs font-medium">Loading notification preferences...</span>
       </div>
     );
   }
 
+  const eventCategoryToggles = [
+    {
+      id: 'toggle-status-changes',
+      label: 'Status Changes (Tasks & Content)',
+      description:
+        'Notify when collaborators mark tasks as done, blocked, or cancelled, or archive content.',
+      checked: notifyStatusChanges && inAppEnabled,
+      onChange: setNotifyStatusChanges,
+    },
+    {
+      id: 'toggle-upcoming-tasks',
+      label: 'Upcoming Task Reminders',
+      description: 'Receive reminders before scheduled tasks begin based on your lead time setting.',
+      checked: notifyUpcomingTasks && inAppEnabled,
+      onChange: setNotifyUpcomingTasks,
+    },
+    {
+      id: 'toggle-overdue-tasks',
+      label: 'Overdue Task Alerts',
+      description: 'Receive alerts when scheduled tasks or deadlines pass without completion.',
+      checked: notifyOverdueTasks && inAppEnabled,
+      onChange: setNotifyOverdueTasks,
+    },
+    {
+      id: 'toggle-upcoming-content',
+      label: 'Scheduled Content Alerts',
+      description: 'Alert when social content is scheduled or due for publishing.',
+      checked: notifyUpcomingContent && inAppEnabled,
+      onChange: setNotifyUpcomingContent,
+    },
+  ];
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-8 max-w-3xl">
-      {/* Header */}
-      <div className="pb-4 border-b border-neutral-800 space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <Link
-            href="/notifications"
-            className="inline-flex items-center gap-1 text-xs text-neutral-400 hover:text-neutral-200 transition-colors"
-          >
-            <ChevronLeft className="w-3.5 h-3.5" />
-            <span>Back to Notifications</span>
-          </Link>
-
-          <div className="flex items-center gap-1 p-1 rounded-lg bg-neutral-950 border border-neutral-800 text-xs">
-            <Link
-              href="/settings/notifications"
-              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-neutral-800 text-neutral-100 font-medium shadow-xs"
-            >
-              <Bell className="w-3.5 h-3.5 text-blue-400" />
-              <span>Notifications</span>
-            </Link>
-            <Link
-              href="/settings/tokens"
-              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-neutral-400 hover:text-neutral-200 transition-colors"
-            >
-              <KeyRound className="w-3.5 h-3.5" />
-              <span>AI &amp; API Tokens</span>
-            </Link>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2.5">
-          <div className="p-2 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-400">
-            <Sliders className="w-5 h-5" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold tracking-tight text-neutral-100">
-              Notification Preferences
-            </h1>
-            <p className="text-xs text-neutral-400">
-              Configure how and when you receive in-app alerts
-              {workspaceName ? ` in ${workspaceName}` : ''}.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Success Notification */}
+    <form onSubmit={handleSubmit} className="space-y-6">
       {successMessage && (
         <div
           role="status"
-          className="p-4 rounded-xl bg-emerald-950/40 border border-emerald-800 text-emerald-200 text-xs flex items-center gap-2.5 animate-in fade-in duration-200"
+          className="p-3.5 rounded-[var(--radius-sm)] border badge-success text-xs flex items-center gap-2.5"
         >
-          <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+          <Check className="w-4 h-4 shrink-0" />
           <span>{successMessage}</span>
         </div>
       )}
 
-      {/* Error Banner */}
       {error && (
         <div
           role="alert"
-          className="p-4 rounded-xl bg-rose-950/40 border border-rose-900/60 text-rose-200 text-xs flex items-center justify-between gap-2"
+          className="p-3.5 rounded-[var(--radius-sm)] border badge-danger text-xs flex items-center justify-between gap-2"
         >
           <span>{error}</span>
           <button
             type="button"
             onClick={loadPreferences}
-            className="p-1 rounded hover:bg-rose-900/50 text-rose-100"
+            className="btn-secondary px-2.5 py-1 text-xs"
             title="Reload settings"
           >
             <RefreshCw className="w-3.5 h-3.5" />
+            <span>Retry</span>
           </button>
         </div>
       )}
 
       {/* Section 1: Channel Delivery Toggles */}
-      <div className="space-y-4">
+      <section className="space-y-3">
         <div>
-          <h2 className="text-sm font-semibold text-neutral-200 flex items-center gap-2">
-            <Bell className="w-4 h-4 text-blue-400" />
+          <h2 className="heading-section text-sm sm:text-base flex items-center gap-2">
+            <Bell className="w-4 h-4 text-[var(--accent)]" />
             <span>Delivery Channels</span>
           </h2>
-          <p className="text-xs text-neutral-400 mt-0.5">
-            Choose where alerts should be dispatched.
+          <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+            Choose where real-time operational alerts are dispatched.
           </p>
         </div>
 
-        <div className="p-4 rounded-xl bg-neutral-950 border border-neutral-800 space-y-4">
-          {/* Master In-App Toggle */}
+        <div className="surface-card p-5 space-y-4">
           <div className="flex items-start justify-between gap-4">
             <div className="space-y-0.5">
               <label
                 htmlFor="toggle-in-app"
-                className="text-xs font-semibold text-neutral-200 cursor-pointer"
+                className="text-xs font-semibold text-[var(--text-primary)] cursor-pointer block"
               >
                 In-App Notifications
               </label>
-              <p className="text-[11px] text-neutral-400">
-                Receive notifications in the Zahi bell badge and notification panel.
+              <p className="text-xs text-[var(--text-secondary)]">
+                Receive notifications in the Zahi bell badge and notifications inbox.
               </p>
             </div>
             <input
@@ -268,29 +271,26 @@ export function NotificationPreferencesForm({
               type="checkbox"
               checked={inAppEnabled}
               onChange={(e) => setInAppEnabled(e.target.checked)}
-              className="w-4 h-4 rounded text-blue-600 bg-neutral-900 border-neutral-700 focus:ring-blue-500 mt-1 cursor-pointer"
+              className="w-4 h-4 rounded accent-[var(--accent)] mt-0.5 cursor-pointer shrink-0"
             />
           </div>
 
-          <div className="border-t border-neutral-850 pt-4">
-            {/* Email Channel (Coming Soon) */}
-            <div className="flex items-start justify-between gap-4 opacity-60">
+          <div className="border-t border-[var(--border-subtle)] pt-4">
+            <div className="flex items-start justify-between gap-4 opacity-65">
               <div className="space-y-0.5">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <label
                     htmlFor="toggle-email"
-                    className="text-xs font-semibold text-neutral-300 flex items-center gap-1.5"
+                    className="text-xs font-semibold text-[var(--text-secondary)] flex items-center gap-1.5"
                   >
-                    <Mail className="w-3.5 h-3.5 text-neutral-400" />
-                    <span>Email Notifications</span>
+                    <Mail className="w-3.5 h-3.5 text-[var(--text-muted)]" />
+                    <span>Instant Email Alerts</span>
                   </label>
-                  <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-neutral-800 text-neutral-400 border border-neutral-700">
-                    Coming Soon
-                  </span>
+                  <span className="badge badge-neutral text-[10px]">Scheduled</span>
                 </div>
-                <p className="text-[11px] text-neutral-400">
-                  Email notification delivery is currently in development and will be enabled in a
-                  future milestone.
+                <p className="text-xs text-[var(--text-muted)]">
+                  Instant per-event email alerts are reserved for a future release; configure Daily
+                  Briefing digests below for scheduled email delivery.
                 </p>
               </div>
               <input
@@ -298,137 +298,70 @@ export function NotificationPreferencesForm({
                 type="checkbox"
                 disabled
                 checked={false}
-                className="w-4 h-4 rounded text-neutral-600 bg-neutral-900 border-neutral-700 cursor-not-allowed mt-1"
+                className="w-4 h-4 rounded cursor-not-allowed mt-0.5 shrink-0"
               />
             </div>
           </div>
         </div>
-      </div>
+      </section>
 
       {/* Section 2: Event Category Preferences */}
-      <div className="space-y-4">
+      <section className="space-y-3">
         <div>
-          <h2 className="text-sm font-semibold text-neutral-200 flex items-center gap-2">
-            <ShieldCheck className="w-4 h-4 text-emerald-400" />
+          <h2 className="heading-section text-sm sm:text-base flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-[var(--status-success-text)]" />
             <span>Event Categories</span>
           </h2>
-          <p className="text-xs text-neutral-400 mt-0.5">
-            Select which events trigger notifications when actions occur.
+          <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+            Select which workspace events generate notifications.
           </p>
         </div>
 
-        <div className="p-4 rounded-xl bg-neutral-950 border border-neutral-800 space-y-4 divide-y divide-neutral-850">
-          {/* Status changes toggle */}
-          <div className="flex items-start justify-between gap-4 pt-1">
-            <div className="space-y-0.5">
-              <label
-                htmlFor="toggle-status-changes"
-                className="text-xs font-medium text-neutral-200 cursor-pointer"
-              >
-                Status Changes (Tasks & Content)
-              </label>
-              <p className="text-[11px] text-neutral-400">
-                Notify when collaborators mark tasks as done, blocked, or cancelled, or archive content.
-              </p>
+        <div className="surface-card divide-y divide-[var(--border-subtle)] px-5">
+          {eventCategoryToggles.map((toggle) => (
+            <div
+              key={toggle.id}
+              className="flex items-start justify-between gap-4 py-4 first:pt-4 last:pb-4"
+            >
+              <div className="space-y-0.5 min-w-0">
+                <label
+                  htmlFor={toggle.id}
+                  className="text-xs font-semibold text-[var(--text-primary)] cursor-pointer block"
+                >
+                  {toggle.label}
+                </label>
+                <p className="text-xs text-[var(--text-secondary)]">{toggle.description}</p>
+              </div>
+              <input
+                id={toggle.id}
+                type="checkbox"
+                disabled={!inAppEnabled}
+                checked={toggle.checked}
+                onChange={(e) => toggle.onChange(e.target.checked)}
+                className="w-4 h-4 rounded accent-[var(--accent)] mt-0.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+              />
             </div>
-            <input
-              id="toggle-status-changes"
-              type="checkbox"
-              disabled={!inAppEnabled}
-              checked={notifyStatusChanges && inAppEnabled}
-              onChange={(e) => setNotifyStatusChanges(e.target.checked)}
-              className="w-4 h-4 rounded text-blue-600 bg-neutral-900 border-neutral-700 focus:ring-blue-500 mt-0.5 cursor-pointer disabled:opacity-50"
-            />
-          </div>
-
-          {/* Upcoming tasks toggle */}
-          <div className="flex items-start justify-between gap-4 pt-4">
-            <div className="space-y-0.5">
-              <label
-                htmlFor="toggle-upcoming-tasks"
-                className="text-xs font-medium text-neutral-200 cursor-pointer"
-              >
-                Upcoming Task Reminders
-              </label>
-              <p className="text-[11px] text-neutral-400">
-                Receive reminders before scheduled tasks begin based on your lead time setting.
-              </p>
-            </div>
-            <input
-              id="toggle-upcoming-tasks"
-              type="checkbox"
-              disabled={!inAppEnabled}
-              checked={notifyUpcomingTasks && inAppEnabled}
-              onChange={(e) => setNotifyUpcomingTasks(e.target.checked)}
-              className="w-4 h-4 rounded text-blue-600 bg-neutral-900 border-neutral-700 focus:ring-blue-500 mt-0.5 cursor-pointer disabled:opacity-50"
-            />
-          </div>
-
-          {/* Overdue tasks toggle */}
-          <div className="flex items-start justify-between gap-4 pt-4">
-            <div className="space-y-0.5">
-              <label
-                htmlFor="toggle-overdue-tasks"
-                className="text-xs font-medium text-neutral-200 cursor-pointer"
-              >
-                Overdue Task Alerts
-              </label>
-              <p className="text-[11px] text-neutral-400">
-                Receive alerts when scheduled tasks or deadlines pass without completion.
-              </p>
-            </div>
-            <input
-              id="toggle-overdue-tasks"
-              type="checkbox"
-              disabled={!inAppEnabled}
-              checked={notifyOverdueTasks && inAppEnabled}
-              onChange={(e) => setNotifyOverdueTasks(e.target.checked)}
-              className="w-4 h-4 rounded text-blue-600 bg-neutral-900 border-neutral-700 focus:ring-blue-500 mt-0.5 cursor-pointer disabled:opacity-50"
-            />
-          </div>
-
-          {/* Upcoming content toggle */}
-          <div className="flex items-start justify-between gap-4 pt-4">
-            <div className="space-y-0.5">
-              <label
-                htmlFor="toggle-upcoming-content"
-                className="text-xs font-medium text-neutral-200 cursor-pointer"
-              >
-                Scheduled Content Alerts
-              </label>
-              <p className="text-[11px] text-neutral-400">
-                Alert when social content is scheduled or due for publishing.
-              </p>
-            </div>
-            <input
-              id="toggle-upcoming-content"
-              type="checkbox"
-              disabled={!inAppEnabled}
-              checked={notifyUpcomingContent && inAppEnabled}
-              onChange={(e) => setNotifyUpcomingContent(e.target.checked)}
-              className="w-4 h-4 rounded text-blue-600 bg-neutral-900 border-neutral-700 focus:ring-blue-500 mt-0.5 cursor-pointer disabled:opacity-50"
-            />
-          </div>
+          ))}
         </div>
-      </div>
+      </section>
 
       {/* Section 3: Reminder Lead Time */}
-      <div className="space-y-4">
+      <section className="space-y-3">
         <div>
-          <h2 className="text-sm font-semibold text-neutral-200 flex items-center gap-2">
-            <Clock className="w-4 h-4 text-amber-400" />
+          <h2 className="heading-section text-sm sm:text-base flex items-center gap-2">
+            <Clock className="w-4 h-4 text-[var(--status-warning-text)]" />
             <span>Reminder Timing</span>
           </h2>
-          <p className="text-xs text-neutral-400 mt-0.5">
-            Configure how early scheduled task and content reminders are intended to occur.
+          <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+            Configure how early upcoming task and content reminders fire.
           </p>
         </div>
 
-        <div className="p-4 rounded-xl bg-neutral-950 border border-neutral-800 space-y-4">
-          <div className="space-y-2">
+        <div className="surface-card p-5 space-y-4">
+          <div className="space-y-1.5">
             <label
               htmlFor="select-lead-time"
-              className="text-xs font-medium text-neutral-300 block"
+              className="text-xs font-medium text-[var(--text-secondary)] block"
             >
               Default Lead Time
             </label>
@@ -437,7 +370,7 @@ export function NotificationPreferencesForm({
               value={isCustomLeadTime ? -1 : leadTimeMinutes}
               onChange={(e) => handleLeadTimePresetChange(e.target.value)}
               disabled={!inAppEnabled}
-              className="w-full sm:w-80 bg-neutral-900 border border-neutral-700 rounded-lg px-3 py-2 text-xs text-neutral-100 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+              className="input-control w-full sm:w-80 py-1.5 px-3 min-h-9 text-xs leading-tight appearance-auto disabled:opacity-50"
             >
               {PRESET_LEAD_TIMES.map((preset) => (
                 <option key={preset.value} value={preset.value}>
@@ -447,12 +380,11 @@ export function NotificationPreferencesForm({
             </select>
           </div>
 
-          {/* Custom Minute Input */}
           {isCustomLeadTime && (
-            <div className="space-y-1.5 pt-2">
+            <div className="space-y-1.5 pt-1">
               <label
                 htmlFor="input-custom-lead-time"
-                className="text-xs font-medium text-neutral-300 block"
+                className="text-xs font-medium text-[var(--text-secondary)] block"
               >
                 Custom Lead Time (Minutes, 0 to 10,080)
               </label>
@@ -465,39 +397,33 @@ export function NotificationPreferencesForm({
                   value={leadTimeMinutes}
                   onChange={handleCustomLeadTimeChange}
                   disabled={!inAppEnabled}
-                  className="w-36 bg-neutral-900 border border-neutral-700 rounded-lg px-3 py-1.5 text-xs text-neutral-100 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                  className="input-control w-36 px-3 py-1.5 text-xs font-mono disabled:opacity-50"
                 />
-                <span className="text-xs text-neutral-400">minutes</span>
+                <span className="text-xs text-[var(--text-muted)]">minutes</span>
               </div>
             </div>
           )}
 
-          {/* Architecture context callout */}
-          <div className="p-3 rounded-lg bg-neutral-900/60 border border-neutral-800 text-[11px] text-neutral-400 flex items-start gap-2">
-            <Info className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
+          <div className="p-3 rounded-[var(--radius-sm)] bg-[var(--bg-surface-muted)]/70 border border-[var(--border-subtle)] text-xs text-[var(--text-secondary)] flex items-start gap-2">
+            <Info className="w-4 h-4 text-[var(--accent)] shrink-0 mt-0.5" />
             <span>
-              This value defines how many minutes in advance upcoming reminders are generated.
-              Automated background reminder processing is being configured for Phase 5, Step 5.
+              Lead time defines how far ahead automated reminder sweeps dispatch notifications before
+              due times and scheduled publishing windows.
             </span>
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* Save Button */}
-      <div className="flex items-center justify-between pt-4 border-t border-neutral-800">
-        <span className="text-[11px] text-neutral-500">
+      {/* Save Action Row */}
+      <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+        <span className="text-xs text-[var(--text-muted)]">
           Preferences apply across all devices within this workspace.
         </span>
 
         <button
           type="submit"
           disabled={saving || !inAppEnabled}
-          className={clsx(
-            'inline-flex items-center gap-2 px-5 py-2 rounded-lg text-xs font-semibold transition-all shadow-sm',
-            'bg-blue-600 hover:bg-blue-500 text-white',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-neutral-950',
-            'disabled:opacity-50 disabled:cursor-not-allowed'
-          )}
+          className="btn-accent px-5 py-2 text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {saving ? (
             <>

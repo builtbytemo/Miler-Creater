@@ -3,9 +3,15 @@ import { connection } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { resolveAuthorizedWorkspace } from '@/lib/auth/workspace';
 import { WorkspaceShell } from '@/components/layout/WorkspaceShell';
+import { SettingsNav } from '@/components/settings/SettingsNav';
 import { ClaudeConnection } from '@/components/settings/ClaudeConnection';
 import { CliConnection } from '@/components/settings/CliConnection';
 import { AiTokensManager } from '@/components/settings/AiTokensManager';
+import {
+  DEFAULT_TIMEZONE,
+  isValidTimeZone,
+  normalizeTimeZone,
+} from '@/lib/temporal/timezone';
 
 export const instant = false;
 
@@ -42,17 +48,32 @@ export default async function AiTokensSettingsPage() {
     supabase.from('profiles').select('timezone').eq('id', authData.user.id).maybeSingle(),
   ]);
 
-  const userTimeZone = profileData?.timezone || 'Asia/Cairo';
+  const rawTz = profileData?.timezone;
+  const userTimeZone =
+    rawTz && isValidTimeZone(rawTz) ? normalizeTimeZone(rawTz) : DEFAULT_TIMEZONE;
 
   return (
     <WorkspaceShell workspaceName={wsData?.name} maxWidth="narrow">
-      <CliConnection workspaceId={workspaceId} />
-      <ClaudeConnection />
-      <AiTokensManager
-        workspaceId={workspaceId}
-        workspaceName={wsData?.name}
-        userTimeZone={userTimeZone}
+      <SettingsNav
+        activeTab="tokens"
+        backHref="/dashboard"
+        backLabel="Back to Overview"
+        eyebrow="Settings & Integrations"
+        title="AI & MCP API Tokens"
+        description={`Connect Zahi CLI, authorize remote Claude MCP access, and manage scoped bearer tokens${
+          wsData?.name ? ` for ${wsData.name}` : ''
+        }.`}
+        metaLabel={wsData?.name ? `${wsData.name} · ${userTimeZone}` : userTimeZone}
       />
+      <div className="space-y-6">
+        <CliConnection workspaceId={workspaceId} />
+        <ClaudeConnection />
+        <AiTokensManager
+          workspaceId={workspaceId}
+          workspaceName={wsData?.name}
+          userTimeZone={userTimeZone}
+        />
+      </div>
     </WorkspaceShell>
   );
 }

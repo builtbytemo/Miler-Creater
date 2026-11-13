@@ -4,6 +4,7 @@ import { useActionState, Suspense, useEffect } from 'react';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { signInWithEmail, type AuthActionResult } from '@/lib/auth/actions';
+import { AuthAlert } from '@/components/auth/AuthAlert';
 import { GoogleOAuthButton } from '@/components/auth/GoogleOAuthButton';
 import { getSafeRedirectPath } from '@/lib/auth/redirects';
 
@@ -39,16 +40,13 @@ function SignInContent() {
       </div>
 
       {callbackError && (
-        <div className="p-3 text-xs rounded-[var(--radius-sm)] border badge-danger">
-          Authentication session error: {callbackError}. Please sign in again.
-        </div>
+        <AuthAlert
+          tone="danger"
+          message={`Authentication session error: ${callbackError}. Please sign in again.`}
+        />
       )}
 
-      {state?.error && (
-        <div className="p-3 text-xs rounded-[var(--radius-sm)] border badge-danger">
-          {state.error}
-        </div>
-      )}
+      {state?.error && <AuthAlert tone="danger" message={state.error} />}
 
       <form action={formAction} className="space-y-4">
         <input type="hidden" name="redirectTo" value={redirectTo} />

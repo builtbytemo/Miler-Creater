@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { resolveAuthorizedWorkspace } from '@/lib/actions/content-actions';
 import { WorkspaceShell } from '@/components/layout/WorkspaceShell';
 import { DailyBriefingSettings } from '@/components/settings/DailyBriefingSettings';
+import { SettingsNav } from '@/components/settings/SettingsNav';
 import { NotificationPreferencesForm } from '@/components/notifications/NotificationPreferencesForm';
 
 export const instant = false;
@@ -43,11 +44,22 @@ export default async function NotificationSettingsPage() {
 
   return (
     <WorkspaceShell workspaceName={wsData?.name} maxWidth="narrow">
+      <SettingsNav
+        activeTab="notifications"
+        backHref="/notifications"
+        backLabel="Back to Notifications"
+        eyebrow="Settings & Delivery"
+        title="Notification Preferences"
+        description={`Configure in-app alerts, reminder lead times, and scheduled briefings${
+          wsData?.name ? ` for ${wsData.name}` : ''
+        }.`}
+        metaLabel={wsData?.name || undefined}
+      />
       <NotificationPreferencesForm
         workspaceId={workspaceId}
         workspaceName={wsData?.name}
       />
-      <div className="mt-10 pt-8 border-t border-[var(--border-subtle)]">
+      <div className="mt-8 pt-8 border-t border-[var(--border-subtle)]">
         <DailyBriefingSettings />
       </div>
     </WorkspaceShell>
