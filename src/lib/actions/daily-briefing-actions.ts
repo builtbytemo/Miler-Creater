@@ -195,8 +195,8 @@ export async function sendTestBriefingMessageAction(channel: BriefingChannel): P
 
   const message = {
     channel,
-    subject: 'Miler delivery test',
-    text: 'This is a Miler test message confirming that delivery to this destination works. It is not a Daily Briefing.',
+    subject: 'Zahi delivery test',
+    text: 'This is a Zahi test message confirming that delivery to this destination works. It is not a Daily Briefing.',
   };
 
   let result;

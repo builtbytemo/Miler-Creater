@@ -104,7 +104,29 @@ describe('Telegram account linking', () => {
     expect(a).toMatch(/^[A-Za-z0-9_-]{43}$/);
     expect(a).not.toBe(generateLinkToken());
     expect(hashLinkToken(a)).not.toContain(a);
-    expect(buildDeepLink('MilerBot', a)).toBe(`https://t.me/MilerBot?start=${a}`);
+    expect(buildDeepLink('ZahiBot', a)).toBe(`https://t.me/ZahiBot?start=${a}`);
+  });
+
+  it('uses Zahi branding in Telegram bot replies', async () => {
+    const sent: string[] = [];
+    const spyTg = {
+      channel: 'telegram' as const,
+      async send(_d: { chatId: number }, msg: { text: string }) {
+        sent.push(msg.text);
+        return { ok: true as const, messageId: '1' };
+      },
+    };
+    const { db, tokens } = linkDb();
+    const token = generateLinkToken();
+    tokens.set(hashLinkToken(token), { user: 'u1', used: false, expired: false });
+    const admin = createFakeAdmin(db);
+    await handleTelegramUpdate(admin, start(10, token), spyTg);
+    await handleTelegramUpdate(admin, start(11, 'invalid'), spyTg);
+    expect(sent[0]).toContain('Zahi is now connected');
+    expect(sent[1]).toContain('Zahi settings');
+    for (const msg of sent) {
+      expect(msg).not.toMatch(/\bmiler\b/i);
+    }
   });
 });
 

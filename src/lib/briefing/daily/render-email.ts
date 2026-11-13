@@ -40,7 +40,7 @@ const C = {
  */
 export function renderEmail(snap: BriefingSnapshot): RenderedEmail {
   const longDate = formatLongDate(snap.localDate);
-  const subject = `Your Miler briefing · ${formatShortDate(snap.localDate)}`;
+  const subject = `Your Zahi briefing · ${formatShortDate(snap.localDate)}`;
 
   const taskRows = snap.tasks.map((t) => ({ title: t.title, detail: timeLabel(t, snap) }));
   const contentRows = snap.content.map((c) => ({ title: c.title, detail: timeLabel(c, snap) }));
@@ -56,7 +56,7 @@ export function renderEmail(snap: BriefingSnapshot): RenderedEmail {
   const emptyLine = 'Nothing is scheduled for today. Enjoy the open day.';
 
   const text = [
-    `Your Miler briefing`,
+    `Your Zahi briefing`,
     longDate,
     '',
     ...(empty
@@ -111,7 +111,7 @@ export function renderEmail(snap: BriefingSnapshot): RenderedEmail {
 <tr><td>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
 <tr><td style="vertical-align:top;">
-<span style="display:inline-block;background:${C.topBar};color:#ffffff;font-family:${FONT};font-size:10px;font-weight:700;letter-spacing:0.12em;padding:2px 7px;border-radius:3px;text-transform:uppercase;">MILER</span>
+<span style="display:inline-block;background:${C.topBar};color:#ffffff;font-family:${FONT};font-size:10px;font-weight:700;letter-spacing:0.12em;padding:2px 7px;border-radius:3px;text-transform:uppercase;">ZAHI</span>
 <div class="hero-day" style="padding-top:10px;font-family:${FONT};font-size:25px;line-height:29px;font-weight:700;color:${C.ink};letter-spacing:-0.02em;">${escapeHtml(weekday)}</div>
 <div style="padding-top:2px;font-family:${FONT};font-size:14px;line-height:20px;color:${C.secondary};font-weight:500;">${escapeHtml(monthDayYear || longDate)}</div>
 </td></tr>
@@ -119,7 +119,7 @@ export function renderEmail(snap: BriefingSnapshot): RenderedEmail {
 </table>
 </td></tr>
 ${bodyContent}
-<tr><td style="padding-top:36px;font-family:${FONT};font-size:11px;line-height:16px;color:${C.muted};text-align:center;">Miler Daily Planner</td></tr>
+<tr><td style="padding-top:36px;font-family:${FONT};font-size:11px;line-height:16px;color:${C.muted};text-align:center;">Zahi Daily Planner</td></tr>
 </table></td></tr>
 </table></td></tr></table></body></html>`;
 

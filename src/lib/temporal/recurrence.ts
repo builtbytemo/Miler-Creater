@@ -52,7 +52,7 @@ export function validateRecurrenceRule(rule: RecurrenceRuleParams): void {
   const validFrequencies = ['daily', 'weekly', 'monthly', 'yearly'];
   if (rule.frequency === 'custom' || !validFrequencies.includes(rule.frequency)) {
     throw new Error(
-      `Unsupported recurrence frequency: '${rule.frequency}'. Miler officially supports 'daily', 'weekly', 'monthly', and 'yearly'.`
+      `Unsupported recurrence frequency: '${rule.frequency}'. Zahi officially supports 'daily', 'weekly', 'monthly', and 'yearly'.`
     );
   }
 

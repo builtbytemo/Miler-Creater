@@ -11,7 +11,7 @@ export const recurrenceInputSchema = z
     frequency: recurrenceFrequencyEnum.refine(
       (f) => f !== 'custom',
       {
-        message: "Unsupported recurrence frequency: 'custom'. Miler officially supports daily, weekly, monthly, and yearly.",
+        message: "Unsupported recurrence frequency: 'custom'. Zahi officially supports daily, weekly, monthly, and yearly.",
       }
     ),
     interval: z
