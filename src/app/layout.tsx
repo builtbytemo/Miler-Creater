@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Content & Task Command Center",
-  description: "Unified operations workspace for social content planning and personal task management.",
+  title: "Zahi — Content & Task Command Center",
+  description: "Zahi is a unified operations workspace for social content planning and personal task management.",
 };
 
 const THEME_INIT_SCRIPT = `(function(){try{var s=localStorage.getItem("theme");var p=(s==="light"||s==="dark"||s==="system")?s:"system";var r=p==="system"?(window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"):p;document.documentElement.setAttribute("data-theme",r);document.documentElement.setAttribute("data-theme-preference",p);document.documentElement.style.colorScheme=r;}catch(e){}})()`;

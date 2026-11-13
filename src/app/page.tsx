@@ -35,10 +35,10 @@ export default async function HomePage() {
       <header className="border-b border-neutral-800/80 px-6 py-4 flex items-center justify-between max-w-7xl w-full mx-auto">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold text-sm tracking-tight shadow-sm">
-            CC
+            Z
           </div>
           <span className="font-semibold text-sm tracking-tight text-neutral-200">
-            Command Center
+            Zahi
           </span>
         </div>
         <div className="flex items-center gap-3">
@@ -65,7 +65,7 @@ export default async function HomePage() {
         </div>
 
         <h1 className="text-4xl sm:text-5xl font-bold tracking-tight text-neutral-100 max-w-2xl leading-tight">
-          Unified Content & Task Command Center
+          Zahi — Unified Content & Task Command Center
         </h1>
 
         <p className="mt-4 text-base text-neutral-400 max-w-xl leading-relaxed">
@@ -78,7 +78,7 @@ export default async function HomePage() {
             href="/auth/sign-up"
             className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-medium text-sm transition-colors shadow-sm"
           >
-            <span>Open Command Center</span>
+            <span>Open Zahi</span>
             <ArrowRight className="w-4 h-4" />
           </Link>
           <Link
@@ -125,7 +125,7 @@ export default async function HomePage() {
 
       {/* Footer */}
       <footer className="border-t border-neutral-800/80 px-6 py-6 text-center text-xs text-neutral-400">
-        Personal-first Content & Task Command Center • Standalone Architecture
+        Zahi • Personal-first Content & Task Command Center • Standalone Architecture
       </footer>
     </div>
   );

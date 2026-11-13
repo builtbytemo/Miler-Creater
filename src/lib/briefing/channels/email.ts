@@ -32,7 +32,7 @@ export function createEmailAdapter(fetchImpl: FetchLike = fetch): ChannelAdapter
           body: JSON.stringify({
             from,
             to: [destination.to],
-            subject: message.subject ?? 'Miler',
+            subject: message.subject ?? 'Zahi',
             text: message.text,
             ...(message.html ? { html: message.html } : {}),
           }),

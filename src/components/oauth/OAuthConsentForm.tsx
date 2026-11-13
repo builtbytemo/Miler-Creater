@@ -156,7 +156,7 @@ export function OAuthConsentForm({
           <code className="px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-200 font-mono">
             {callbackHost}
           </code>
-          ) is requesting access to your Miler Creator workspace over the Model Context Protocol.
+          ) is requesting access to your Zahi workspace over the Model Context Protocol.
         </p>
 
         <div className="mt-3 pt-3 border-t border-neutral-800/80 flex flex-wrap items-center justify-between gap-2 text-xs text-neutral-400">

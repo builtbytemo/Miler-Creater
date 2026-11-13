@@ -428,7 +428,13 @@ describe('Email rendering', () => {
     expect(email.html).toContain('02 / </span>Content');
     expect(email.html).toContain('Wednesday');
     expect(email.html).toContain('November 11, 2026');
-    expect(email.html).toContain('Miler Daily Planner');
+    expect(email.subject).toContain('Your Zahi briefing');
+    expect(email.text).toContain('Your Zahi briefing');
+    expect(email.html).toContain('>ZAHI<');
+    expect(email.html).toContain('Zahi Daily Planner');
+    expect(email.html).not.toMatch(/\bmiler\b/i);
+    expect(email.subject).not.toMatch(/\bmiler\b/i);
+    expect(email.text).not.toMatch(/\bmiler\b/i);
   });
 
   it('escapes user-generated HTML everywhere', async () => {

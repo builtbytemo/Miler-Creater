@@ -43,10 +43,10 @@ interface TelegramUpdate {
 export type WebhookOutcome = 'duplicate' | 'linked' | 'invalid_token' | 'chat_in_use' | 'ignored' | 'bot_blocked' | 'malformed';
 
 const REPLIES: Record<string, string> = {
-  linked: 'Miler is now connected to this chat. You can manage delivery in Miler settings.',
-  invalid_token: 'This connection link is invalid, expired or already used. Please generate a new one in Miler settings.',
-  chat_in_use: 'This Telegram chat is already connected to another Miler account.',
-  help: 'To connect Miler, open Miler settings and choose "Connect Telegram".',
+  linked: 'Zahi is now connected to this chat. You can manage delivery in Zahi settings.',
+  invalid_token: 'This connection link is invalid, expired or already used. Please generate a new one in Zahi settings.',
+  chat_in_use: 'This Telegram chat is already connected to another Zahi account.',
+  help: 'To connect Zahi, open Zahi settings and choose "Connect Telegram".',
 };
 
 /**
