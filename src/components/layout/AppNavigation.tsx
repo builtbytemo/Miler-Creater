@@ -167,16 +167,16 @@ export function AppNavigation() {
           <div className="flex items-center justify-between gap-2 min-w-0 px-1">
             <Link
               href="/dashboard"
-              aria-label="Command Center home"
+              aria-label="Zahi home"
               className="group inline-flex min-w-0 items-center gap-2.5 text-sm font-semibold tracking-tight text-[var(--text-primary)]"
             >
               <span
                 aria-hidden="true"
                 className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[var(--text-primary)] text-[var(--bg-canvas)] text-[11px] font-bold tracking-tighter"
               >
-                C
+                Z
               </span>
-              <span className="truncate">Command Center</span>
+              <span className="truncate">Zahi</span>
             </Link>
 
             <NotificationBell panelAlign="left" className="shrink-0" />
@@ -248,16 +248,16 @@ export function AppNavigation() {
           <div className="flex h-13 items-center justify-between gap-2 min-w-0">
             <Link
               href="/dashboard"
-              aria-label="Command Center home"
+              aria-label="Zahi home"
               className="inline-flex min-w-0 items-center gap-2 text-sm font-semibold tracking-tight text-[var(--text-primary)]"
             >
               <span
                 aria-hidden="true"
                 className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[var(--text-primary)] text-[var(--bg-canvas)] text-[11px] font-bold"
               >
-                C
+                Z
               </span>
-              <span className="truncate">Command Center</span>
+              <span className="truncate">Zahi</span>
             </Link>
 
             <div className="flex shrink-0 items-center gap-1.5">

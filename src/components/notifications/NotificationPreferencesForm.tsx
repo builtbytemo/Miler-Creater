@@ -260,7 +260,7 @@ export function NotificationPreferencesForm({
                 In-App Notifications
               </label>
               <p className="text-[11px] text-neutral-400">
-                Receive notifications in the Command Center bell badge and notification panel.
+                Receive notifications in the Zahi bell badge and notification panel.
               </p>
             </div>
             <input
