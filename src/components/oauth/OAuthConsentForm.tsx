@@ -11,10 +11,10 @@ import {
   Sparkles,
   XCircle,
 } from 'lucide-react';
-import clsx from 'clsx';
 import type { ToolScope } from '@/lib/mcp/types';
 import type { WorkspaceRole } from '@/types/database';
 import { AI_TOKEN_SCOPE_DETAILS } from '@/lib/validation/ai-token';
+import { ZahiDiamondMark } from '@/components/brand/ZahiBrand';
 import { submitOAuthDecisionAction } from '@/lib/actions/oauth-actions';
 
 export interface AuthorizableWorkspaceOption {
@@ -133,52 +133,54 @@ export function OAuthConsentForm({
   return (
     <div
       data-testid="oauth-consent-card"
-      className="w-full max-w-xl mx-auto rounded-2xl bg-neutral-900 border border-neutral-800 shadow-2xl overflow-hidden text-neutral-100"
+      className="surface-card zahi-khatam-accent w-full max-w-xl mx-auto overflow-hidden"
     >
       {/* Header */}
-      <div className="p-6 border-b border-neutral-800 bg-neutral-950/60">
-        <div className="flex items-center gap-3 mb-3">
-          <div className="p-2.5 rounded-xl bg-blue-500/15 border border-blue-500/30 text-blue-400">
+      <div className="p-6 border-b border-[var(--border-subtle)] bg-[var(--bg-surface-muted)]/45 space-y-3">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 rounded-[var(--radius-sm)] bg-[var(--accent-soft)] border border-[var(--accent)]/25 text-[var(--accent)]">
             <Sparkles className="w-5 h-5" />
           </div>
-          <div>
-            <p className="text-xs uppercase tracking-wider font-semibold text-blue-400">
-              MCP Remote Connector Authorization
-            </p>
-            <h1 className="text-lg font-bold text-white">
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-[0.08em] text-[var(--accent-text)] font-medium">
+              <ZahiDiamondMark size="xs" tone="accent" />
+              <span>MCP Remote Connector Authorization</span>
+            </div>
+            <h1 className="heading-display text-lg sm:text-xl mt-0.5 truncate">
               Authorize <span data-testid="oauth-client-name">{clientName}</span>
             </h1>
           </div>
         </div>
 
-        <p className="text-xs text-neutral-400 leading-relaxed">
-          <strong className="text-neutral-200">{clientName}</strong> (via{' '}
-          <code className="px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-200 font-mono">
+        <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+          <strong className="font-semibold text-[var(--text-primary)]">{clientName}</strong> (via{' '}
+          <code className="px-1.5 py-0.5 rounded-[4px] bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-primary)] font-mono">
             {callbackHost}
           </code>
           ) is requesting access to your Zahi workspace over the Model Context Protocol.
         </p>
 
-        <div className="mt-3 pt-3 border-t border-neutral-800/80 flex flex-wrap items-center justify-between gap-2 text-xs text-neutral-400">
+        <div className="pt-3 border-t border-[var(--border-subtle)] flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--text-muted)]">
           <span>
-            Signed in as <strong className="text-neutral-200">{userEmail}</strong>
+            Signed in as{' '}
+            <strong className="font-semibold text-[var(--text-primary)]">{userEmail}</strong>
           </span>
-          <span className="inline-flex items-center gap-1 text-emerald-400 font-medium">
-            <Lock className="w-3.5 h-3.5" />
-            PKCE S256 Verified
+          <span className="badge badge-success font-medium">
+            <Lock className="w-3 h-3" />
+            <span>PKCE S256 Verified</span>
           </span>
         </div>
       </div>
 
       {/* Body */}
-      <div className="p-6 space-y-6">
+      <div className="p-6 space-y-5">
         {error && (
           <div
             role="alert"
             data-testid="oauth-consent-error"
-            className="p-3.5 rounded-xl bg-red-950/50 border border-red-800/80 text-red-200 text-xs flex items-start gap-2.5"
+            className="p-3.5 rounded-[var(--radius-sm)] border badge-danger text-xs flex items-start gap-2.5"
           >
-            <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
             <span>{error}</span>
           </div>
         )}
@@ -187,14 +189,14 @@ export function OAuthConsentForm({
         <div className="space-y-2">
           <label
             htmlFor="oauth-workspace-select"
-            className="flex items-center gap-1.5 text-xs font-semibold text-neutral-200"
+            className="flex items-center gap-1.5 text-xs font-semibold text-[var(--text-primary)]"
           >
-            <Building2 className="w-3.5 h-3.5 text-neutral-400" />
+            <Building2 className="w-3.5 h-3.5 text-[var(--text-muted)]" />
             <span>1. Select Workspace to Connect</span>
           </label>
 
           {workspaces.length === 0 ? (
-            <div className="p-3.5 rounded-xl bg-amber-950/40 border border-amber-800/70 text-amber-200 text-xs">
+            <div className="p-3.5 rounded-[var(--radius-sm)] border badge-warning text-xs">
               You do not belong to any active workspaces yet. Create or join a workspace first to
               connect an AI assistant.
             </div>
@@ -205,7 +207,7 @@ export function OAuthConsentForm({
               value={selectedWorkspaceId}
               onChange={(e) => setSelectedWorkspaceId(e.target.value)}
               disabled={submitting !== null}
-              className="w-full px-3.5 py-2.5 text-sm rounded-xl bg-neutral-950 border border-neutral-700 text-neutral-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="input-control py-2 px-3 min-h-10 text-sm leading-tight appearance-auto"
             >
               {workspaces.map((ws) => (
                 <option key={ws.id} value={ws.id}>
@@ -219,7 +221,7 @@ export function OAuthConsentForm({
           {isSelectedWorkspaceViewer && (
             <p
               data-testid="oauth-viewer-warning"
-              className="text-xs text-amber-300 bg-amber-950/40 border border-amber-800/60 rounded-lg px-3 py-2"
+              className="text-xs border badge-warning rounded-[var(--radius-sm)] px-3 py-2"
             >
               You hold a <strong>Viewer</strong> role in this workspace. Only Owners, Admins, and
               Members can authorize MCP access.
@@ -229,12 +231,12 @@ export function OAuthConsentForm({
 
         {/* Scope Consent */}
         <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="flex items-center gap-1.5 text-xs font-semibold text-neutral-200">
-              <ShieldCheck className="w-3.5 h-3.5 text-neutral-400" />
+          <div className="flex items-center justify-between gap-2">
+            <span className="flex items-center gap-1.5 text-xs font-semibold text-[var(--text-primary)]">
+              <ShieldCheck className="w-3.5 h-3.5 text-[var(--text-muted)]" />
               <span>2. Approve Permission Scopes</span>
             </span>
-            <span className="text-[11px] text-neutral-400">
+            <span className="text-[11px] font-mono text-[var(--text-muted)] tabular-nums">
               {selectedScopes.length} of {AI_TOKEN_SCOPE_DETAILS.length} selected
             </span>
           </div>
@@ -242,7 +244,7 @@ export function OAuthConsentForm({
           {wasScopeOmitted && (
             <p
               data-testid="least-privilege-notice"
-              className="text-xs text-blue-200/90 bg-blue-950/40 border border-blue-800/60 rounded-lg px-3 py-2"
+              className="text-xs border badge-info rounded-[var(--radius-sm)] px-3 py-2 leading-relaxed"
             >
               <strong>Least-privilege default applied:</strong> Only read-only permissions are
               pre-selected. Check <strong>Write Tasks</strong> or <strong>Write Content</strong>{' '}
@@ -258,40 +260,36 @@ export function OAuthConsentForm({
                 <label
                   key={item.scope}
                   data-testid={`scope-option-${item.scope}`}
-                  className={clsx(
-                    'flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all',
+                  className={`flex items-start gap-3 p-3.5 rounded-[var(--radius-sm)] border cursor-pointer transition-colors ${
                     checked
-                      ? 'bg-neutral-950 border-blue-500/70 ring-1 ring-blue-500/30'
-                      : 'bg-neutral-950/50 border-neutral-800 hover:border-neutral-700'
-                  )}
+                      ? 'bg-[var(--accent-soft)] border-[var(--accent)]/45'
+                      : 'bg-[var(--bg-surface-muted)]/45 border-[var(--border-subtle)] hover:border-[var(--border-strong)]'
+                  }`}
                 >
                   <input
                     type="checkbox"
                     checked={checked}
                     disabled={submitting !== null}
                     onChange={() => toggleScope(item.scope)}
-                    className="mt-0.5 rounded border-neutral-600 bg-neutral-900 text-blue-500 focus:ring-blue-500"
+                    className="mt-0.5 h-4 w-4 rounded accent-[var(--accent)] shrink-0 cursor-pointer"
                   />
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs font-semibold text-neutral-100">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-xs font-semibold text-[var(--text-primary)]">
                         {item.label}{' '}
-                        <code className="text-[11px] font-mono text-neutral-400">
+                        <code className="text-[11px] font-mono text-[var(--text-muted)] font-normal">
                           ({item.scope})
                         </code>
                       </span>
                       <span
-                        className={clsx(
-                          'px-2 py-0.5 text-[10px] font-semibold uppercase rounded-full border',
-                          isWrite
-                            ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
-                            : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
-                        )}
+                        className={`badge text-[10px] uppercase ${
+                          isWrite ? 'badge-warning' : 'badge-success'
+                        }`}
                       >
                         {isWrite ? 'Write Access' : 'Read-Only'}
                       </span>
                     </div>
-                    <p className="text-xs text-neutral-400 mt-1 leading-relaxed">
+                    <p className="text-xs text-[var(--text-secondary)] mt-1 leading-relaxed">
                       {item.description}
                     </p>
                   </div>
@@ -302,29 +300,29 @@ export function OAuthConsentForm({
         </div>
 
         {/* Target Resource Disclosure */}
-        <div className="p-3 rounded-xl bg-neutral-950 border border-neutral-800/80 text-[11px] text-neutral-400 flex items-center justify-between gap-2">
+        <div className="p-3 rounded-[var(--radius-sm)] bg-[var(--bg-surface-muted)]/70 border border-[var(--border-subtle)] text-[11px] text-[var(--text-muted)] flex flex-wrap items-center justify-between gap-2">
           <span>Bound MCP Resource (RFC 8707):</span>
           <code
             data-testid="bound-mcp-resource"
-            className="font-mono text-neutral-200 truncate"
+            className="font-mono text-[var(--text-primary)] truncate max-w-full"
           >
             {resource}
           </code>
         </div>
 
         {/* Actions */}
-        <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-3">
+        <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2.5">
           <button
             type="button"
             data-testid="oauth-deny-button"
             disabled={submitting !== null}
             onClick={() => handleDecision('deny')}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-neutral-700 bg-neutral-800/70 hover:bg-neutral-800 text-neutral-200 text-xs font-semibold transition-colors disabled:opacity-50"
+            className="btn-secondary px-4 py-2 text-xs font-semibold disabled:opacity-50"
           >
             {submitting === 'deny' ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
-              <XCircle className="w-4 h-4 text-neutral-400" />
+              <XCircle className="w-4 h-4 text-[var(--text-muted)]" />
             )}
             <span>Deny</span>
           </button>
@@ -339,7 +337,7 @@ export function OAuthConsentForm({
               selectedScopes.length === 0
             }
             onClick={() => handleDecision('approve')}
-            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition-colors shadow-lg shadow-blue-600/20 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="btn-accent px-5 py-2 text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {submitting === 'approve' ? (
               <Loader2 className="w-4 h-4 animate-spin" />

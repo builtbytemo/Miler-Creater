@@ -2,6 +2,7 @@
 
 import { useActionState } from 'react';
 import Link from 'next/link';
+import { AuthAlert } from '@/components/auth/AuthAlert';
 import { resetPasswordForEmail, type AuthActionResult } from '@/lib/auth/actions';
 
 export default function ForgotPasswordPage() {
@@ -21,16 +22,10 @@ export default function ForgotPasswordPage() {
         </p>
       </div>
 
-      {state?.error && (
-        <div className="p-3 text-xs rounded-[var(--radius-sm)] border badge-danger">
-          {state.error}
-        </div>
-      )}
+      {state?.error && <AuthAlert tone="danger" message={state.error} />}
 
       {state?.success && state.message && (
-        <div className="p-3 text-xs rounded-[var(--radius-sm)] border badge-success">
-          {state.message}
-        </div>
+        <AuthAlert tone="success" message={state.message} />
       )}
 
       <form action={formAction} className="space-y-4">

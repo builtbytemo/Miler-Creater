@@ -11,7 +11,7 @@ export function AuthAlert({
   return (
     <div
       role={tone === 'danger' ? 'alert' : 'status'}
-      className={`p-3 text-xs rounded-[var(--radius-md)] border ${
+      className={`p-3 text-xs rounded-[var(--radius-sm)] border ${
         tone === 'danger' ? 'badge-danger' : 'badge-success'
       }`}
     >

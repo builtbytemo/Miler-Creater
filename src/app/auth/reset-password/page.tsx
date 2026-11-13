@@ -3,6 +3,7 @@
 import { useActionState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { AuthAlert } from '@/components/auth/AuthAlert';
 import { updatePassword, type AuthActionResult } from '@/lib/auth/actions';
 
 export default function ResetPasswordPage() {
@@ -30,11 +31,7 @@ export default function ResetPasswordPage() {
         </p>
       </div>
 
-      {state?.error && (
-        <div className="p-3 text-xs rounded-[var(--radius-sm)] border badge-danger">
-          {state.error}
-        </div>
-      )}
+      {state?.error && <AuthAlert tone="danger" message={state.error} />}
 
       <form action={formAction} className="space-y-4">
         <div>
