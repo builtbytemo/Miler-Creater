@@ -252,7 +252,7 @@
   }
 
   div:has(> [data-app-nav]) > [data-app-nav] {
-    width: var(--sidebar-width);
+    width: auto;
     flex-shrink: 0;
   }
 
