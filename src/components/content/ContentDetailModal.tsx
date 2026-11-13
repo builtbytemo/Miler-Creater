@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useId } from 'react';
 import {
   X,
   Calendar,
@@ -26,6 +26,8 @@ import { updateContentItemAction, deleteContentItemAction } from '@/lib/actions/
 import { formatInTimeZone, DEFAULT_TIMEZONE } from '@/lib/temporal/timezone';
 import { toLocalDatetimeString, parseLocalDatetimeString } from '@/lib/temporal/calendar';
 import { PLATFORM_CONFIG, STATUS_CONFIG, ACTION_CONFIG } from './ContentCard';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { useDialog } from '@/lib/hooks/use-dialog';
 
 interface ProjectOption {
   id: string;
@@ -85,7 +87,9 @@ export function ContentDetailModal({
   const [status, setStatus] = useState<ContentStatus>(item.status);
   const [title, setTitle] = useState(item.title || '');
   const [body, setBody] = useState(item.body || '');
-  const [scheduledAt, setScheduledAt] = useState(toLocalDatetimeString(item.scheduled_at, userTimeZone));
+  const [scheduledAt, setScheduledAt] = useState(
+    toLocalDatetimeString(item.scheduled_at, userTimeZone)
+  );
   const [durationMinutes, setDurationMinutes] = useState(
     item.duration_minutes ? String(item.duration_minutes) : ''
   );
@@ -111,17 +115,28 @@ export function ContentDetailModal({
   const [subreddit, setSubreddit] = useState(initialTargetRef?.subreddit || '');
 
   const [isPending, setIsPending] = useState(false);
-  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isConfirmingArchive, setIsConfirmingArchive] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Reset form when item prop changes
-  useEffect(() => {
+  const titleId = useId();
+  const dialogRef = useDialog(
+    isOpen && !isDeleteConfirmOpen,
+    onClose,
+    isPending || isDeleting
+  );
+
+  // Reset form state synchronously during render when item or timezone changes
+  const [prevItem, setPrevItem] = useState(item);
+  const [prevUserTimeZone, setPrevUserTimeZone] = useState(userTimeZone);
+  if (prevItem !== item || prevUserTimeZone !== userTimeZone) {
+    setPrevItem(item);
+    setPrevUserTimeZone(userTimeZone);
     const tRef = getTargetReference(item.target_reference);
     setCurrentItem(item);
     setIsEditing(false);
-    setIsConfirmingDelete(false);
+    setIsDeleteConfirmOpen(false);
     setIsConfirmingArchive(false);
     setError(null);
     setPlatform(item.platform);
@@ -147,21 +162,22 @@ export function ContentDetailModal({
           tRef?.subreddit
       )
     );
-  }, [item]);
+  }
 
   if (!isOpen) return null;
 
-  const currentLimit = PLATFORM_LIMITS[isEditing ? platform : currentItem.platform]?.maxChars || 280;
+  const currentLimit =
+    PLATFORM_LIMITS[isEditing ? platform : currentItem.platform]?.maxChars || 280;
   const activeBody = isEditing ? body : currentItem.body || '';
   const isOverRecommendedLimit = activeBody.length > currentLimit;
 
   const platformInfo = PLATFORM_CONFIG[currentItem.platform] || {
     label: currentItem.platform,
-    badgeClass: 'bg-neutral-800 text-neutral-300 border-neutral-700',
+    badgeClass: 'badge-neutral',
   };
   const statusInfo = STATUS_CONFIG[currentItem.status] || {
     label: currentItem.status,
-    badgeClass: 'bg-neutral-800 text-neutral-300 border-neutral-700',
+    badgeClass: 'badge-neutral',
   };
   const actionInfo = ACTION_CONFIG[currentItem.action_type] || {
     label: currentItem.action_type,
@@ -275,27 +291,22 @@ export function ContentDetailModal({
     }
   };
 
-  const handleDelete = async () => {
-    if (!isConfirmingDelete) {
-      setIsConfirmingDelete(true);
-      setIsConfirmingArchive(false);
-      return;
-    }
-
+  const handleConfirmDelete = async () => {
     try {
       setIsDeleting(true);
       setError(null);
       const res = await deleteContentItemAction(workspaceId, currentItem.id);
       if (res.error) {
         setError(res.error);
-        setIsConfirmingDelete(false);
+        setIsDeleteConfirmOpen(false);
         return;
       }
+      setIsDeleteConfirmOpen(false);
       onContentDeleted?.(currentItem.id);
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete content item');
-      setIsConfirmingDelete(false);
+      setIsDeleteConfirmOpen(false);
     } finally {
       setIsDeleting(false);
     }
@@ -304,7 +315,6 @@ export function ContentDetailModal({
   const handleArchive = async () => {
     if (!isConfirmingArchive) {
       setIsConfirmingArchive(true);
-      setIsConfirmingDelete(false);
       return;
     }
 
@@ -357,42 +367,51 @@ export function ContentDetailModal({
     }
   };
 
+  const inputCls = 'input-control w-full px-3 py-2 text-xs';
+
   return (
     <div
-      className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto"
+      className="fixed inset-0 bg-black/55 dark:bg-black/75 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-5 overflow-y-auto"
       onClick={(e) => {
         if (e.target === e.currentTarget && !isPending && !isDeleting) {
           onClose();
         }
       }}
     >
-      <div className="w-full max-w-2xl rounded-2xl bg-neutral-950 border border-neutral-800 p-6 space-y-6 shadow-2xl animate-in fade-in zoom-in-95 duration-150 my-8 max-h-[90vh] flex flex-col">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        className="w-full max-w-2xl surface-elevated rounded-[var(--radius-lg)] p-5 sm:p-6 space-y-5 my-6 max-h-[90vh] flex flex-col focus:outline-none"
+      >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-neutral-800 pb-4 shrink-0">
-          <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center justify-between gap-3 border-b border-[var(--border-subtle)] pb-4 shrink-0">
+          <div className="flex items-center gap-1.5 flex-wrap">
             <span
-              className={`text-xs font-semibold px-2.5 py-1 rounded-md border ${platformInfo.badgeClass}`}
+              className={`text-[11px] font-semibold px-2 py-0.5 rounded-[var(--radius-xs)] border ${platformInfo.badgeClass}`}
             >
               {platformInfo.label}
             </span>
             <span
-              className={`text-xs px-2.5 py-1 rounded-md border ${statusInfo.badgeClass}`}
+              className={`text-[11px] font-semibold px-2 py-0.5 rounded-[var(--radius-xs)] border ${statusInfo.badgeClass}`}
             >
               {statusInfo.label}
             </span>
-            <span className="text-xs px-2.5 py-1 rounded-md border border-neutral-800 bg-neutral-900 text-neutral-300">
+            <span className="text-[11px] font-medium px-2 py-0.5 rounded-[var(--radius-xs)] border badge-neutral">
               {actionInfo.label}
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 shrink-0">
             {!isEditing && (
               <button
                 type="button"
                 onClick={handleStartEdit}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-neutral-800 text-xs font-medium text-neutral-300 hover:text-neutral-100 hover:bg-neutral-900 transition-colors"
+                className="btn-secondary px-3 py-1.5 text-xs font-medium"
               >
-                <Edit2 className="w-3.5 h-3.5 text-neutral-400" />
+                <Edit2 className="w-3.5 h-3.5 text-[var(--text-muted)]" aria-hidden="true" />
                 <span>Edit</span>
               </button>
             )}
@@ -400,17 +419,21 @@ export function ContentDetailModal({
               type="button"
               onClick={onClose}
               disabled={isPending || isDeleting}
-              className="p-1 rounded-md text-neutral-400 hover:text-neutral-200 hover:bg-neutral-900 transition-colors disabled:opacity-50"
+              aria-label="Close dialog"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-muted)] transition-colors disabled:opacity-50"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4" aria-hidden="true" />
             </button>
           </div>
         </div>
 
         {/* Error notification */}
         {error && (
-          <div className="p-3 rounded-lg bg-red-950/40 border border-red-800 text-red-200 text-xs flex items-center gap-2 shrink-0">
-            <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
+          <div
+            role="alert"
+            className="p-3 rounded-[var(--radius-sm)] badge-danger border text-xs flex items-center gap-2 shrink-0"
+          >
+            <AlertCircle className="w-4 h-4 shrink-0" aria-hidden="true" />
             <span>{error}</span>
           </div>
         )}
@@ -420,19 +443,19 @@ export function ContentDetailModal({
           {isEditing ? (
             /* ================= EDIT MODE ================= */
             <form id="edit-content-form" onSubmit={handleUpdate} className="space-y-4 text-xs">
-              {/* Platform Selector */}
               <div className="space-y-1.5">
-                <label className="font-medium text-neutral-300">Platform</label>
-                <div className="grid grid-cols-4 gap-2">
+                <label className="block font-medium text-[var(--text-secondary)]">Platform</label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
                   {(['x', 'linkedin', 'reddit', 'threads'] as const).map((p) => (
                     <button
                       key={p}
                       type="button"
                       onClick={() => setPlatform(p)}
-                      className={`py-2 px-3 rounded-lg border text-xs font-medium capitalize text-center transition-all ${
+                      aria-pressed={platform === p}
+                      className={`py-2 px-3 rounded-[var(--radius-sm)] border text-xs font-medium capitalize text-center transition-colors ${
                         platform === p
-                          ? 'border-blue-500 bg-blue-500/10 text-blue-300'
-                          : 'border-neutral-800 bg-neutral-900 text-neutral-400 hover:text-neutral-200 hover:bg-neutral-850'
+                          ? 'bg-[var(--text-primary)] border-[var(--text-primary)] text-[var(--bg-canvas)] font-semibold'
+                          : 'bg-[var(--bg-surface)] border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--border-strong)]'
                       }`}
                     >
                       {p === 'x' ? 'X (Twitter)' : p}
@@ -442,13 +465,16 @@ export function ContentDetailModal({
               </div>
 
               {/* Action Type & Status Row */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div className="space-y-1.5">
-                  <label className="font-medium text-neutral-300">Action Type</label>
+                  <label htmlFor="detail-action-type" className="block font-medium text-[var(--text-secondary)]">
+                    Action Type
+                  </label>
                   <select
+                    id="detail-action-type"
                     value={actionType}
                     onChange={(e) => setActionType(e.target.value as ContentActionType)}
-                    className="w-full rounded-lg bg-neutral-900 border border-neutral-800 px-3 py-2 text-xs text-neutral-200 focus:outline-none focus:border-blue-500 transition-colors"
+                    className={inputCls}
                   >
                     <option value="post">Post / Update</option>
                     <option value="comment">Comment</option>
@@ -460,140 +486,170 @@ export function ContentDetailModal({
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="font-medium text-neutral-300">Status</label>
+                  <label htmlFor="detail-status" className="block font-medium text-[var(--text-secondary)]">
+                    Status
+                  </label>
                   <select
+                    id="detail-status"
                     value={status}
                     onChange={(e) => setStatus(e.target.value as ContentStatus)}
-                    className="w-full rounded-lg bg-neutral-900 border border-neutral-800 px-3 py-2 text-xs text-neutral-200 focus:outline-none focus:border-blue-500 transition-colors"
+                    className={inputCls}
                   >
                     <option value="idea">Idea (Inbox)</option>
                     <option value="draft">Draft</option>
                     <option value="scheduled">Scheduled</option>
                     <option value="archived">Archived</option>
-                    {(['publishing', 'published', 'failed'] as ContentStatus[]).includes(currentItem.status) && (
+                    {(['publishing', 'published', 'failed'] as ContentStatus[]).includes(
+                      currentItem.status
+                    ) && (
                       <option value={currentItem.status} disabled>
-                        {STATUS_CONFIG[currentItem.status]?.label || currentItem.status} (Automated lifecycle - Read only)
+                        {STATUS_CONFIG[currentItem.status]?.label || currentItem.status} (Automated
+                        lifecycle - Read only)
                       </option>
                     )}
                   </select>
-                  <p className="text-[10px] text-neutral-500">
-                    Publishing, Published, and Failed statuses are managed automatically by publishing integrations (Phase 4) and cannot be set manually.
+                  <p className="text-[10.5px] text-[var(--text-muted)]">
+                    Publishing, Published, and Failed states are managed by integrations and cannot
+                    be selected manually.
                   </p>
                 </div>
               </div>
 
               {/* Title */}
               <div className="space-y-1.5">
-                <label className="font-medium text-neutral-300">
-                  Headline / Title <span className="text-neutral-500 font-normal">(Optional)</span>
+                <label htmlFor="detail-title" className="block font-medium text-[var(--text-secondary)]">
+                  Headline / Title{' '}
+                  <span className="text-[var(--text-muted)] font-normal">(Optional)</span>
                 </label>
                 <input
+                  id="detail-title"
                   type="text"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder="e.g. Announcing our new open-source roadmap"
-                  className="w-full rounded-lg bg-neutral-900 border border-neutral-800 px-3 py-2 text-xs text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-blue-500 transition-colors"
+                  className={inputCls}
                 />
               </div>
 
               {/* Content Body */}
               <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <label className="font-medium text-neutral-300">Content Body</label>
+                <div className="flex items-center justify-between gap-2">
+                  <label htmlFor="detail-body" className="font-medium text-[var(--text-secondary)]">
+                    Content Body
+                  </label>
                   <span
-                    className={`text-[11px] font-mono ${
-                      isOverRecommendedLimit ? 'text-amber-400 font-medium' : 'text-neutral-500'
+                    className={`text-[11px] font-mono tabular-nums ${
+                      isOverRecommendedLimit
+                        ? 'text-[var(--status-warning-text)] font-semibold'
+                        : 'text-[var(--text-muted)]'
                     }`}
                   >
                     {body.length} / {currentLimit} chars
                   </span>
                 </div>
                 <textarea
+                  id="detail-body"
                   rows={6}
                   value={body}
                   onChange={(e) => setBody(e.target.value)}
                   placeholder="Compose your post, comment, or editorial note..."
-                  className="w-full rounded-lg bg-neutral-900 border border-neutral-800 px-3 py-2 text-xs text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-blue-500 transition-colors resize-y leading-relaxed"
+                  className={`${inputCls} resize-y leading-relaxed`}
                 />
                 {isOverRecommendedLimit && (
-                  <p className="text-[11px] text-amber-400/90 flex items-center gap-1.5">
-                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  <p className="text-[11px] text-[var(--status-warning-text)] flex items-center gap-1.5">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
                     <span>
                       Exceeds standard {PLATFORM_CONFIG[platform]?.label || platform} character
-                      limit. Publishing will not be blocked (editorial advisory).
+                      limit (advisory only).
                     </span>
                   </p>
                 )}
               </div>
 
               {/* Schedule and Duration */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 p-3.5 rounded-[var(--radius-md)] bg-[var(--bg-surface-muted)] border border-[var(--border-subtle)]">
                 <div className="space-y-1.5">
-                  <label className="font-medium text-neutral-300 flex items-center gap-1.5">
-                    <Calendar className="w-3.5 h-3.5 text-neutral-400" />
-                    <span>Scheduled Date & Time</span>
+                  <label
+                    htmlFor="detail-schedule"
+                    className="font-medium text-[var(--text-secondary)] flex items-center gap-1.5"
+                  >
+                    <Calendar className="w-3.5 h-3.5 text-[var(--text-muted)]" aria-hidden="true" />
+                    <span>Scheduled Date &amp; Time</span>
                   </label>
                   <input
+                    id="detail-schedule"
                     type="datetime-local"
                     value={scheduledAt}
                     onChange={(e) => setScheduledAt(e.target.value)}
-                    className="w-full rounded-lg bg-neutral-900 border border-neutral-800 px-3 py-2 text-xs text-neutral-200 focus:outline-none focus:border-blue-500 transition-colors"
+                    className={`${inputCls} font-mono`}
                   />
-                  <p className="text-[10px] text-neutral-500">Leave blank for unscheduled idea</p>
+                  <p className="text-[10.5px] text-[var(--text-muted)]">
+                    Leave blank for unscheduled idea ({userTimeZone})
+                  </p>
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="font-medium text-neutral-300 flex items-center gap-1.5">
-                    <Clock className="w-3.5 h-3.5 text-neutral-400" />
+                  <label
+                    htmlFor="detail-duration"
+                    className="font-medium text-[var(--text-secondary)] flex items-center gap-1.5"
+                  >
+                    <Clock className="w-3.5 h-3.5 text-[var(--text-muted)]" aria-hidden="true" />
                     <span>Duration (Minutes)</span>
                   </label>
                   <input
+                    id="detail-duration"
                     type="number"
                     min="1"
                     max="10080"
                     value={durationMinutes}
                     onChange={(e) => setDurationMinutes(e.target.value)}
                     placeholder="e.g. 30"
-                    className="w-full rounded-lg bg-neutral-900 border border-neutral-800 px-3 py-2 text-xs text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-blue-500 transition-colors"
+                    className={`${inputCls} font-mono`}
                   />
                 </div>
               </div>
 
               {/* Target Social Account & Project Link */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div className="space-y-1.5">
-                  <label className="font-medium text-neutral-300 flex items-center gap-1.5">
-                    <AtSign className="w-3.5 h-3.5 text-neutral-400" />
+                  <label
+                    htmlFor="detail-social-account"
+                    className="font-medium text-[var(--text-secondary)] flex items-center gap-1.5"
+                  >
+                    <AtSign className="w-3.5 h-3.5 text-[var(--text-muted)]" aria-hidden="true" />
                     <span>Target Social Account</span>
                   </label>
                   <select
+                    id="detail-social-account"
                     value={socialAccountId}
                     onChange={(e) => setSocialAccountId(e.target.value)}
-                    className="w-full rounded-lg bg-neutral-900 border border-neutral-800 px-3 py-2 text-xs text-neutral-200 focus:outline-none focus:border-blue-500 transition-colors"
+                    className={inputCls}
                   >
                     <option value="">None (Personal / Unassigned)</option>
                     {socialAccounts
                       .filter((a) => a.platform === platform)
                       .map((acc) => (
                         <option key={acc.id} value={acc.id}>
-                          @{acc.account_handle} {acc.account_name ? `(${acc.account_name})` : ''}
+                          @{acc.account_handle.replace(/^@/, '')}{' '}
+                          {acc.account_name ? `(${acc.account_name})` : ''}
                         </option>
                       ))}
                   </select>
-                  <p className="text-[10px] text-neutral-500">
-                    Destination profile for this {platform.toUpperCase()} content
-                  </p>
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="font-medium text-neutral-300 flex items-center gap-1.5">
-                    <Folder className="w-3.5 h-3.5 text-neutral-400" />
+                  <label
+                    htmlFor="detail-project"
+                    className="font-medium text-[var(--text-secondary)] flex items-center gap-1.5"
+                  >
+                    <Folder className="w-3.5 h-3.5 text-[var(--text-muted)]" aria-hidden="true" />
                     <span>Linked Project</span>
                   </label>
                   <select
+                    id="detail-project"
                     value={projectId}
                     onChange={(e) => setProjectId(e.target.value)}
-                    className="w-full rounded-lg bg-neutral-900 border border-neutral-800 px-3 py-2 text-xs text-neutral-200 focus:outline-none focus:border-blue-500 transition-colors"
+                    className={inputCls}
                   >
                     <option value="">None</option>
                     {projects.map((proj) => (
@@ -607,97 +663,113 @@ export function ContentDetailModal({
 
               {/* Tags & Editorial Notes */}
               <div className="space-y-1.5">
-                <label className="font-medium text-neutral-300 flex items-center gap-1.5">
-                  <Tag className="w-3.5 h-3.5 text-neutral-400" />
+                <label
+                  htmlFor="detail-tags"
+                  className="font-medium text-[var(--text-secondary)] flex items-center gap-1.5"
+                >
+                  <Tag className="w-3.5 h-3.5 text-[var(--text-muted)]" aria-hidden="true" />
                   <span>Tags</span>
                 </label>
                 <input
+                  id="detail-tags"
                   type="text"
                   value={tagsInput}
                   onChange={(e) => setTagsInput(e.target.value)}
                   placeholder="engineering, devrel, launch (comma-separated)"
-                  className="w-full rounded-lg bg-neutral-900 border border-neutral-800 px-3 py-2 text-xs text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-blue-500 transition-colors"
+                  className={inputCls}
                 />
               </div>
 
               <div className="space-y-1.5">
-                <label className="font-medium text-neutral-300 flex items-center gap-1.5">
-                  <FileText className="w-3.5 h-3.5 text-neutral-400" />
+                <label
+                  htmlFor="detail-notes"
+                  className="font-medium text-[var(--text-secondary)] flex items-center gap-1.5"
+                >
+                  <FileText className="w-3.5 h-3.5 text-[var(--text-muted)]" aria-hidden="true" />
                   <span>Editorial Notes / Context</span>
                 </label>
                 <textarea
+                  id="detail-notes"
                   rows={2}
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   placeholder="Internal notes, context, or talking points..."
-                  className="w-full rounded-lg bg-neutral-900 border border-neutral-800 px-3 py-2 text-xs text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-blue-500 transition-colors resize-y"
+                  className={`${inputCls} resize-y`}
                 />
               </div>
 
               {/* Target Reference (Collapsible) */}
-              <div className="border border-neutral-800 rounded-lg p-3 bg-neutral-900/50 space-y-3">
+              <div className="border border-[var(--border-subtle)] rounded-[var(--radius-md)] p-3.5 bg-[var(--bg-surface-muted)] space-y-3">
                 <button
                   type="button"
                   onClick={() => setIsTargetRefOpen(!isTargetRefOpen)}
-                  className="w-full flex items-center justify-between text-left text-neutral-300 font-medium"
+                  className="w-full flex items-center justify-between text-left text-[var(--text-secondary)] hover:text-[var(--text-primary)] font-semibold"
                 >
                   <span className="flex items-center gap-1.5">
-                    <LinkIcon className="w-3.5 h-3.5 text-neutral-400" />
+                    <LinkIcon className="w-3.5 h-3.5 text-[var(--text-muted)]" aria-hidden="true" />
                     <span>Target Reference (For comments, replies, reposts)</span>
                   </span>
                   {isTargetRefOpen ? (
-                    <ChevronUp className="w-4 h-4 text-neutral-400" />
+                    <ChevronUp className="w-4 h-4 text-[var(--text-muted)]" />
                   ) : (
-                    <ChevronDown className="w-4 h-4 text-neutral-400" />
+                    <ChevronDown className="w-4 h-4 text-[var(--text-muted)]" />
                   )}
                 </button>
 
                 {isTargetRefOpen && (
-                  <div className="pt-2 border-t border-neutral-800/60 space-y-3">
+                  <div className="pt-2.5 border-t border-[var(--border-subtle)] space-y-3">
                     <div className="space-y-1">
-                      <label className="text-[11px] text-neutral-400">Target Post URL</label>
+                      <label className="text-[11px] font-medium text-[var(--text-secondary)]">
+                        Target Post URL
+                      </label>
                       <input
                         type="url"
                         value={targetUrl}
                         onChange={(e) => setTargetUrl(e.target.value)}
                         placeholder="https://x.com/username/status/123456"
-                        className="w-full rounded-md bg-neutral-900 border border-neutral-800 px-2.5 py-1.5 text-xs text-neutral-200 placeholder-neutral-500 focus:outline-none focus:border-blue-500"
+                        className={inputCls}
                       />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div className="space-y-1">
-                        <label className="text-[11px] text-neutral-400">Target Post ID</label>
+                        <label className="text-[11px] font-medium text-[var(--text-secondary)]">
+                          Target Post ID
+                        </label>
                         <input
                           type="text"
                           value={targetPostId}
                           onChange={(e) => setTargetPostId(e.target.value)}
                           placeholder="e.g. 182749102834012"
-                          className="w-full rounded-md bg-neutral-900 border border-neutral-800 px-2.5 py-1.5 text-xs text-neutral-200 placeholder-neutral-500 focus:outline-none focus:border-blue-500"
+                          className={inputCls}
                         />
                       </div>
 
                       <div className="space-y-1">
-                        <label className="text-[11px] text-neutral-400">Target Author Handle</label>
+                        <label className="text-[11px] font-medium text-[var(--text-secondary)]">
+                          Target Author Handle
+                        </label>
                         <input
                           type="text"
                           value={targetAuthorHandle}
                           onChange={(e) => setTargetAuthorHandle(e.target.value)}
                           placeholder="e.g. @rauchg"
-                          className="w-full rounded-md bg-neutral-900 border border-neutral-800 px-2.5 py-1.5 text-xs text-neutral-200 placeholder-neutral-500 focus:outline-none focus:border-blue-500"
+                          className={inputCls}
                         />
                       </div>
                     </div>
 
                     {platform === 'reddit' && (
                       <div className="space-y-1">
-                        <label className="text-[11px] text-neutral-400">Subreddit</label>
+                        <label className="text-[11px] font-medium text-[var(--text-secondary)]">
+                          Subreddit
+                        </label>
                         <input
                           type="text"
                           value={subreddit}
                           onChange={(e) => setSubreddit(e.target.value)}
                           placeholder="e.g. r/webdev"
-                          className="w-full rounded-md bg-neutral-900 border border-neutral-800 px-2.5 py-1.5 text-xs text-neutral-200 placeholder-neutral-500 focus:outline-none focus:border-blue-500"
+                          className={inputCls}
                         />
                       </div>
                     )}
@@ -707,115 +779,118 @@ export function ContentDetailModal({
             </form>
           ) : (
             /* ================= VIEW MODE ================= */
-            <div className="space-y-5 text-sm">
+            <div className="space-y-4 text-sm">
               {/* Title / Headline */}
               <div>
-                <h3 className="text-base font-semibold text-neutral-100 leading-snug">
+                <h2
+                  id={titleId}
+                  className="heading-section text-base sm:text-lg text-[var(--text-primary)] leading-snug"
+                >
                   {currentItem.title || (
-                    <span className="text-neutral-500 italic font-normal">
+                    <span className="text-[var(--text-muted)] italic font-normal">
                       (No headline / title)
                     </span>
                   )}
-                </h3>
+                </h2>
               </div>
 
               {/* Body */}
-              <div className="rounded-xl bg-neutral-900/60 border border-neutral-800/80 p-4 space-y-3">
-                <p className="whitespace-pre-wrap text-neutral-200 leading-relaxed font-sans text-xs md:text-sm selection:bg-blue-600/30">
+              <div className="rounded-[var(--radius-md)] bg-[var(--bg-surface-muted)] border border-[var(--border-subtle)] p-4 space-y-3">
+                <p className="whitespace-pre-wrap text-[var(--text-primary)] leading-relaxed font-sans text-xs sm:text-sm">
                   {currentItem.body || (
-                    <span className="text-neutral-500 italic">No content body provided.</span>
+                    <span className="text-[var(--text-muted)] italic">
+                      No content body provided.
+                    </span>
                   )}
                 </p>
 
-                <div className="pt-2 border-t border-neutral-800/60 flex items-center justify-between text-xs font-mono text-neutral-400">
-                  <span className="text-[11px] text-neutral-500">Character count:</span>
+                <div className="pt-2.5 border-t border-[var(--border-subtle)] flex items-center justify-between text-xs font-mono tabular-nums">
+                  <span className="text-[11px] text-[var(--text-muted)]">Character count</span>
                   <span
                     className={
-                      isOverRecommendedLimit ? 'text-amber-400 font-semibold' : 'text-neutral-400'
+                      isOverRecommendedLimit
+                        ? 'text-[var(--status-warning-text)] font-semibold'
+                        : 'text-[var(--text-secondary)]'
                     }
                   >
                     {activeBody.length} / {currentLimit} chars
                     {isOverRecommendedLimit && (
-                      <span className="ml-1.5 text-[10px] text-amber-500 font-sans">
-                        (Over advisory limit)
-                      </span>
+                      <span className="ml-1.5 text-[10.5px] font-sans">(Over advisory limit)</span>
                     )}
                   </span>
                 </div>
               </div>
 
               {/* Metadata Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-                {/* Schedule & Timezone */}
-                <div className="p-3 rounded-lg bg-neutral-900/40 border border-neutral-800/60 space-y-1">
-                  <div className="flex items-center gap-1.5 text-neutral-400 font-medium">
-                    <Calendar className="w-3.5 h-3.5 text-neutral-400" />
-                    <span>Scheduled Slot</span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div className="p-3 rounded-[var(--radius-sm)] bg-[var(--bg-surface-muted)]/60 border border-[var(--border-subtle)] space-y-1">
+                  <div className="flex items-center gap-1.5 text-[var(--text-muted)] font-medium text-[11px]">
+                    <Calendar className="w-3.5 h-3.5" aria-hidden="true" />
+                    <span>Scheduled Slot ({userTimeZone})</span>
                   </div>
-                  <p className="text-neutral-200 font-medium">
+                  <p className="text-[var(--text-primary)] font-medium font-mono tabular-nums">
                     {formattedSchedule || (
-                      <span className="text-neutral-500">Unscheduled (Idea / Draft)</span>
+                      <span className="text-[var(--text-muted)] font-sans">
+                        Unscheduled (Idea / Draft)
+                      </span>
                     )}
                   </p>
                   {currentItem.duration_minutes && (
-                    <p className="text-[11px] text-neutral-400">
+                    <p className="text-[11px] text-[var(--text-secondary)] font-mono">
                       Duration: {currentItem.duration_minutes} minutes
                     </p>
                   )}
                 </div>
 
-                {/* Social Account Handle */}
-                <div className="p-3 rounded-lg bg-neutral-900/40 border border-neutral-800/60 space-y-1">
-                  <div className="flex items-center gap-1.5 text-neutral-400 font-medium">
-                    <AtSign className="w-3.5 h-3.5 text-neutral-400" />
+                <div className="p-3 rounded-[var(--radius-sm)] bg-[var(--bg-surface-muted)]/60 border border-[var(--border-subtle)] space-y-1">
+                  <div className="flex items-center gap-1.5 text-[var(--text-muted)] font-medium text-[11px]">
+                    <AtSign className="w-3.5 h-3.5" aria-hidden="true" />
                     <span>Author / Handle</span>
                   </div>
-                  <p className="text-neutral-200 font-medium">
+                  <p className="text-[var(--text-primary)] font-medium font-mono">
                     {currentItem.social_account ? (
-                      `@${currentItem.social_account.account_handle}`
+                      `@${currentItem.social_account.account_handle.replace(/^@/, '')}`
                     ) : (
-                      <span className="text-neutral-500">Not assigned</span>
+                      <span className="text-[var(--text-muted)] font-sans">Not assigned</span>
                     )}
                   </p>
                   {currentItem.social_account?.account_name && (
-                    <p className="text-[11px] text-neutral-400">
+                    <p className="text-[11px] text-[var(--text-secondary)]">
                       {currentItem.social_account.account_name}
                     </p>
                   )}
                 </div>
 
-                {/* Project Link */}
-                <div className="p-3 rounded-lg bg-neutral-900/40 border border-neutral-800/60 space-y-1">
-                  <div className="flex items-center gap-1.5 text-neutral-400 font-medium">
-                    <Folder className="w-3.5 h-3.5 text-neutral-400" />
+                <div className="p-3 rounded-[var(--radius-sm)] bg-[var(--bg-surface-muted)]/60 border border-[var(--border-subtle)] space-y-1">
+                  <div className="flex items-center gap-1.5 text-[var(--text-muted)] font-medium text-[11px]">
+                    <Folder className="w-3.5 h-3.5" aria-hidden="true" />
                     <span>Project</span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     {currentItem.project ? (
                       <>
                         <span
-                          className="w-2 h-2 rounded-full"
+                          className="w-2 h-2 rounded-full shrink-0"
                           style={{
-                            backgroundColor: currentItem.project.color || '#3b82f6',
+                            backgroundColor: currentItem.project.color || 'var(--accent)',
                           }}
                         />
-                        <span className="text-neutral-200 font-medium">
+                        <span className="text-[var(--text-primary)] font-medium">
                           {currentItem.project.name}
                         </span>
                       </>
                     ) : (
-                      <span className="text-neutral-500">None</span>
+                      <span className="text-[var(--text-muted)]">None</span>
                     )}
                   </div>
                 </div>
 
-                {/* Created Date */}
-                <div className="p-3 rounded-lg bg-neutral-900/40 border border-neutral-800/60 space-y-1">
-                  <div className="flex items-center gap-1.5 text-neutral-400 font-medium">
-                    <Clock className="w-3.5 h-3.5 text-neutral-400" />
+                <div className="p-3 rounded-[var(--radius-sm)] bg-[var(--bg-surface-muted)]/60 border border-[var(--border-subtle)] space-y-1">
+                  <div className="flex items-center gap-1.5 text-[var(--text-muted)] font-medium text-[11px]">
+                    <Clock className="w-3.5 h-3.5" aria-hidden="true" />
                     <span>Created At</span>
                   </div>
-                  <p className="text-neutral-300">
+                  <p className="text-[var(--text-secondary)] font-mono tabular-nums">
                     {currentItem.created_at
                       ? formatInTimeZone(currentItem.created_at, userTimeZone, {
                           month: 'short',
@@ -830,7 +905,7 @@ export function ContentDetailModal({
                 </div>
               </div>
 
-              {/* Target Reference Info (if present) */}
+              {/* Target Reference Info */}
               {(() => {
                 const targetRef = getTargetReference(currentItem.target_reference);
                 if (
@@ -843,33 +918,33 @@ export function ContentDetailModal({
                   return null;
                 }
                 return (
-                  <div className="p-3.5 rounded-lg bg-neutral-900/40 border border-neutral-800/60 space-y-2">
-                    <div className="flex items-center gap-1.5 text-neutral-400 font-medium text-xs">
-                      <LinkIcon className="w-3.5 h-3.5 text-neutral-400" />
+                  <div className="p-3.5 rounded-[var(--radius-md)] bg-[var(--bg-surface-muted)]/60 border border-[var(--border-subtle)] space-y-2">
+                    <div className="flex items-center gap-1.5 text-[var(--text-muted)] font-medium text-xs">
+                      <LinkIcon className="w-3.5 h-3.5" aria-hidden="true" />
                       <span>Target Post Reference</span>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                       {targetRef.author_handle && (
                         <div>
-                          <span className="text-neutral-500">Author: </span>
-                          <span className="text-neutral-200 font-mono">
+                          <span className="text-[var(--text-muted)]">Author: </span>
+                          <span className="text-[var(--text-primary)] font-mono">
                             {targetRef.author_handle}
                           </span>
                         </div>
                       )}
                       {targetRef.post_id && (
                         <div>
-                          <span className="text-neutral-500">Post ID: </span>
-                          <span className="text-neutral-200 font-mono">
+                          <span className="text-[var(--text-muted)]">Post ID: </span>
+                          <span className="text-[var(--text-primary)] font-mono">
                             {targetRef.post_id}
                           </span>
                         </div>
                       )}
                       {targetRef.subreddit && (
                         <div>
-                          <span className="text-neutral-500">Subreddit: </span>
-                          <span className="text-orange-400 font-medium">
+                          <span className="text-[var(--text-muted)]">Subreddit: </span>
+                          <span className="text-[var(--status-warning-text)] font-medium">
                             {targetRef.subreddit}
                           </span>
                         </div>
@@ -877,14 +952,14 @@ export function ContentDetailModal({
                     </div>
 
                     {targetRef.url && (
-                      <div className="pt-1.5 border-t border-neutral-800/60">
+                      <div className="pt-2 border-t border-[var(--border-subtle)]">
                         <a
                           href={targetRef.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 hover:underline break-all"
+                          className="inline-flex items-center gap-1 text-xs text-[var(--accent-text)] hover:underline break-all"
                         >
-                          <ExternalLink className="w-3 h-3 shrink-0" />
+                          <ExternalLink className="w-3 h-3 shrink-0" aria-hidden="true" />
                           <span>{targetRef.url}</span>
                         </a>
                       </div>
@@ -896,15 +971,15 @@ export function ContentDetailModal({
               {/* Tags */}
               {currentItem.tags && currentItem.tags.length > 0 && (
                 <div className="space-y-1.5">
-                  <div className="flex items-center gap-1.5 text-xs text-neutral-400 font-medium">
-                    <Tag className="w-3.5 h-3.5 text-neutral-400" />
+                  <div className="flex items-center gap-1.5 text-xs text-[var(--text-muted)] font-medium">
+                    <Tag className="w-3.5 h-3.5" aria-hidden="true" />
                     <span>Tags</span>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     {currentItem.tags.map((tag) => (
                       <span
                         key={tag}
-                        className="text-xs px-2.5 py-0.5 rounded-full bg-neutral-900 border border-neutral-800 text-neutral-300"
+                        className="text-[11px] px-2.5 py-0.5 rounded-[var(--radius-xs)] badge-neutral border font-mono"
                       >
                         #{tag}
                       </span>
@@ -916,11 +991,11 @@ export function ContentDetailModal({
               {/* Editorial Notes */}
               {currentItem.notes && (
                 <div className="space-y-1.5">
-                  <div className="flex items-center gap-1.5 text-xs text-neutral-400 font-medium">
-                    <FileText className="w-3.5 h-3.5 text-neutral-400" />
+                  <div className="flex items-center gap-1.5 text-xs text-[var(--text-muted)] font-medium">
+                    <FileText className="w-3.5 h-3.5" aria-hidden="true" />
                     <span>Editorial Notes</span>
                   </div>
-                  <div className="p-3 rounded-lg bg-neutral-900/40 border border-neutral-800/60 text-xs text-neutral-300 whitespace-pre-wrap leading-relaxed">
+                  <div className="p-3 rounded-[var(--radius-sm)] bg-[var(--bg-surface-muted)]/60 border border-[var(--border-subtle)] text-xs text-[var(--text-secondary)] whitespace-pre-wrap leading-relaxed">
                     {currentItem.notes}
                   </div>
                 </div>
@@ -930,37 +1005,27 @@ export function ContentDetailModal({
         </div>
 
         {/* Footer */}
-        <div className="border-t border-neutral-800 pt-4 flex items-center justify-between shrink-0">
+        <div className="border-t border-[var(--border-subtle)] pt-4 flex items-center justify-between gap-2 shrink-0 flex-wrap">
           <div>
             {isEditing ? (
               <button
                 type="button"
                 onClick={handleCancelEdit}
                 disabled={isPending}
-                className="px-3.5 py-2 rounded-lg border border-neutral-800 text-xs font-medium text-neutral-300 hover:text-neutral-100 hover:bg-neutral-900 transition-colors disabled:opacity-50"
+                className="btn-secondary px-3.5 py-2 text-xs font-medium disabled:opacity-50"
               >
                 Cancel Edit
               </button>
             ) : (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <button
                   type="button"
-                  onClick={handleDelete}
+                  onClick={() => setIsDeleteConfirmOpen(true)}
                   disabled={isDeleting || isPending}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                    isConfirmingDelete
-                      ? 'bg-red-600 text-white hover:bg-red-700'
-                      : 'text-red-400 hover:text-red-300 hover:bg-red-950/40 border border-transparent hover:border-red-900/50'
-                  }`}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--radius-sm)] text-xs font-medium badge-danger border transition-opacity hover:opacity-90 disabled:opacity-50"
                 >
-                  {isDeleting ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Trash2 className="w-3.5 h-3.5" />
-                  )}
-                  <span>
-                    {isConfirmingDelete ? 'Click again to confirm delete' : 'Delete'}
-                  </span>
+                  <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+                  <span>Delete</span>
                 </button>
 
                 {currentItem.status === 'archived' ? (
@@ -968,12 +1033,12 @@ export function ContentDetailModal({
                     type="button"
                     onClick={handleUnarchive}
                     disabled={isPending || isDeleting}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-blue-400 hover:text-blue-300 hover:bg-blue-950/40 border border-blue-900/50 transition-colors disabled:opacity-50"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--radius-sm)] text-xs font-medium badge-info border transition-opacity hover:opacity-90 disabled:opacity-50"
                   >
                     {isPending ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
                     ) : (
-                      <ArchiveRestore className="w-3.5 h-3.5" />
+                      <ArchiveRestore className="w-3.5 h-3.5" aria-hidden="true" />
                     )}
                     <span>Unarchive</span>
                   </button>
@@ -982,20 +1047,18 @@ export function ContentDetailModal({
                     type="button"
                     onClick={handleArchive}
                     disabled={isPending || isDeleting}
-                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-50 ${
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--radius-sm)] text-xs font-medium border transition-colors disabled:opacity-50 ${
                       isConfirmingArchive
-                        ? 'bg-amber-600 text-white hover:bg-amber-700'
-                        : 'text-amber-400 hover:text-amber-300 hover:bg-amber-950/40 border border-transparent hover:border-amber-900/50'
+                        ? 'badge-warning font-semibold'
+                        : 'bg-[var(--bg-surface)] border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--status-warning-text)] hover:border-[var(--status-warning-border)]'
                     }`}
                   >
                     {isPending ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
                     ) : (
-                      <Archive className="w-3.5 h-3.5" />
+                      <Archive className="w-3.5 h-3.5" aria-hidden="true" />
                     )}
-                    <span>
-                      {isConfirmingArchive ? 'Click again to archive' : 'Archive'}
-                    </span>
+                    <span>{isConfirmingArchive ? 'Click again to archive' : 'Archive'}</span>
                   </button>
                 )}
               </div>
@@ -1008,16 +1071,16 @@ export function ContentDetailModal({
                 type="submit"
                 form="edit-content-form"
                 disabled={isPending}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium shadow-sm transition-colors disabled:opacity-50"
+                className="btn-accent px-4 py-2 text-xs font-semibold disabled:opacity-50"
               >
-                {isPending && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                {isPending && <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />}
                 <span>Save Changes</span>
               </button>
             ) : (
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 rounded-lg bg-neutral-900 border border-neutral-800 text-xs font-medium text-neutral-300 hover:text-neutral-100 hover:bg-neutral-850 transition-colors"
+                className="btn-secondary px-4 py-2 text-xs font-medium"
               >
                 Close
               </button>
@@ -1025,6 +1088,18 @@ export function ContentDetailModal({
           </div>
         </div>
       </div>
+
+      <ConfirmDialog
+        isOpen={isDeleteConfirmOpen}
+        onCancel={() => setIsDeleteConfirmOpen(false)}
+        onConfirm={handleConfirmDelete}
+        title="Delete Content Item"
+        description={`Are you sure you want to delete "${currentItem.title || 'this content draft'}"? This action cannot be undone.`}
+        confirmLabel="Delete Content"
+        cancelLabel="Cancel"
+        tone="danger"
+        isPending={isDeleting}
+      />
     </div>
   );
 }

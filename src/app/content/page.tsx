@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { getContentItems, getIdeaInboxItems, getSocialAccounts } from '@/lib/services/content-service';
 import { WorkspaceShell } from '@/components/layout/WorkspaceShell';
 import { ContentWorkspace } from '@/components/content/ContentWorkspace';
+import { DEFAULT_TIMEZONE, isValidTimeZone, normalizeTimeZone } from '@/lib/temporal/timezone';
 
 export const instant = false;
 
@@ -50,7 +51,9 @@ export default async function ContentPage({ searchParams }: ContentPageProps = {
     .eq('id', authData.user.id)
     .maybeSingle();
 
-  const userTimeZone = profile?.timezone || 'Asia/Cairo';
+  const rawTz = profile?.timezone;
+  const userTimeZone =
+    rawTz && isValidTimeZone(rawTz) ? normalizeTimeZone(rawTz) : DEFAULT_TIMEZONE;
 
   // Get active workspace membership
   const { data: memberData } = await supabase

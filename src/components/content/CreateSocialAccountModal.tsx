@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useId } from 'react';
 import { X, AtSign, AlertCircle, Loader2 } from 'lucide-react';
 import type { SocialPlatform } from '@/types/database';
 import type { SocialAccountRow } from '@/lib/services/content-service';
 import { createSocialAccountAction } from '@/lib/actions/content-actions';
+import { useDialog } from '@/lib/hooks/use-dialog';
 
 interface CreateSocialAccountModalProps {
   workspaceId: string;
@@ -24,6 +25,9 @@ export function CreateSocialAccountModal({
   const [accountName, setAccountName] = useState('');
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const dialogRef = useDialog(isOpen, onClose, isPending);
+  const titleId = useId();
 
   if (!isOpen) return null;
 
@@ -62,32 +66,52 @@ export function CreateSocialAccountModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-md rounded-2xl bg-neutral-950 border border-neutral-800 p-6 space-y-5 shadow-xl animate-in fade-in zoom-in-95 duration-150">
-        <div className="flex items-center justify-between border-b border-neutral-800/80 pb-4">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-blue-500/10 text-blue-400 flex items-center justify-center border border-blue-500/20">
-              <AtSign className="w-4 h-4" />
+    <div
+      className="fixed inset-0 bg-black/55 dark:bg-black/75 backdrop-blur-xs z-50 flex items-center justify-center p-4"
+      onClick={() => {
+        if (!isPending) onClose();
+      }}
+    >
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-md surface-elevated rounded-[var(--radius-lg)] p-5 sm:p-6 space-y-5 animate-in fade-in zoom-in-95 duration-150 focus:outline-none"
+      >
+        <div className="flex items-start justify-between gap-3 border-b border-[var(--border-subtle)] pb-4">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 rounded-[var(--radius-sm)] badge-accent border flex items-center justify-center shrink-0 mt-0.5">
+              <AtSign className="w-4 h-4" aria-hidden="true" />
             </div>
             <div>
-              <h2 className="text-sm font-semibold text-neutral-100">Add social account</h2>
-              <p className="text-[11px] text-neutral-400 mt-0.5 leading-relaxed">
-                Save the social profile you use for each platform so you can associate planned content with the right account. This does not connect your account or enable publishing.
+              <h2 id={titleId} className="heading-section text-sm text-[var(--text-primary)]">
+                Add social account
+              </h2>
+              <p className="text-[11px] text-[var(--text-secondary)] mt-0.5 leading-relaxed">
+                Save a profile reference so planned content maps to the right account. This stores metadata only and does not connect OAuth publishing.
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-1 rounded-md text-neutral-400 hover:text-neutral-200 hover:bg-neutral-900 transition-colors"
+            disabled={isPending}
+            aria-label="Close dialog"
+            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[var(--radius-sm)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-muted)] transition-colors"
           >
-            <X className="w-4 h-4" />
+            <X className="w-4 h-4" aria-hidden="true" />
           </button>
         </div>
 
         {error && (
-          <div className="p-3 rounded-lg bg-red-950/40 border border-red-800 text-red-200 text-xs flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
+          <div
+            role="alert"
+            className="p-3 rounded-[var(--radius-sm)] badge-danger border text-xs flex items-center gap-2"
+          >
+            <AlertCircle className="w-4 h-4 shrink-0" aria-hidden="true" />
             <span>{error}</span>
           </div>
         )}
@@ -95,23 +119,24 @@ export function CreateSocialAccountModal({
         <form onSubmit={handleSubmit} className="space-y-4 text-xs">
           {/* Platform Selector */}
           <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <label className="font-medium text-neutral-300">Platform</label>
-              <span className="text-[10px] text-neutral-500">Which social network the profile belongs to</span>
+            <div className="flex items-center justify-between gap-2">
+              <label className="font-medium text-[var(--text-secondary)]">Platform</label>
+              <span className="text-[10.5px] text-[var(--text-muted)]">Target social network</span>
             </div>
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
               {(['x', 'linkedin', 'reddit', 'threads'] as const).map((p) => (
                 <button
                   key={p}
                   type="button"
                   onClick={() => setPlatform(p)}
-                  className={`py-1.5 px-2 rounded-lg text-xs font-medium border text-center transition-colors capitalize ${
+                  aria-pressed={platform === p}
+                  className={`py-1.5 px-2 rounded-[var(--radius-sm)] text-xs font-medium border text-center transition-colors capitalize ${
                     platform === p
-                      ? 'bg-blue-600/20 border-blue-500 text-blue-300'
-                      : 'bg-neutral-900 border-neutral-800 text-neutral-400 hover:border-neutral-700'
+                      ? 'bg-[var(--text-primary)] border-[var(--text-primary)] text-[var(--bg-canvas)] font-semibold'
+                      : 'bg-[var(--bg-surface)] border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--border-strong)]'
                   }`}
                 >
-                  {p === 'x' ? 'X (Twitter)' : p}
+                  {p === 'x' ? 'X' : p}
                 </button>
               ))}
             </div>
@@ -119,17 +144,21 @@ export function CreateSocialAccountModal({
 
           {/* Account Handle */}
           <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <label className="font-medium text-neutral-300">
-                Handle / username <span className="text-red-400">*</span>
+            <div className="flex items-center justify-between gap-2">
+              <label htmlFor="social-handle-input" className="font-medium text-[var(--text-secondary)]">
+                Handle / username <span className="text-[var(--accent-text)]">*</span>
               </label>
-              <span className="text-[10px] text-neutral-500">The username or public handle for that profile</span>
+              <span className="text-[10.5px] text-[var(--text-muted)]">Public username</span>
             </div>
             <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 font-mono text-xs">
+              <span
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] font-mono text-xs pointer-events-none"
+                aria-hidden="true"
+              >
                 @
               </span>
               <input
+                id="social-handle-input"
                 type="text"
                 value={accountHandle.startsWith('@') ? accountHandle.slice(1) : accountHandle}
                 onChange={(e) => {
@@ -138,42 +167,45 @@ export function CreateSocialAccountModal({
                 }}
                 placeholder="handle or username"
                 required
-                className="w-full pl-8 pr-3 py-2 rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-100 placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs"
+                className="input-control w-full pl-8 pr-3 py-2 text-xs font-mono"
               />
             </div>
           </div>
 
           {/* Account Name */}
           <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <label className="font-medium text-neutral-300">Display name (Optional)</label>
-              <span className="text-[10px] text-neutral-500">The name shown to people on that platform; optional</span>
+            <div className="flex items-center justify-between gap-2">
+              <label htmlFor="social-display-input" className="font-medium text-[var(--text-secondary)]">
+                Display name (Optional)
+              </label>
+              <span className="text-[10.5px] text-[var(--text-muted)]">Shown on profile</span>
             </div>
             <input
+              id="social-display-input"
               type="text"
               value={accountName}
               onChange={(e) => setAccountName(e.target.value)}
-              placeholder="e.g. Alex Rivera, Company Brand"
-              className="w-full px-3 py-2 rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-100 placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs"
+              placeholder="e.g. Alex Rivera, Zahi Studio"
+              className="input-control w-full px-3 py-2 text-xs"
             />
           </div>
 
           {/* Action buttons */}
-          <div className="flex items-center justify-end gap-2 pt-3 border-t border-neutral-900">
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--border-subtle)]">
             <button
               type="button"
               disabled={isPending}
               onClick={onClose}
-              className="px-3.5 py-2 rounded-lg bg-neutral-900 hover:bg-neutral-800 text-neutral-300 text-xs transition-colors"
+              className="btn-secondary px-3.5 py-2 text-xs font-medium"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isPending}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs transition-colors disabled:opacity-50"
+              className="btn-accent px-4 py-2 text-xs font-semibold disabled:opacity-50"
             >
-              {isPending && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              {isPending && <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />}
               <span>{isPending ? 'Saving...' : 'Save social account'}</span>
             </button>
           </div>
