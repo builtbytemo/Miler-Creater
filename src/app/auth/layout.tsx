@@ -1,26 +1,66 @@
 import type { ReactNode } from 'react';
+import Link from 'next/link';
+import {
+  ZahiCornerBracket,
+  ZahiLogoMark,
+  ZahiMascot,
+} from '@/components/brand/ZahiBrand';
+import { ThemeToggle } from '@/components/layout/ThemeToggle';
 
+/**
+ * Shared authentication shell framing sign-in, sign-up, and password recovery routes
+ * in Zahi's warm ivory / near-black design tokens with selective mascot presence.
+ */
 export default function AuthLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-screen flex flex-col justify-center py-12 sm:px-6 lg:px-8 bg-neutral-50 dark:bg-neutral-950 text-neutral-900 dark:text-neutral-100">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md text-center mb-6">
-        <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 font-bold text-lg mb-3 shadow-sm">
-          Z
-        </div>
-        <h1 className="text-xl font-semibold tracking-tight">Zahi</h1>
-        <p className="text-sm text-neutral-500 dark:text-neutral-400 mt-1">
-          Social Media Content & Task Operations
-        </p>
+    <div className="min-h-screen flex flex-col justify-between bg-[var(--bg-canvas)] text-[var(--text-primary)] font-sans">
+      <div className="px-5 py-4 flex items-center justify-between max-w-5xl w-full mx-auto">
+        <Link
+          href="/"
+          className="inline-flex items-center gap-2 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
+        >
+          <ZahiLogoMark size="sm" />
+          <span>Back to Zahi</span>
+        </Link>
+        <ThemeToggle variant="compact" />
       </div>
 
-      <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-white dark:bg-neutral-900 py-8 px-6 shadow-sm border border-neutral-200 dark:border-neutral-800 sm:rounded-xl sm:px-10">
-          {children}
+      <div className="flex-1 flex flex-col justify-center py-6 px-4 sm:px-6 lg:px-8">
+        <div className="sm:mx-auto sm:w-full sm:max-w-md text-center mb-6 space-y-2.5">
+          <div className="flex justify-center">
+            <ZahiMascot
+              variant="medallion"
+              priority={true}
+              imgClassName="w-20 h-auto"
+            />
+          </div>
+          <div>
+            <h1 className="font-brand-serif text-2xl font-semibold tracking-tight text-[var(--text-primary)]">
+              Zahi
+            </h1>
+            <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+              Content &amp; Task Command Center
+            </p>
+          </div>
+        </div>
+
+        <div className="sm:mx-auto sm:w-full sm:max-w-md">
+          <div className="relative surface-card py-7 px-6 sm:px-9 overflow-hidden">
+            <ZahiCornerBracket
+              position="top-left"
+              className="!w-10 !h-10 opacity-30"
+            />
+            <ZahiCornerBracket
+              position="top-right"
+              className="!w-10 !h-10 opacity-30"
+            />
+            <div className="relative z-10">{children}</div>
+          </div>
         </div>
       </div>
 
-      <footer className="mt-8 text-center text-xs text-neutral-400 dark:text-neutral-600">
-        Zahi • Personal-first Content & Task Command Center
+      <footer className="py-6 text-center text-xs text-[var(--text-muted)]">
+        Zahi • Content &amp; Task Command Center
       </footer>
     </div>
   );

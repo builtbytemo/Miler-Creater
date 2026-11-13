@@ -9,6 +9,9 @@ interface DashboardContentPipelineProps {
   timeZone: string;
 }
 
+/**
+ * Editorial content schedule timeline, pipeline status rollup, and channel distribution ledger.
+ */
 export function DashboardContentPipeline({
   content,
   timeZone,
@@ -21,16 +24,20 @@ export function DashboardContentPipeline({
   };
 
   const platforms: SocialPlatform[] = ['linkedin', 'reddit', 'threads', 'x'];
+  const maxPlatformCount = Math.max(
+    1,
+    ...platforms.map((platform) => content.byPlatform[platform] ?? 0)
+  );
 
   return (
-    <section className="space-y-6 min-w-0" aria-labelledby="content-pipeline-heading">
-      <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-[var(--border-subtle)] pb-3">
-        <h3 id="content-pipeline-heading" className="heading-section text-lg">
+    <section className="space-y-5 min-w-0" aria-labelledby="content-pipeline-heading">
+      <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-[var(--border-subtle)] pb-2.5">
+        <h3 id="content-pipeline-heading" className="heading-section text-base sm:text-lg">
           Content Pipeline &amp; Scheduling
         </h3>
         <Link
           href="/content"
-          className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors whitespace-nowrap"
+          className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--accent-text)] transition-colors whitespace-nowrap"
         >
           <span>View all content</span>
           <ArrowUpRight className="w-3.5 h-3.5" aria-hidden="true" />
@@ -40,12 +47,16 @@ export function DashboardContentPipeline({
       {/* Upcoming Scheduled Posts */}
       <div className="space-y-3 min-w-0">
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--text-muted)]">
-          <span className="font-medium text-[var(--text-secondary)]">Upcoming Scheduled Posts</span>
-          <span className="font-mono shrink-0">Next {content.upcomingItems.length} items</span>
+          <span className="font-medium text-[var(--text-secondary)]">
+            Upcoming Scheduled Posts
+          </span>
+          <span className="font-mono tabular-nums shrink-0">
+            Next {content.upcomingItems.length} items
+          </span>
         </div>
 
         {content.upcomingItems.length === 0 ? (
-          <div className="py-8 px-5 text-center space-y-2 border border-dashed border-[var(--border-subtle)] rounded-2xl">
+          <div className="py-7 px-5 text-center space-y-2 surface-card border-dashed">
             <p className="text-sm font-semibold text-[var(--text-primary)]">
               No content currently scheduled
             </p>
@@ -53,10 +64,7 @@ export function DashboardContentPipeline({
               Create new drafts or schedule posts for publishing across social platforms.
             </p>
             <div className="pt-1">
-              <Link
-                href="/content"
-                className="btn-accent px-4 py-1.5 text-xs"
-              >
+              <Link href="/content" className="btn-accent px-4 py-1.5 text-xs">
                 <span>Go to Content Studio</span>
                 <ArrowUpRight className="w-3.5 h-3.5" aria-hidden="true" />
               </Link>
@@ -67,23 +75,23 @@ export function DashboardContentPipeline({
             {content.upcomingItems.map((item) => (
               <Link
                 key={item.id}
-                href="/content"
-                className="group block px-4 py-3.5 transition-colors hover:bg-[var(--bg-surface-hover)] space-y-1.5"
+                href="/calendar"
+                className="group block px-4 py-3 transition-colors hover:bg-[var(--bg-surface-hover)] space-y-1.5"
               >
                 <div className="flex items-start justify-between gap-2.5 min-w-0">
-                  <p className="text-sm font-medium text-[var(--text-primary)] group-hover:underline line-clamp-2 break-words min-w-0 flex-1">
+                  <p className="text-sm font-medium text-[var(--text-primary)] group-hover:text-[var(--accent-text)] line-clamp-2 break-words min-w-0 flex-1 transition-colors">
                     {item.title || 'Untitled Post'}
                   </p>
                   <ArrowUpRight
                     aria-hidden="true"
-                    className="h-3.5 w-3.5 shrink-0 mt-0.5 text-[var(--text-muted)] opacity-50 transition-all group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-[var(--text-primary)] group-hover:opacity-100"
+                    className="h-3.5 w-3.5 shrink-0 mt-0.5 text-[var(--text-muted)] opacity-45 transition-all group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-[var(--accent-text)] group-hover:opacity-100"
                   />
                 </div>
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                  <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-[var(--bg-surface-muted)] text-[var(--text-secondary)] capitalize shrink-0">
+                  <span className="px-2 py-0.5 rounded-[var(--radius-sm)] border border-[var(--border-subtle)] text-[11px] font-medium bg-[var(--bg-surface-muted)] text-[var(--text-secondary)] capitalize shrink-0">
                     {item.platform}
                   </span>
-                  <span className="text-[11px] text-[var(--text-muted)] font-mono shrink-0">
+                  <span className="text-[11px] text-[var(--text-muted)] font-mono tabular-nums shrink-0">
                     {item.scheduled_at
                       ? formatInTimeZone(item.scheduled_at, timeZone, {
                           month: 'short',
@@ -100,52 +108,67 @@ export function DashboardContentPipeline({
         )}
       </div>
 
-      {/* Editorial Pipeline Breakdown & Platform Ledger (No Box-Inside-Box Clutter) */}
-      <div className="pt-2 space-y-5 min-w-0">
-        <div className="grid grid-cols-3 gap-3 border-y border-[var(--border-subtle)] py-4">
+      {/* Editorial Pipeline Breakdown & Platform Ledger */}
+      <div className="surface-card p-4 sm:p-5 space-y-4 min-w-0">
+        <div className="grid grid-cols-3 gap-3 pb-3.5 border-b border-[var(--border-subtle)]">
           <div className="min-w-0">
-            <p className="text-xs text-[var(--text-muted)] truncate">Drafts</p>
-            <p className="mt-1 text-2xl font-semibold tracking-tight tabular-nums text-[var(--text-primary)]">
+            <p className="text-[11px] font-mono text-[var(--text-muted)] truncate">
+              Drafts
+            </p>
+            <p className="mt-1 text-xl font-semibold tracking-tight tabular-nums text-[var(--text-primary)]">
               {content.draftCount}
             </p>
           </div>
           <div className="min-w-0">
-            <p className="text-xs text-[var(--text-muted)] truncate">Ideas</p>
-            <p className="mt-1 text-2xl font-semibold tracking-tight tabular-nums text-[var(--text-primary)]">
+            <p className="text-[11px] font-mono text-[var(--text-muted)] truncate">
+              Ideas
+            </p>
+            <p className="mt-1 text-xl font-semibold tracking-tight tabular-nums text-[var(--text-primary)]">
               {content.ideaCount}
             </p>
           </div>
           <div className="min-w-0">
             <p
-              className="text-xs text-[var(--text-muted)] truncate"
+              className="text-[11px] font-mono text-[var(--text-muted)] truncate"
               title="Scheduled in next 7 days"
             >
               7-Day Sched
             </p>
-            <p className="mt-1 text-2xl font-semibold tracking-tight tabular-nums text-[var(--text-primary)]">
+            <p className="mt-1 text-xl font-semibold tracking-tight tabular-nums text-[var(--text-primary)]">
               {content.scheduledNext7DaysCount}
             </p>
           </div>
         </div>
 
-        <div className="space-y-2 min-w-0">
+        <div className="space-y-2.5 min-w-0">
           <p className="text-xs font-medium text-[var(--text-secondary)]">
             Scheduled by Platform
           </p>
-          <div className="divide-y divide-[var(--border-subtle)] border-t border-[var(--border-subtle)]">
-            {platforms.map((platform) => (
-              <div
-                key={platform}
-                className="flex items-center justify-between gap-2 py-2 text-xs min-w-0"
-              >
-                <span className="text-[var(--text-secondary)] truncate">
-                  {platformNames[platform]}
-                </span>
-                <span className="font-semibold tabular-nums font-mono text-[var(--text-primary)] shrink-0">
-                  {content.byPlatform[platform]}
-                </span>
-              </div>
-            ))}
+          <div className="space-y-2">
+            {platforms.map((platform) => {
+              const value = content.byPlatform[platform] ?? 0;
+              const widthPct = value === 0 ? 0 : Math.max(8, Math.round((value / maxPlatformCount) * 100));
+              return (
+                <div key={platform} className="space-y-1 text-xs min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[var(--text-secondary)] truncate">
+                      {platformNames[platform]}
+                    </span>
+                    <span className="font-semibold tabular-nums font-mono text-[var(--text-primary)] shrink-0">
+                      {value}
+                    </span>
+                  </div>
+                  <div className="h-1 w-full rounded-full bg-[var(--bg-surface-muted)] overflow-hidden">
+                    {widthPct > 0 && (
+                      <div
+                        className="h-full rounded-full bg-[var(--accent)]"
+                        style={{ width: `${widthPct}%` }}
+                      />
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>

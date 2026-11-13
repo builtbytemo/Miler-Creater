@@ -4,6 +4,9 @@ import { useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { getSafeRedirectPath } from '@/lib/auth/redirects';
 
+/**
+ * Initiates Supabase Google OAuth login preserving workspace redirect targets.
+ */
 export function GoogleOAuthButton({
   text = 'Continue with Google',
   redirectTo = '/dashboard',
@@ -47,7 +50,9 @@ export function GoogleOAuthButton({
         setError(authError.message);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Google OAuth initialization failed.');
+      setError(
+        err instanceof Error ? err.message : 'Google OAuth initialization failed.'
+      );
     } finally {
       setLoading(false);
     }
@@ -59,9 +64,9 @@ export function GoogleOAuthButton({
         type="button"
         onClick={handleGoogleSignIn}
         disabled={loading}
-        className="w-full inline-flex items-center justify-center gap-3 px-4 py-2.5 rounded-lg border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200 hover:bg-neutral-50 dark:hover:bg-neutral-750 font-medium text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-neutral-900 disabled:opacity-60 disabled:cursor-not-allowed shadow-sm"
+        className="btn-secondary w-full px-4 py-2.5 text-sm disabled:opacity-60"
       >
-        <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+        <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
           <path
             fill="#4285F4"
             d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"
@@ -83,7 +88,10 @@ export function GoogleOAuthButton({
       </button>
 
       {error && (
-        <div className="p-3 text-xs rounded-md bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200">
+        <div
+          role="alert"
+          className="p-3 text-xs rounded-[var(--radius-md)] badge-warning border"
+        >
           <p className="font-semibold mb-0.5">Configuration Notice</p>
           <p>{error}</p>
         </div>

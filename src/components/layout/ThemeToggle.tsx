@@ -63,6 +63,26 @@ export function applyThemeToDocument(preference: ThemePreference): ResolvedTheme
   return resolved;
 }
 
+/**
+ * Persists a user theme preference, updates document attributes, and broadcasts
+ * the change event to any mounted theme consumers.
+ */
+export function setThemePreference(nextPref: ThemePreference): void {
+  try {
+    if (nextPref === 'system') {
+      window.localStorage.removeItem(STORAGE_KEY);
+    } else {
+      window.localStorage.setItem(STORAGE_KEY, nextPref);
+    }
+  } catch {
+    // Ignore storage access errors
+  }
+  applyThemeToDocument(nextPref);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(THEME_EVENT));
+  }
+}
+
 function subscribeToThemeStore(onStoreChange: () => void): () => void {
   if (typeof window === 'undefined') {
     return () => {};
@@ -121,19 +141,7 @@ export function ThemeToggle({ variant = 'segmented', className }: ThemeTogglePro
   }, [preference, resolvedTheme]);
 
   const selectPreference = useCallback((nextPref: ThemePreference) => {
-    try {
-      if (nextPref === 'system') {
-        window.localStorage.removeItem(STORAGE_KEY);
-      } else {
-        window.localStorage.setItem(STORAGE_KEY, nextPref);
-      }
-    } catch {
-      // Ignore storage errors
-    }
-    applyThemeToDocument(nextPref);
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent(THEME_EVENT));
-    }
+    setThemePreference(nextPref);
   }, []);
 
   const toggleLightDark = useCallback(() => {

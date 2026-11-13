@@ -4,6 +4,9 @@ import Link from 'next/link';
 import { AlertCircle, RotateCcw, ArrowUpRight } from 'lucide-react';
 import { AppNavigation } from '@/components/layout/AppNavigation';
 
+/**
+ * Standardized workspace error boundary view preserving sidebar navigation and recovery actions.
+ */
 export function WorkspaceError({
   reset,
 }: {
@@ -25,7 +28,7 @@ export function WorkspaceError({
           role="alert"
           className="surface-card w-full max-w-md p-8 sm:p-10 text-center space-y-4"
         >
-          <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full badge-warning border">
+          <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-[var(--radius-md)] badge-warning border">
             <AlertCircle aria-hidden="true" className="h-5 w-5" />
           </div>
           <div className="space-y-2">
@@ -40,14 +43,14 @@ export function WorkspaceError({
             <button
               type="button"
               onClick={reset}
-              className="btn-accent min-h-9 px-4.5 py-2 text-xs"
+              className="btn-accent min-h-9 px-4 py-2 text-xs"
             >
               <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
               <span>Try again</span>
             </button>
             <Link
               href="/dashboard"
-              className="btn-secondary min-h-9 px-4.5 py-2 text-xs"
+              className="btn-secondary min-h-9 px-4 py-2 text-xs"
             >
               <span>Go to overview</span>
               <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />

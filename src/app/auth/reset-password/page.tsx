@@ -4,13 +4,16 @@ import { useActionState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { updatePassword, type AuthActionResult } from '@/lib/auth/actions';
+import { AuthAlert } from '@/components/auth/AuthAlert';
+import { Button } from '@/components/ui/Button';
+import { FormField, Input } from '@/components/ui/Input';
 
 export default function ResetPasswordPage() {
   const router = useRouter();
-  const [state, formAction, isPending] = useActionState<AuthActionResult | null, FormData>(
-    updatePassword,
-    null
-  );
+  const [state, formAction, isPending] = useActionState<
+    AuthActionResult | null,
+    FormData
+  >(updatePassword, null);
 
   useEffect(() => {
     if (state?.success && state.redirectTo) {
@@ -20,74 +23,56 @@ export default function ResetPasswordPage() {
   }, [state, router]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div>
-        <h2 className="text-lg font-semibold text-neutral-900 dark:text-neutral-100">
-          Set new password
-        </h2>
-        <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
+        <h2 className="heading-section text-lg">Set new password</h2>
+        <p className="text-xs text-[var(--text-secondary)] mt-1">
           Choose a strong password for your account
         </p>
       </div>
 
-      {state?.error && (
-        <div className="p-3 text-xs rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300">
-          {state.error}
-        </div>
-      )}
+      {state?.error && <AuthAlert tone="danger" message={state.error} />}
 
       <form action={formAction} className="space-y-4">
-        <div>
-          <label
-            htmlFor="password"
-            className="block text-xs font-medium text-neutral-700 dark:text-neutral-300 mb-1"
-          >
-            New Password (min 8 characters)
-          </label>
-          <input
+        <FormField htmlFor="password" label="New Password (min 8 characters)">
+          <Input
             id="password"
             name="password"
             type="password"
             autoComplete="new-password"
             required
             minLength={8}
-            className="w-full px-3 py-2 text-sm rounded-lg border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
             placeholder="••••••••"
           />
-        </div>
+        </FormField>
 
-        <div>
-          <label
-            htmlFor="confirmPassword"
-            className="block text-xs font-medium text-neutral-700 dark:text-neutral-300 mb-1"
-          >
-            Confirm New Password
-          </label>
-          <input
+        <FormField htmlFor="confirmPassword" label="Confirm New Password">
+          <Input
             id="confirmPassword"
             name="confirmPassword"
             type="password"
             autoComplete="new-password"
             required
             minLength={8}
-            className="w-full px-3 py-2 text-sm rounded-lg border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
             placeholder="••••••••"
           />
-        </div>
+        </FormField>
 
-        <button
+        <Button
           type="submit"
+          variant="primary"
+          size="lg"
           disabled={isPending}
-          className="w-full py-2.5 px-4 rounded-lg bg-neutral-900 dark:bg-neutral-100 text-white dark:text-neutral-900 text-sm font-medium hover:bg-neutral-800 dark:hover:bg-white/90 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
+          className="w-full"
         >
           {isPending ? 'Updating password...' : 'Update Password & Sign In'}
-        </button>
+        </Button>
       </form>
 
-      <div className="pt-2 text-center text-xs text-neutral-500 dark:text-neutral-400">
+      <div className="pt-2 text-center text-xs text-[var(--text-secondary)]">
         <Link
           href="/auth/sign-in"
-          className="font-medium text-blue-600 dark:text-blue-400 hover:underline"
+          className="font-medium text-[var(--accent-text)] hover:underline"
         >
           Back to sign in
         </Link>
