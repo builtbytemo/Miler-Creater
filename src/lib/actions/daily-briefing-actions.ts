@@ -6,7 +6,13 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createTelegramAdapter } from '@/lib/briefing/channels/telegram';
 import { createEmailAdapter } from '@/lib/briefing/channels/email';
-import { getDeliveryServiceStatus, getTelegramBotUsername, type DeliveryServiceStatus } from '@/lib/briefing/config';
+import {
+  authorizeEmailDestination,
+  getDeliveryServiceStatus,
+  getEmailAccessForUser,
+  getTelegramBotUsername,
+  type DeliveryServiceStatus,
+} from '@/lib/briefing/config';
 import {
   DEFAULT_BRIEFING_LOCAL_TIME,
   DEFAULT_BRIEFING_TIMEZONE,
@@ -33,11 +39,35 @@ export interface BriefingActionResult<T = undefined> {
   data?: T;
 }
 
-async function requireUser(): Promise<{ supabase: SupabaseClient; userId: string; emailVerified: boolean } | null> {
+async function requireUser(): Promise<{
+  supabase: SupabaseClient;
+  userId: string;
+  email: string | null;
+  emailVerified: boolean;
+} | null> {
   const supabase = (await createClient()) as unknown as SupabaseClient;
   const { data } = await supabase.auth.getUser();
   if (!data.user) return null;
-  return { supabase, userId: data.user.id, emailVerified: Boolean(data.user.email && data.user.email_confirmed_at) };
+  return {
+    supabase,
+    userId: data.user.id,
+    email: data.user.email ?? null,
+    emailVerified: Boolean(data.user.email && data.user.email_confirmed_at),
+  };
+}
+
+function validateEmailAccessError(
+  ctx: { userId: string; email: string | null; emailVerified: boolean },
+  notConfiguredMessage: string
+): string | null {
+  const access = getEmailAccessForUser(ctx.userId, ctx.email, ctx.emailVerified);
+  if (access.reason === 'not_configured') return notConfiguredMessage;
+  if (access.reason === 'user_unauthorized') return 'Email delivery is not available for this account';
+  if (access.reason === 'email_unverified') return 'Your account email address is not verified';
+  if (access.reason === 'recipient_mismatch') {
+    return 'Your verified email address is not authorized for email delivery';
+  }
+  return null;
 }
 
 export async function getDailyBriefingStateAction(): Promise<BriefingActionResult<DailyBriefingState>> {
@@ -49,10 +79,13 @@ export async function getDailyBriefingStateAction(): Promise<BriefingActionResul
     ctx.supabase.from('telegram_connections').select('status, telegram_username').eq('user_id', ctx.userId).maybeSingle(),
   ]);
 
+  const service = getDeliveryServiceStatus();
+  const access = getEmailAccessForUser(ctx.userId, ctx.email, ctx.emailVerified);
+
   return {
     data: {
       enabled: prefs?.enabled ?? false,
-      emailEnabled: prefs?.email_enabled ?? false,
+      emailEnabled: access.configuredForUser && access.destinationAuthorized ? (prefs?.email_enabled ?? false) : false,
       telegramEnabled: prefs?.telegram_enabled ?? false,
       timezone: prefs?.timezone ?? DEFAULT_BRIEFING_TIMEZONE,
       deliveryLocalTime: String(prefs?.delivery_local_time ?? DEFAULT_BRIEFING_LOCAL_TIME).slice(0, 5),
@@ -60,7 +93,11 @@ export async function getDailyBriefingStateAction(): Promise<BriefingActionResul
         ? { status: conn.status as 'active' | 'blocked', username: conn.telegram_username ?? null }
         : { status: 'not_connected', username: null },
       emailAddressVerified: ctx.emailVerified,
-      service: getDeliveryServiceStatus(),
+      service: {
+        ...service,
+        emailConfigured: access.configuredForUser,
+        ...(access.reason === 'recipient_mismatch' ? { emailRecipientMismatch: true } : {}),
+      },
     },
   };
 }
@@ -80,12 +117,8 @@ export async function updateDailyBriefingPreferencesAction(input: {
     return { error: 'Invalid delivery time' };
   }
   if (input.emailEnabled) {
-    if (!getDeliveryServiceStatus().emailConfigured) {
-      return { error: 'Email delivery is not configured on this server' };
-    }
-    if (!ctx.emailVerified) {
-      return { error: 'Your account email address is not verified' };
-    }
+    const emailErr = validateEmailAccessError(ctx, 'Email delivery is not configured on this server');
+    if (emailErr) return { error: emailErr };
   }
 
   const patch: Record<string, unknown> = {};
@@ -181,7 +214,10 @@ export async function sendTestBriefingMessageAction(channel: BriefingChannel): P
 
   const status = getDeliveryServiceStatus();
   if (channel === 'telegram' && !status.telegramConfigured) return { error: 'Telegram is not configured on this server yet' };
-  if (channel === 'email' && !status.emailConfigured) return { error: 'Email delivery is not configured on this server yet' };
+  if (channel === 'email') {
+    const emailErr = validateEmailAccessError(ctx, 'Email delivery is not configured on this server yet');
+    if (emailErr) return { error: emailErr };
+  }
 
   const admin = createAdminClient() as unknown as SupabaseClient;
   const { data: prefs } = await admin
@@ -211,8 +247,10 @@ export async function sendTestBriefingMessageAction(channel: BriefingChannel): P
   } else {
     if (!ctx.emailVerified) return { error: 'Your account email address is not verified' };
     const { data: u } = await admin.auth.admin.getUserById(ctx.userId);
-    if (!u.user?.email) return { error: 'No verified email address' };
-    result = await createEmailAdapter().send({ to: u.user.email }, message);
+    if (!u.user?.email || !u.user.email_confirmed_at) return { error: 'No verified email address' };
+    const destAuth = authorizeEmailDestination(u.user.email, ctx.userId);
+    if (!destAuth.allowed) return { error: 'Your verified email address is not authorized for email delivery' };
+    result = await createEmailAdapter().send({ to: destAuth.normalizedTo }, message);
   }
 
   // Record the attempt time regardless of outcome to bound abuse.

@@ -1,7 +1,18 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { enqueueDueBriefings } from '../src/lib/briefing/scheduler';
 import { createFakeAdmin } from './helpers-briefing-fake-db';
+
+const originalEnv = { ...process.env };
+beforeEach(() => {
+  process.env.VERCEL_ENV = 'preview';
+  process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://prmgrrzqtnygmitplkhn.supabase.co';
+  delete process.env.DAILY_BRIEFING_EMAIL_ALLOWED_USER_ID;
+  delete process.env.DAILY_BRIEFING_EMAIL_ALLOWED_RECIPIENT;
+});
+afterEach(() => {
+  process.env = { ...originalEnv };
+});
 
 const prefs = (over: Record<string, any> = {}) => ({
   user_id: 'u1', enabled: true, email_enabled: true, telegram_enabled: true,

@@ -1,8 +1,19 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { dispatchDueBriefings } from '../src/lib/briefing/dispatcher';
 import { createFakeAdmin } from './helpers-briefing-fake-db';
 import type { BriefingContentGenerator } from '../src/lib/briefing/types';
+
+const originalEnv = { ...process.env };
+beforeEach(() => {
+  process.env.VERCEL_ENV = 'preview';
+  process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://prmgrrzqtnygmitplkhn.supabase.co';
+  delete process.env.DAILY_BRIEFING_EMAIL_ALLOWED_USER_ID;
+  delete process.env.DAILY_BRIEFING_EMAIL_ALLOWED_RECIPIENT;
+});
+afterEach(() => {
+  process.env = { ...originalEnv };
+});
 
 function setup(opts: { channel?: 'email' | 'telegram'; prefs?: any; conn?: any; verified?: boolean } = {}) {
   const channel = opts.channel ?? 'telegram';

@@ -150,11 +150,13 @@ export function DailyBriefingSettings() {
             id="toggle-briefing-email"
             label="Email"
             description={
-              !service.emailConfigured
-                ? 'Email delivery is not configured on this server.'
-                : state.emailAddressVerified
-                  ? 'Send to your verified account email. Enabling records your consent.'
-                  : 'Your account email address must be verified first.'
+              service.emailRecipientMismatch
+                ? 'Your verified account email does not match the authorized recipient for this server.'
+                : !service.emailConfigured
+                  ? 'Email delivery is not configured on this server.'
+                  : state.emailAddressVerified
+                    ? 'Send to your verified account email. Enabling records your consent.'
+                    : 'Your account email address must be verified first.'
             }
             checked={state.emailEnabled && service.emailConfigured}
             disabled={pending || !service.emailConfigured || !state.emailAddressVerified}
@@ -169,7 +171,13 @@ export function DailyBriefingSettings() {
           >
             <Mail className="w-3.5 h-3.5" /> Send test email
           </button>
-          {!service.emailConfigured && <p className="text-xs text-neutral-500">Email delivery is not configured on this server yet.</p>}
+          {service.emailRecipientMismatch ? (
+            <p className="text-xs text-amber-300/90">
+              Your verified account email does not match the authorized recipient for this server.
+            </p>
+          ) : (
+            !service.emailConfigured && <p className="text-xs text-neutral-500">Email delivery is not configured on this server yet.</p>
+          )}
         </div>
 
         <div className="border-t border-neutral-800 pt-4 space-y-3">

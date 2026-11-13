@@ -1,3 +1,4 @@
+import { authorizeEmailDestination, getResendCredentials } from '../config';
 import type { BriefingMessage, ChannelAdapter, DeliveryResult } from '../types';
 
 type FetchLike = typeof fetch;
@@ -16,22 +17,26 @@ const TIMEOUT_MS = 10_000;
 export function createEmailAdapter(fetchImpl: FetchLike = fetch): ChannelAdapter<EmailDestination> {
   return {
     async send(destination, message: BriefingMessage, opts): Promise<DeliveryResult> {
-      const apiKey = process.env.RESEND_API_KEY;
-      const from = process.env.EMAIL_FROM;
-      if (!apiKey || !from) return { ok: false, kind: 'not_configured', code: 'email_not_configured' };
+      const creds = getResendCredentials();
+      if (!creds) return { ok: false, kind: 'not_configured', code: 'email_not_configured' };
+
+      const destAuth = authorizeEmailDestination(destination.to);
+      if (!destAuth.allowed) {
+        return { ok: false, kind: destAuth.kind, code: destAuth.code };
+      }
 
       let res: Response;
       try {
         res = await fetchImpl('https://api.resend.com/emails', {
           method: 'POST',
           headers: {
-            authorization: `Bearer ${apiKey}`,
+            authorization: `Bearer ${creds.apiKey}`,
             'content-type': 'application/json',
             ...(opts?.idempotencyKey ? { 'idempotency-key': opts.idempotencyKey } : {}),
           },
           body: JSON.stringify({
-            from,
-            to: [destination.to],
+            from: creds.from,
+            to: [destAuth.normalizedTo],
             subject: message.subject ?? 'Zahi',
             text: message.text,
             ...(message.html ? { html: message.html } : {}),

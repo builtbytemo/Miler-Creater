@@ -40,9 +40,13 @@ describe('Daily Briefing Actions Suite', () => {
     vi.clearAllMocks();
     process.env = {
       ...originalEnv,
+      VERCEL_ENV: 'preview',
+      NEXT_PUBLIC_SUPABASE_URL: 'https://prmgrrzqtnygmitplkhn.supabase.co',
       RESEND_API_KEY: 're_test_key',
       EMAIL_FROM: 'briefing@miler.app',
     };
+    delete process.env.DAILY_BRIEFING_EMAIL_ALLOWED_USER_ID;
+    delete process.env.DAILY_BRIEFING_EMAIL_ALLOWED_RECIPIENT;
     mockGetUser.mockResolvedValue({
       data: {
         user: {
