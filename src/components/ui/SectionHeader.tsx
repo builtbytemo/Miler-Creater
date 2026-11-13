@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { ZahiDiamondMark } from '@/components/brand/ZahiBrand';
 
 export function SectionHeader({
   title,
@@ -6,6 +7,7 @@ export function SectionHeader({
   badge,
   action,
   headingId,
+  accented = false,
   className = '',
 }: {
   title: string;
@@ -13,6 +15,7 @@ export function SectionHeader({
   badge?: ReactNode;
   action?: ReactNode;
   headingId?: string;
+  accented?: boolean;
   className?: string;
 }) {
   return (
@@ -20,6 +23,7 @@ export function SectionHeader({
       className={`flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-[var(--border-subtle)] ${className}`.trim()}
     >
       <div className="flex flex-wrap items-center gap-2 min-w-0">
+        {accented && <ZahiDiamondMark size="xs" tone="accent" />}
         <h2
           id={headingId}
           className="text-[13px] font-semibold tracking-[-0.01em] text-[var(--text-primary)]"

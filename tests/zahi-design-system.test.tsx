@@ -8,6 +8,8 @@ import { FormField, Input } from '../src/components/ui/Input';
 import { SectionHeader } from '../src/components/ui/SectionHeader';
 import { EmptyState } from '../src/components/ui/EmptyState';
 import {
+  ZahiDiamondMark,
+  ZahiDividerRule,
   ZahiLogoMark,
   ZahiMascot,
   ZahiWordmark,
@@ -32,6 +34,8 @@ describe('Zahi Phase 1 Design System Foundation', () => {
     expect(css).toContain('#FFFFFF');
     expect(css).toContain('--font-geist-sans');
     expect(css).toContain('--font-geist-mono');
+    expect(css).toContain('--ease-zahi');
+    expect(css).toContain('.zahi-khatam-accent');
     expect(css).not.toContain('#e2f925');
     expect(css).not.toContain('--font-zahi-serif');
   });
@@ -45,9 +49,17 @@ describe('Zahi Phase 1 Design System Foundation', () => {
     const logoHtml = renderToStaticMarkup(<ZahiLogoMark size="md" />);
     expect(logoHtml).toContain('>Z<');
     expect(logoHtml).toContain('bg-[var(--accent)]');
+    expect(logoHtml).toContain('rotate-45');
 
     const wordmarkHtml = renderToStaticMarkup(<ZahiWordmark />);
-    expect(wordmarkHtml).toContain('Zahi');
+    expect(wordmarkHtml).toContain('>Zahi<');
+    expect(wordmarkHtml).toContain('rotate-45');
+
+    const diamondHtml = renderToStaticMarkup(<ZahiDiamondMark size="sm" />);
+    expect(diamondHtml).toContain('rotate-45');
+
+    const dividerHtml = renderToStaticMarkup(<ZahiDividerRule />);
+    expect(dividerHtml).toContain('zahi-hairline-rule');
 
     const mascotHtml = renderToStaticMarkup(<ZahiMascot size={48} />);
     expect(mascotHtml).toContain('/brand/zahi-mascot.png');
@@ -60,6 +72,7 @@ describe('Zahi Phase 1 Design System Foundation', () => {
       <div>
         <SectionHeader
           title="Priority Tasks"
+          accented
           badge={<Badge tone="accent">Urgent</Badge>}
         />
         <FormField label="Workspace Name" htmlFor="ws-name">
@@ -80,6 +93,7 @@ describe('Zahi Phase 1 Design System Foundation', () => {
     expect(html).toContain('Create Task');
     expect(html).toContain('No active work');
     expect(html).toContain('/brand/zahi-mascot.png');
+    expect(html).toContain('zahi-hairline-rule');
   });
 
   it('provides searchable keyboard-first Command Palette destinations', () => {

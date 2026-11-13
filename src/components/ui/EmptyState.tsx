@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { ZahiMascot } from '@/components/brand/ZahiBrand';
+import { ZahiDividerRule, ZahiMascot } from '@/components/brand/ZahiBrand';
 
 export interface EmptyStateProps {
   title: string;
@@ -23,8 +23,11 @@ export function EmptyState({
       className={`rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-5 py-6 text-center space-y-2.5 ${className}`.trim()}
     >
       {showMascot ? (
-        <div className="flex justify-center pb-0.5">
-          <ZahiMascot size={48} />
+        <div className="space-y-2 pb-0.5">
+          <div className="flex justify-center">
+            <ZahiMascot size={48} />
+          </div>
+          <ZahiDividerRule className="max-w-[76px] mx-auto" />
         </div>
       ) : icon ? (
         <div className="mx-auto flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--bg-surface-muted)] text-[var(--text-secondary)]">
