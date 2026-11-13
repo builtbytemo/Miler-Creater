@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useRef, useMemo } from 'react';
+import { useState, useCallback, useRef, useMemo, useEffect } from 'react';
 import {
   Calendar as CalendarIcon,
   ChevronLeft,
@@ -48,6 +48,8 @@ import { TaskDetailModal } from '@/components/tasks/TaskDetailModal';
 import { getCalendarEventsAction } from '@/lib/actions/content-actions';
 import { getTaskDetailAction } from '@/lib/actions/task-actions';
 import { useDialog } from '@/lib/hooks/use-dialog';
+import { ZahiDiamondMark } from '@/components/brand/ZahiBrand';
+import { EmptyState } from '@/components/ui/EmptyState';
 import {
   buildCalendarItemColorMap,
   resolveCalendarItemColor,
@@ -412,7 +414,7 @@ export function CalendarWorkspace({
   );
 
   // Navigation Handlers
-  const handlePrev = () => {
+  const handlePrev = useCallback(() => {
     if (viewMode === 'day') {
       const prevDate = getPrevDayDate(referenceDate, userTimeZone);
       setReferenceDate(prevDate);
@@ -426,9 +428,9 @@ export function CalendarWorkspace({
       setReferenceDate(prevMonthDate);
       fetchContentAndTasks(prevMonthDate, 'month');
     }
-  };
+  }, [viewMode, referenceDate, userTimeZone, currentWeekRange.weekStart, fetchContentAndTasks]);
 
-  const handleNext = () => {
+  const handleNext = useCallback(() => {
     if (viewMode === 'day') {
       const nextDate = getNextDayDate(referenceDate, userTimeZone);
       setReferenceDate(nextDate);
@@ -442,19 +444,86 @@ export function CalendarWorkspace({
       setReferenceDate(nextMonthDate);
       fetchContentAndTasks(nextMonthDate, 'month');
     }
-  };
+  }, [viewMode, referenceDate, userTimeZone, currentWeekRange.weekStart, fetchContentAndTasks]);
 
-  const handleToday = () => {
+  const handleToday = useCallback(() => {
     const now = new Date();
     setReferenceDate(now);
     fetchContentAndTasks(now, viewMode);
-  };
+  }, [fetchContentAndTasks, viewMode]);
 
-  const handleViewModeChange = (newMode: CalendarViewMode) => {
-    if (newMode === viewMode) return;
-    setViewMode(newMode);
-    fetchContentAndTasks(referenceDate, newMode);
-  };
+  const handleViewModeChange = useCallback(
+    (newMode: CalendarViewMode) => {
+      if (newMode === viewMode) return;
+      setViewMode(newMode);
+      fetchContentAndTasks(referenceDate, newMode);
+    },
+    [viewMode, referenceDate, fetchContentAndTasks]
+  );
+
+  // Keyboard-first navigation (d/w/m view switch, t today, ArrowLeft/Right period step)
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (
+        isCreateModalOpen ||
+        isCreateTaskModalOpen ||
+        selectedItem ||
+        selectedTask ||
+        slotPickerContext ||
+        isUnscheduledDrawerOpen
+      ) {
+        return;
+      }
+
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable ||
+          target.closest('[role="dialog"]'))
+      ) {
+        return;
+      }
+
+      const key = event.key.toLowerCase();
+      if (key === 'd') {
+        event.preventDefault();
+        handleViewModeChange('day');
+      } else if (key === 'w') {
+        event.preventDefault();
+        handleViewModeChange('week');
+      } else if (key === 'm') {
+        event.preventDefault();
+        handleViewModeChange('month');
+      } else if (key === 't') {
+        event.preventDefault();
+        handleToday();
+      } else if (event.key === 'ArrowLeft') {
+        event.preventDefault();
+        handlePrev();
+      } else if (event.key === 'ArrowRight') {
+        event.preventDefault();
+        handleNext();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [
+    isCreateModalOpen,
+    isCreateTaskModalOpen,
+    selectedItem,
+    selectedTask,
+    slotPickerContext,
+    isUnscheduledDrawerOpen,
+    handleViewModeChange,
+    handleToday,
+    handlePrev,
+    handleNext,
+  ]);
 
   // Drill-down from Month or Week view cell header to Day view
   const handleSelectDate = (date: Date) => {
@@ -715,57 +784,57 @@ export function CalendarWorkspace({
   const calendarTotalForView = calendarTasksForView.length + calendarContentForView.length;
 
   return (
-    <div className="space-y-6" data-testid="calendar-workspace">
-      {/* Editorial Header: Title & Primary Actions */}
-      <header className="flex flex-col lg:flex-row lg:items-end justify-between gap-5 pb-5 border-b border-[var(--border-subtle)]">
-        <div className="space-y-2 min-w-0">
-          <div className="flex items-center gap-2 text-xs font-medium text-[var(--text-tertiary)] flex-wrap">
-            <CalendarIcon className="w-3.5 h-3.5 text-[var(--text-secondary)] shrink-0" />
-            <span className="uppercase tracking-[0.12em] font-semibold text-[var(--text-secondary)] truncate max-w-[240px]">
+    <div className="space-y-5 min-w-0" data-testid="calendar-workspace">
+      {/* Precision Masthead: Title & Primary Actions (@container responsive) */}
+      <header className="flex flex-col @3xl:flex-row @3xl:items-end justify-between gap-4 pb-5 border-b border-[var(--border-subtle)] min-w-0">
+        <div className="space-y-1.5 min-w-0">
+          <div className="flex items-center gap-2 text-xs font-mono text-[var(--text-tertiary)] flex-wrap min-w-0">
+            <ZahiDiamondMark size="xs" tone="accent" />
+            <span className="font-semibold text-[var(--text-secondary)] truncate max-w-[220px]">
               {workspaceName}
             </span>
-            <span aria-hidden="true">·</span>
+            <span className="text-[var(--border-strong)]" aria-hidden="true">·</span>
             <span>Schedule &amp; Time Blocking</span>
             <span
-              className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-mono bg-[var(--bg-subtle)] text-[var(--text-secondary)] border border-[var(--border-subtle)]"
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[var(--radius-xs)] text-[11px] font-mono bg-[var(--bg-surface-muted)] text-[var(--text-secondary)] border border-[var(--border-subtle)]"
               title="Active Calendar Timezone"
               data-testid="calendar-timezone-badge"
             >
-              <Globe className="w-3 h-3 text-[var(--text-tertiary)]" />
+              <Globe className="w-3 h-3 text-[var(--text-tertiary)]" aria-hidden="true" />
               {userTimeZone}
             </span>
           </div>
 
           <div className="flex items-baseline gap-3 flex-wrap">
-            <h1 className="heading-display text-3xl sm:text-4xl text-[var(--text-primary)]">
+            <h1 className="heading-display text-[22px] sm:text-[26px] text-[var(--text-primary)]">
               Calendar
             </h1>
-            <p className="text-sm text-[var(--text-secondary)]">
-              Plan daily focus blocks, task deadlines, and social publishing in one place.
+            <p className="text-[13px] text-[var(--text-secondary)]">
+              Plan daily focus blocks, task deadlines, and social publishing in one unified timeline.
             </p>
           </div>
         </div>
 
         {/* Right Actions: Unscheduled Backlog, New Task, New Content */}
-        <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
           <button
             type="button"
             onClick={() => setIsUnscheduledDrawerOpen((prev) => !prev)}
             data-testid="toggle-unscheduled-drawer"
             aria-pressed={isUnscheduledDrawerOpen}
-            className={`inline-flex items-center gap-2 px-3.5 py-2.5 rounded-full text-xs font-semibold border transition-all ${
+            className={`inline-flex items-center gap-2 px-3 py-2 rounded-[var(--radius-sm)] text-xs font-semibold border transition-all ${
               isUnscheduledDrawerOpen
                 ? 'bg-[var(--text-primary)] text-[var(--bg-canvas)] border-[var(--text-primary)]'
                 : 'bg-[var(--bg-surface)] text-[var(--text-secondary)] border-[var(--border-default)] hover:text-[var(--text-primary)] hover:border-[var(--border-strong)]'
             }`}
           >
-            <Inbox className="w-3.5 h-3.5" />
+            <Inbox className="w-3.5 h-3.5" aria-hidden="true" />
             <span>Unscheduled</span>
             <span
-              className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold ${
+              className={`px-1.5 py-0.5 rounded-[var(--radius-xs)] text-[10px] font-mono font-bold tabular-nums ${
                 isUnscheduledDrawerOpen
                   ? 'bg-[var(--bg-canvas)] text-[var(--text-primary)]'
-                  : 'bg-[var(--bg-subtle)] text-[var(--text-primary)]'
+                  : 'bg-[var(--bg-surface-muted)] text-[var(--text-primary)]'
               }`}
             >
               {activeUnscheduledCount}
@@ -780,9 +849,9 @@ export function CalendarWorkspace({
               setIsCreateTaskModalOpen(true);
             }}
             data-testid="calendar-new-task-btn"
-            className="btn-secondary px-4 py-2.5 text-xs font-semibold"
+            className="btn-secondary px-3.5 py-2 text-xs font-semibold"
           >
-            <CheckSquare className="w-3.5 h-3.5" />
+            <CheckSquare className="w-3.5 h-3.5" aria-hidden="true" />
             <span>New Task</span>
           </button>
 
@@ -794,9 +863,9 @@ export function CalendarWorkspace({
               setIsCreateModalOpen(true);
             }}
             data-testid="calendar-new-content-btn"
-            className="btn-accent px-4 py-2.5 text-xs font-semibold"
+            className="btn-accent px-3.5 py-2 text-xs font-semibold"
           >
-            <Plus className="w-3.5 h-3.5" />
+            <Plus className="w-3.5 h-3.5" aria-hidden="true" />
             <span>New Content</span>
           </button>
         </div>
@@ -805,17 +874,18 @@ export function CalendarWorkspace({
       {/* Navigation, View Switcher & Channel Filter Toolbar */}
       <section
         aria-label="Calendar controls"
-        className="surface-card p-3 sm:p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3.5"
+        className="surface-card p-3 sm:p-3.5 flex flex-col @3xl:flex-row @3xl:items-center justify-between gap-3"
       >
         {/* Left: Period Navigation Controls */}
-        <div className="flex items-center gap-2.5 flex-wrap">
-          <div className="inline-flex items-center rounded-full bg-[var(--bg-subtle)] border border-[var(--border-subtle)] p-1">
+        <div className="flex items-center gap-2.5 flex-wrap min-w-0">
+          <div className="inline-flex items-center rounded-[var(--radius-sm)] bg-[var(--bg-surface-muted)] border border-[var(--border-subtle)] p-0.5">
             <button
               type="button"
               onClick={handlePrev}
               disabled={isLoading}
-              className="p-1.5 rounded-full text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface)] transition-colors disabled:opacity-50"
+              className="p-1.5 rounded-[5px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface)] transition-colors disabled:opacity-50"
               aria-label="Previous period"
+              title="Previous period (Left arrow)"
               data-testid="calendar-prev-btn"
             >
               <ChevronLeft className="w-4 h-4" />
@@ -824,7 +894,8 @@ export function CalendarWorkspace({
               type="button"
               onClick={handleToday}
               disabled={isLoading}
-              className="px-3 py-1 rounded-full text-xs font-semibold text-[var(--text-primary)] hover:bg-[var(--bg-surface)] transition-colors disabled:opacity-50"
+              title="Jump to Today (T)"
+              className="px-2.5 py-1 rounded-[5px] text-xs font-semibold text-[var(--text-primary)] hover:bg-[var(--bg-surface)] transition-colors disabled:opacity-50"
               data-testid="calendar-today-btn"
             >
               Today
@@ -833,8 +904,9 @@ export function CalendarWorkspace({
               type="button"
               onClick={handleNext}
               disabled={isLoading}
-              className="p-1.5 rounded-full text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface)] transition-colors disabled:opacity-50"
+              className="p-1.5 rounded-[5px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface)] transition-colors disabled:opacity-50"
               aria-label="Next period"
+              title="Next period (Right arrow)"
               data-testid="calendar-next-btn"
             >
               <ChevronRight className="w-4 h-4" />
@@ -843,7 +915,7 @@ export function CalendarWorkspace({
 
           <div className="flex items-center gap-2 min-w-0">
             <h2
-              className="heading-section text-base sm:text-lg text-[var(--text-primary)] tracking-tight truncate"
+              className="heading-section text-[15px] sm:text-base text-[var(--text-primary)] tracking-tight truncate"
               data-testid="calendar-period-label"
             >
               {activePeriodLabel}
@@ -861,7 +933,7 @@ export function CalendarWorkspace({
         <div className="flex flex-wrap items-center gap-2.5">
           {/* View Mode Switcher (Day / Week / Month) */}
           <div
-            className="inline-flex items-center rounded-full bg-[var(--bg-subtle)] border border-[var(--border-subtle)] p-1"
+            className="inline-flex items-center rounded-[var(--radius-sm)] bg-[var(--bg-surface-muted)] border border-[var(--border-subtle)] p-0.5"
             role="tablist"
             aria-label="Calendar view mode"
           >
@@ -870,14 +942,15 @@ export function CalendarWorkspace({
               role="tab"
               aria-selected={viewMode === 'day'}
               onClick={() => handleViewModeChange('day')}
+              title="Day view (D)"
               data-testid="view-mode-day"
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-[5px] text-xs font-semibold transition-all ${
                 viewMode === 'day'
-                  ? 'bg-[var(--text-primary)] text-[var(--bg-canvas)] shadow-xs'
+                  ? 'bg-[var(--text-primary)] text-[var(--bg-canvas)] shadow-2xs'
                   : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
               }`}
             >
-              <Clock className="w-3.5 h-3.5" />
+              <Clock className="w-3.5 h-3.5" aria-hidden="true" />
               <span>Day</span>
             </button>
             <button
@@ -885,14 +958,15 @@ export function CalendarWorkspace({
               role="tab"
               aria-selected={viewMode === 'week'}
               onClick={() => handleViewModeChange('week')}
+              title="Week view (W)"
               data-testid="view-mode-week"
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-[5px] text-xs font-semibold transition-all ${
                 viewMode === 'week'
-                  ? 'bg-[var(--text-primary)] text-[var(--bg-canvas)] shadow-xs'
+                  ? 'bg-[var(--text-primary)] text-[var(--bg-canvas)] shadow-2xs'
                   : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
               }`}
             >
-              <Columns className="w-3.5 h-3.5" />
+              <Columns className="w-3.5 h-3.5" aria-hidden="true" />
               <span>Week</span>
             </button>
             <button
@@ -900,28 +974,29 @@ export function CalendarWorkspace({
               role="tab"
               aria-selected={viewMode === 'month'}
               onClick={() => handleViewModeChange('month')}
+              title="Month view (M)"
               data-testid="view-mode-month"
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-[5px] text-xs font-semibold transition-all ${
                 viewMode === 'month'
-                  ? 'bg-[var(--text-primary)] text-[var(--bg-canvas)] shadow-xs'
+                  ? 'bg-[var(--text-primary)] text-[var(--bg-canvas)] shadow-2xs'
                   : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
               }`}
             >
-              <LayoutGrid className="w-3.5 h-3.5" />
+              <LayoutGrid className="w-3.5 h-3.5" aria-hidden="true" />
               <span>Month</span>
             </button>
           </div>
 
           {/* Channel / Platform Filter */}
           <div className="flex items-center gap-1.5">
-            <div className="relative flex items-center">
-              <Filter className="w-3.5 h-3.5 text-[var(--text-tertiary)] absolute left-3 pointer-events-none" />
+            <div className="relative inline-flex items-center">
+              <Filter className="w-3.5 h-3.5 text-[var(--text-tertiary)] absolute left-2.5 pointer-events-none" aria-hidden="true" />
               <select
                 value={platformFilter}
                 onChange={(e) => setPlatformFilter(e.target.value as SocialPlatform | '')}
                 aria-label="Filter channels"
                 data-testid="calendar-platform-filter"
-                className="pl-8 pr-7 py-1.5 bg-[var(--bg-subtle)] hover:bg-[var(--bg-hover)] border border-[var(--border-subtle)] rounded-full text-xs font-medium text-[var(--text-primary)] focus:outline-none focus:border-[var(--border-strong)] transition-colors"
+                className="input-control w-auto appearance-auto min-h-8 pl-8 pr-3 py-1.5 text-xs leading-tight font-medium"
               >
                 <option value="">All Channels</option>
                 <option value="x">X (Twitter)</option>
@@ -935,7 +1010,7 @@ export function CalendarWorkspace({
               <button
                 type="button"
                 onClick={() => setPlatformFilter('')}
-                className="px-2.5 py-1.5 rounded-full text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] bg-[var(--bg-subtle)] hover:bg-[var(--bg-hover)] border border-[var(--border-subtle)] transition-colors"
+                className="h-8 px-2.5 rounded-[var(--radius-sm)] text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] bg-[var(--bg-surface-muted)] hover:bg-[var(--bg-hover)] border border-[var(--border-subtle)] transition-colors"
               >
                 Clear
               </button>
@@ -948,7 +1023,7 @@ export function CalendarWorkspace({
       {errorMessage && (
         <div
           role="alert"
-          className="p-4 rounded-2xl badge-danger border flex items-center justify-between gap-3 text-xs sm:text-sm"
+          className="p-3.5 rounded-[var(--radius-md)] badge-danger border flex items-center justify-between gap-3 text-xs sm:text-[13px]"
         >
           <div className="flex items-center gap-2.5 min-w-0">
             <AlertCircle className="w-4 h-4 shrink-0" />
@@ -957,7 +1032,7 @@ export function CalendarWorkspace({
           <button
             type="button"
             onClick={() => setErrorMessage(null)}
-            className="px-2.5 py-1 rounded-full text-xs font-semibold bg-[var(--bg-surface)] text-[var(--text-primary)] border border-[var(--border-subtle)] shrink-0"
+            className="px-2.5 py-1 rounded-[var(--radius-sm)] text-xs font-semibold bg-[var(--bg-surface)] text-[var(--text-primary)] border border-[var(--border-subtle)] shrink-0"
           >
             Dismiss
           </button>
@@ -991,7 +1066,7 @@ export function CalendarWorkspace({
                 </span>
                 <span className="text-[var(--text-tertiary)]" aria-hidden="true">·</span>
                 <span className="text-xs text-[var(--text-secondary)]">
-                  Select any day heading for the daily agenda, or click `+` to schedule a time block
+                  Select any day heading for the daily agenda, or click + to schedule a time block
                 </span>
               </div>
 
@@ -999,10 +1074,10 @@ export function CalendarWorkspace({
                 type="button"
                 onClick={() => setIsAssignedPanelOpen((prev) => !prev)}
                 aria-expanded={isAssignedPanelOpen}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--radius-sm)] text-xs font-medium border transition-colors ${
                   isAssignedPanelOpen
                     ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] border-[var(--border-default)]'
-                    : 'bg-[var(--bg-subtle)] text-[var(--text-secondary)] border-[var(--border-subtle)] hover:text-[var(--text-primary)]'
+                    : 'bg-[var(--bg-surface-muted)] text-[var(--text-secondary)] border-[var(--border-subtle)] hover:text-[var(--text-primary)]'
                 }`}
               >
                 <Layers className="w-3.5 h-3.5" />
@@ -1016,7 +1091,7 @@ export function CalendarWorkspace({
                 aria-label="Workspace-assigned tasks and content"
                 className="w-full surface-card overflow-hidden"
               >
-                <div className="px-5 py-3.5 border-b border-[var(--border-subtle)] bg-[var(--bg-subtle)]/50 flex flex-wrap items-center justify-between gap-2">
+                <div className="px-5 py-3 border-b border-[var(--border-subtle)] bg-[var(--bg-subtle)]/50 flex flex-wrap items-center justify-between gap-2">
                   <div className="min-w-0">
                     <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--text-primary)] flex items-center gap-1.5">
                       <Layers className="w-3.5 h-3.5 text-[var(--text-secondary)] shrink-0" />
@@ -1026,20 +1101,20 @@ export function CalendarWorkspace({
                       Items added in the Tasks or Content tabs during this {viewMode} (shown separately from calendar time blocks)
                     </p>
                   </div>
-                  <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-semibold bg-[var(--bg-surface)] text-[var(--text-primary)] border border-[var(--border-subtle)] shrink-0">
+                  <span className="px-2 py-0.5 rounded-[var(--radius-xs)] text-xs font-mono font-semibold bg-[var(--bg-surface)] text-[var(--text-primary)] border border-[var(--border-subtle)] shrink-0 tabular-nums">
                     {assignedTotalForView}
                   </span>
                 </div>
 
                 <div className="p-4 sm:p-5">
                   {assignedTotalForView === 0 ? (
-                    <div className="py-6 px-4 text-center rounded-2xl border border-dashed border-[var(--border-default)] bg-[var(--bg-subtle)]/35">
-                      <p className="text-xs font-medium text-[var(--text-secondary)]">
-                        No workspace-assigned items in this {viewMode}.
-                      </p>
-                    </div>
+                    <EmptyState
+                      icon={<Layers className="h-4 w-4" aria-hidden="true" />}
+                      title={`No workspace-assigned items in this ${viewMode}`}
+                      description="Tasks and content scheduled with due or target dates outside direct calendar time blocks will appear here."
+                    />
                   ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                    <div className="grid grid-cols-1 @lg:grid-cols-2 @3xl:grid-cols-3 @5xl:grid-cols-4 gap-3">
                       {assignedTasksForView.map((task) => {
                         const priorityInfo =
                           PRIORITY_BADGE_MAP[task.priority] || PRIORITY_BADGE_MAP.medium;
@@ -1055,7 +1130,7 @@ export function CalendarWorkspace({
                             onClick={() => handleOpenTaskDetail(task)}
                             data-testid={`assigned-task-${task.id}`}
                             data-cal-color={colorToken.name}
-                            className={`w-full text-left p-3.5 rounded-2xl border border-l-4 transition-all space-y-1.5 group focus:outline-none focus:ring-2 focus:ring-[var(--text-primary)] ${colorToken.colorClass} cal-card-surface`}
+                            className={`w-full text-left p-3.5 rounded-[var(--radius-sm)] border border-l-4 transition-all space-y-1.5 group focus:outline-none focus:ring-2 focus:ring-[var(--text-primary)] ${colorToken.colorClass} cal-card-surface`}
                           >
                             <div className="flex items-center justify-between gap-2">
                               <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">
@@ -1067,13 +1142,13 @@ export function CalendarWorkspace({
                                 <span>Task</span>
                               </span>
                               <span
-                                className={`px-2 py-0.2 rounded-full text-[10px] font-semibold border ${priorityInfo.badgeClass}`}
+                                className={`px-1.5 py-0.5 rounded-[var(--radius-xs)] text-[10px] font-semibold border ${priorityInfo.badgeClass}`}
                               >
                                 {priorityInfo.label}
                               </span>
                             </div>
                             <p
-                              className={`text-xs sm:text-sm font-semibold leading-snug line-clamp-2 break-words ${
+                              className={`text-xs sm:text-[13px] font-semibold leading-snug line-clamp-2 break-words ${
                                 task.status === 'done'
                                   ? 'line-through text-[var(--text-tertiary)]'
                                   : 'text-[var(--text-primary)] group-hover:underline'
@@ -1118,7 +1193,7 @@ export function CalendarWorkspace({
                             onClick={() => setSelectedItem(item)}
                             data-testid={`assigned-content-${item.id}`}
                             data-cal-color={colorToken.name}
-                            className={`w-full text-left p-3.5 rounded-2xl border border-l-4 transition-all space-y-1.5 group focus:outline-none focus:ring-2 focus:ring-[var(--text-primary)] ${colorToken.colorClass} cal-card-surface`}
+                            className={`w-full text-left p-3.5 rounded-[var(--radius-sm)] border border-l-4 transition-all space-y-1.5 group focus:outline-none focus:ring-2 focus:ring-[var(--text-primary)] ${colorToken.colorClass} cal-card-surface`}
                           >
                             <div className="flex items-center justify-between gap-2">
                               <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">
@@ -1211,7 +1286,7 @@ export function CalendarWorkspace({
             aria-labelledby="slot-picker-title"
             tabIndex={-1}
             data-testid="calendar-slot-picker-modal"
-            className="w-full max-w-md surface-elevated bg-[var(--bg-surface-elevated)] border border-[var(--border-strong)] text-[var(--text-primary)] rounded-3xl p-6 space-y-5 shadow-[var(--shadow-elevated)] focus:outline-none"
+            className="w-full max-w-md surface-elevated rounded-[var(--radius-lg)] text-[var(--text-primary)] p-5 sm:p-6 space-y-5 shadow-[var(--shadow-elevated)] focus:outline-none"
           >
             <div className="flex items-start justify-between gap-3 pb-4 border-b border-[var(--border-subtle)]">
               <div className="space-y-1 min-w-0">
@@ -1237,13 +1312,13 @@ export function CalendarWorkspace({
                 type="button"
                 onClick={closeSlotPicker}
                 aria-label="Close slot picker"
-                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-muted)] transition-colors"
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-sm)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-muted)] transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="space-y-2.5 p-4 rounded-2xl bg-[var(--bg-surface-muted)] border border-[var(--border-subtle)]">
+            <div className="space-y-2.5 p-4 rounded-[var(--radius-md)] bg-[var(--bg-surface-muted)] border border-[var(--border-subtle)]">
               <label
                 htmlFor="slot-picker-time"
                 className="block text-xs font-semibold text-[var(--text-primary)]"
@@ -1253,7 +1328,7 @@ export function CalendarWorkspace({
               </label>
 
               <div className="relative flex items-center">
-                <Clock className="w-4 h-4 text-[var(--text-secondary)] absolute left-3.5 pointer-events-none" />
+                <Clock className="w-4 h-4 text-[var(--text-secondary)] absolute left-3 pointer-events-none" />
                 <input
                   id="slot-picker-time"
                   type="time"
@@ -1263,7 +1338,7 @@ export function CalendarWorkspace({
                     if (slotTimeError) setSlotTimeError(null);
                   }}
                   data-testid="slot-picker-time-input"
-                  className="w-full pl-10 pr-3.5 py-2.5 bg-[var(--bg-surface)] border border-[var(--border-strong)] rounded-xl text-sm font-mono font-semibold text-[var(--text-primary)] shadow-2xs focus:outline-none focus:ring-2 focus:ring-[var(--text-primary)] transition-colors"
+                  className="input-control w-full pl-9 pr-3.5 py-2 text-sm font-mono font-semibold"
                 />
               </div>
 
@@ -1284,7 +1359,7 @@ export function CalendarWorkspace({
                         setPendingSlotTime(preset.time);
                         if (slotTimeError) setSlotTimeError(null);
                       }}
-                      className={`px-2.5 py-1 rounded-full text-[11px] font-mono font-semibold border transition-colors ${
+                      className={`px-2.5 py-1 rounded-[var(--radius-sm)] text-[11px] font-mono font-semibold border transition-colors ${
                         isActive
                           ? 'bg-[var(--accent)] text-[var(--accent-ink)] border-[var(--accent)] shadow-2xs'
                           : 'bg-[var(--bg-surface)] text-[var(--text-secondary)] border-[var(--border-subtle)] hover:text-[var(--text-primary)] hover:border-[var(--border-strong)]'
@@ -1313,9 +1388,9 @@ export function CalendarWorkspace({
                   type="button"
                   onClick={handleChooseSlotTask}
                   data-testid="slot-picker-task-btn"
-                  className="flex flex-col items-start gap-2.5 p-4 rounded-2xl bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-muted)] border border-[var(--border-strong)] hover:border-[var(--text-primary)] shadow-2xs transition-all text-left group focus:outline-none focus:ring-2 focus:ring-[var(--text-primary)]"
+                  className="flex flex-col items-start gap-2.5 p-4 rounded-[var(--radius-md)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-muted)] border border-[var(--border-strong)] hover:border-[var(--text-primary)] shadow-2xs transition-all text-left group focus:outline-none focus:ring-2 focus:ring-[var(--text-primary)]"
                 >
-                  <div className="p-2.5 rounded-xl bg-[var(--bg-surface-muted)] border border-[var(--border-subtle)] text-[var(--text-primary)] group-hover:bg-[var(--accent)] group-hover:text-[var(--accent-ink)] group-hover:border-transparent transition-colors">
+                  <div className="p-2 rounded-[var(--radius-sm)] bg-[var(--bg-surface-muted)] border border-[var(--border-subtle)] text-[var(--text-primary)] group-hover:bg-[var(--accent)] group-hover:text-[var(--accent-ink)] group-hover:border-transparent transition-colors">
                     <CheckSquare className="w-5 h-5" />
                   </div>
                   <div className="space-y-0.5">
@@ -1332,9 +1407,9 @@ export function CalendarWorkspace({
                   type="button"
                   onClick={handleChooseSlotContent}
                   data-testid="slot-picker-content-btn"
-                  className="flex flex-col items-start gap-2.5 p-4 rounded-2xl bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-muted)] border border-[var(--border-strong)] hover:border-[var(--text-primary)] shadow-2xs transition-all text-left group focus:outline-none focus:ring-2 focus:ring-[var(--text-primary)]"
+                  className="flex flex-col items-start gap-2.5 p-4 rounded-[var(--radius-md)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-muted)] border border-[var(--border-strong)] hover:border-[var(--text-primary)] shadow-2xs transition-all text-left group focus:outline-none focus:ring-2 focus:ring-[var(--text-primary)]"
                 >
-                  <div className="p-2.5 rounded-xl bg-[var(--bg-surface-muted)] border border-[var(--border-subtle)] text-[var(--text-primary)] group-hover:bg-[var(--accent)] group-hover:text-[var(--accent-ink)] group-hover:border-transparent transition-colors">
+                  <div className="p-2 rounded-[var(--radius-sm)] bg-[var(--bg-surface-muted)] border border-[var(--border-subtle)] text-[var(--text-primary)] group-hover:bg-[var(--accent)] group-hover:text-[var(--accent-ink)] group-hover:border-transparent transition-colors">
                     <Share2 className="w-5 h-5" />
                   </div>
                   <div className="space-y-0.5">

@@ -197,7 +197,7 @@ export function CalendarMonthView({
                       }}
                       data-testid={`month-cell-date-${cell.dateKey}`}
                       title={`View ${monthShort} ${cell.day} in Day view`}
-                      className={`inline-flex items-center justify-center min-w-[26px] h-[26px] px-1.5 rounded-full text-xs font-bold transition-transform hover:scale-105 ${
+                      className={`inline-flex items-center justify-center min-w-[26px] h-[26px] px-1.5 rounded-[var(--radius-xs)] text-xs font-bold tabular-nums transition-transform hover:scale-105 ${
                         isToday
                           ? 'bg-[var(--accent)] text-[var(--accent-ink)] shadow-xs'
                           : cell.isCurrentMonth
@@ -209,11 +209,11 @@ export function CalendarMonthView({
                     </button>
 
                     <div className="flex items-center gap-1">
-                      <span className="opacity-0 group-hover:opacity-100 inline-flex items-center justify-center w-5 h-5 rounded-full bg-[var(--bg-subtle)] text-[var(--text-secondary)] border border-[var(--border-subtle)] transition-opacity">
+                      <span className="opacity-0 group-hover:opacity-100 inline-flex items-center justify-center w-5 h-5 rounded-[var(--radius-xs)] bg-[var(--bg-subtle)] text-[var(--text-secondary)] border border-[var(--border-subtle)] transition-opacity">
                         <Plus className="w-3 h-3" />
                       </span>
                       {totalCount > 0 && (
-                        <span className="text-[10px] font-mono font-semibold text-[var(--text-secondary)] px-1.5 py-0.2 rounded-full bg-[var(--bg-subtle)] border border-[var(--border-subtle)]">
+                        <span className="text-[10px] font-mono font-semibold text-[var(--text-secondary)] px-1.5 py-0.5 rounded-[var(--radius-xs)] bg-[var(--bg-subtle)] border border-[var(--border-subtle)] tabular-nums">
                           {totalCount}
                         </span>
                       )}
@@ -245,7 +245,7 @@ export function CalendarMonthView({
                             }}
                             data-testid={`month-task-${task.id}`}
                             data-cal-color={colorToken.name}
-                            className={`w-full text-left px-2 py-1 rounded-lg border border-l-2 flex items-center gap-1.5 transition-colors group/pill ${colorToken.colorClass} cal-card-surface`}
+                            className={`w-full text-left px-2 py-1 rounded-[var(--radius-xs)] border border-l-2 flex items-center gap-1.5 transition-colors group/pill ${colorToken.colorClass} cal-card-surface`}
                           >
                             <CheckSquare className="w-2.5 h-2.5 text-[var(--text-secondary)] shrink-0" />
                             <span
@@ -290,7 +290,7 @@ export function CalendarMonthView({
                           }}
                           data-testid={`month-content-${item.id}`}
                           data-cal-color={colorToken.name}
-                          className={`w-full text-left px-2 py-1 rounded-lg border border-l-2 flex items-center gap-1.5 transition-colors group/pill ${colorToken.colorClass} cal-card-surface`}
+                          className={`w-full text-left px-2 py-1 rounded-[var(--radius-xs)] border border-l-2 flex items-center gap-1.5 transition-colors group/pill ${colorToken.colorClass} cal-card-surface`}
                         >
                           <Share2 className="w-2.5 h-2.5 text-[var(--text-secondary)] shrink-0" />
                           <span

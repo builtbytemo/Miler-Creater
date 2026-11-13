@@ -104,20 +104,20 @@ export function UnscheduledContentDrawer({
     >
       <aside
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md h-full bg-[var(--bg-surface)] border-l border-[var(--border-default)] shadow-2xl flex flex-col overflow-hidden"
+        className="w-full max-w-md h-full surface-elevated bg-[var(--bg-surface-elevated)] border-l border-[var(--border-default)] shadow-[var(--shadow-elevated)] flex flex-col overflow-hidden"
         aria-label="Unscheduled content backlog"
         data-testid="unscheduled-content-drawer"
       >
       {/* Drawer Header */}
       <div className="px-4 py-3.5 border-b border-[var(--border-subtle)] bg-[var(--bg-subtle)]/55 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className="p-2 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-primary)] shrink-0">
+          <div className="p-2 rounded-[var(--radius-sm)] bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-primary)] shrink-0">
             <Inbox className="w-4 h-4" />
           </div>
           <div className="min-w-0">
             <h3 className="text-sm font-semibold text-[var(--text-primary)] flex items-center gap-1.5">
               <span>Unscheduled Backlog</span>
-              <span className="px-2 py-0.2 rounded-full text-[11px] font-mono font-semibold bg-[var(--bg-surface)] text-[var(--text-secondary)] border border-[var(--border-subtle)]">
+              <span className="px-2 py-0.5 rounded-[var(--radius-xs)] text-[11px] font-mono font-semibold bg-[var(--bg-surface)] text-[var(--text-secondary)] border border-[var(--border-subtle)] tabular-nums">
                 {activeUnscheduledItems.length}
               </span>
             </h3>
@@ -130,7 +130,7 @@ export function UnscheduledContentDrawer({
         <button
           type="button"
           onClick={onClose}
-          className="p-1.5 rounded-full text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
+          className="p-1.5 rounded-[var(--radius-sm)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition-colors"
           aria-label="Close unscheduled drawer"
           data-testid="close-unscheduled-drawer"
         >
@@ -149,17 +149,17 @@ export function UnscheduledContentDrawer({
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search unscheduled drafts & ideas..."
             aria-label="Search unscheduled backlog"
-            className="w-full pl-8 pr-3 py-1.5 bg-[var(--bg-subtle)] border border-[var(--border-subtle)] rounded-full text-xs text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:border-[var(--border-strong)]"
+            className="input-control w-full h-8.5 pl-8 pr-3 text-xs"
           />
         </div>
 
-        {/* Status Pills & Platform Select */}
+        {/* Status Tabs & Platform Select */}
         <div className="flex items-center justify-between gap-2 flex-wrap">
-          <div className="inline-flex items-center gap-1 p-0.5 rounded-full bg-[var(--bg-subtle)] border border-[var(--border-subtle)]">
+          <div className="inline-flex items-center gap-0.5 p-0.5 rounded-[var(--radius-sm)] bg-[var(--bg-surface-muted)] border border-[var(--border-subtle)]">
             <button
               type="button"
               onClick={() => setStatusFilter('all')}
-              className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-colors ${
+              className={`px-2 py-1 rounded-[5px] text-[11px] font-medium transition-colors ${
                 statusFilter === 'all'
                   ? 'bg-[var(--text-primary)] text-[var(--bg-canvas)] font-semibold'
                   : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
@@ -170,7 +170,7 @@ export function UnscheduledContentDrawer({
             <button
               type="button"
               onClick={() => setStatusFilter('idea')}
-              className={`px-2.5 py-1 rounded-full text-[11px] font-medium flex items-center gap-1 transition-colors ${
+              className={`px-2 py-1 rounded-[5px] text-[11px] font-medium flex items-center gap-1 transition-colors ${
                 statusFilter === 'idea'
                   ? 'bg-[var(--text-primary)] text-[var(--bg-canvas)] font-semibold'
                   : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
@@ -182,7 +182,7 @@ export function UnscheduledContentDrawer({
             <button
               type="button"
               onClick={() => setStatusFilter('draft')}
-              className={`px-2.5 py-1 rounded-full text-[11px] font-medium flex items-center gap-1 transition-colors ${
+              className={`px-2 py-1 rounded-[5px] text-[11px] font-medium flex items-center gap-1 transition-colors ${
                 statusFilter === 'draft'
                   ? 'bg-[var(--text-primary)] text-[var(--bg-canvas)] font-semibold'
                   : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
@@ -197,7 +197,7 @@ export function UnscheduledContentDrawer({
             value={platformFilter}
             onChange={(e) => setPlatformFilter(e.target.value as SocialPlatform | '')}
             aria-label="Filter unscheduled by platform"
-            className="px-2.5 py-1 bg-[var(--bg-subtle)] border border-[var(--border-subtle)] rounded-full text-[11px] font-medium text-[var(--text-secondary)] focus:outline-none focus:border-[var(--border-strong)]"
+            className="input-control h-7.5 px-2.5 text-[11px] font-medium text-[var(--text-secondary)]"
           >
             <option value="">All Platforms</option>
             <option value="x">X (Twitter)</option>
@@ -211,7 +211,7 @@ export function UnscheduledContentDrawer({
       {/* Unscheduled Items List */}
       <div className="flex-1 p-3.5 space-y-2.5 overflow-y-auto bg-[var(--bg-surface)]">
         {filteredItems.length === 0 ? (
-          <div className="py-10 px-4 text-center rounded-2xl border border-dashed border-[var(--border-default)] bg-[var(--bg-subtle)]/35 space-y-1.5">
+          <div className="py-10 px-4 text-center rounded-[var(--radius-md)] border border-dashed border-[var(--border-default)] bg-[var(--bg-subtle)]/35 space-y-1.5">
             <Inbox className="w-6 h-6 text-[var(--text-tertiary)] mx-auto mb-1" />
             <p className="text-xs font-semibold text-[var(--text-secondary)]">
               {activeUnscheduledItems.length === 0
@@ -249,7 +249,7 @@ export function UnscheduledContentDrawer({
                 }}
                 data-testid={`unscheduled-item-${item.id}`}
                 data-cal-color={colorToken.name}
-                className={`p-3.5 rounded-2xl border border-l-4 transition-all cursor-pointer space-y-2 group text-left ${colorToken.colorClass} cal-card-surface`}
+                className={`p-3.5 rounded-[var(--radius-sm)] border border-l-4 transition-all cursor-pointer space-y-2 group text-left ${colorToken.colorClass} cal-card-surface`}
               >
                 {/* Badges Row */}
                 <div className="flex items-center justify-between gap-1.5 flex-wrap">
@@ -259,7 +259,7 @@ export function UnscheduledContentDrawer({
                       aria-hidden="true"
                     />
                     <span
-                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${platformInfo.badgeClass}`}
+                      className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[var(--radius-xs)] text-[10px] font-semibold border ${platformInfo.badgeClass}`}
                     >
                       <Share2 className="w-2.5 h-2.5 shrink-0" />
                       {platformInfo.label}
@@ -268,7 +268,7 @@ export function UnscheduledContentDrawer({
                       {actionInfo.label}
                     </span>
                     <span
-                      className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+                      className={`px-1.5 py-0.5 rounded-[var(--radius-xs)] text-[10px] font-semibold border ${
                         item.status === 'idea' ? 'badge-warning' : 'badge-neutral'
                       }`}
                     >
@@ -283,7 +283,7 @@ export function UnscheduledContentDrawer({
                       e.stopPropagation();
                       onScheduleItem(item);
                     }}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-[var(--accent)] text-[var(--accent-ink)] hover:opacity-90 transition-opacity shadow-xs"
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[var(--radius-sm)] text-[10px] font-semibold bg-[var(--accent)] text-[var(--accent-ink)] hover:opacity-90 transition-opacity shadow-xs"
                     title="Schedule onto calendar"
                   >
                     <CalendarPlus className="w-3 h-3" />

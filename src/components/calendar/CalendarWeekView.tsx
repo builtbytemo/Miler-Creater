@@ -164,7 +164,7 @@ export function CalendarWeekView({
 
   return (
     <div
-      className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-px rounded-2xl bg-[var(--border-subtle)] border border-[var(--border-subtle)] overflow-hidden shadow-xs"
+      className="grid grid-cols-1 @md:grid-cols-2 @2xl:grid-cols-4 @4xl:grid-cols-7 gap-px rounded-[var(--radius-md)] bg-[var(--border-subtle)] border border-[var(--border-subtle)] overflow-hidden shadow-xs"
       data-testid="calendar-week-grid"
     >
       {weekDays.map((day) => {
@@ -196,7 +196,7 @@ export function CalendarWeekView({
           <div
             key={day.dateKey}
             data-testid={`week-day-column-${day.dateKey}`}
-            className={`flex flex-col min-h-[260px] xl:min-h-[420px] min-w-0 transition-colors ${
+            className={`flex flex-col min-h-[240px] @4xl:min-h-[420px] min-w-0 transition-colors ${
               isToday ? 'bg-[var(--bg-surface)]' : 'bg-[var(--bg-surface)]/95'
             }`}
           >
@@ -212,7 +212,7 @@ export function CalendarWeekView({
                 type="button"
                 onClick={() => onSelectDay?.(day.startOfDay)}
                 data-testid={`week-day-header-${day.dateKey}`}
-                className="inline-flex items-center gap-1.5 text-left group focus:outline-none focus:ring-2 focus:ring-[var(--text-primary)] rounded-full pr-1 min-w-0"
+                className="inline-flex items-center gap-1.5 text-left group focus:outline-none focus:ring-2 focus:ring-[var(--text-primary)] rounded-[var(--radius-sm)] pr-1 min-w-0"
                 title={`Open Day view for ${day.weekdayName}, ${monthShort} ${day.day}`}
               >
                 <span
@@ -223,7 +223,7 @@ export function CalendarWeekView({
                   {day.weekdayName}
                 </span>
                 <span
-                  className={`inline-flex items-center justify-center min-w-[24px] h-6 px-1.5 rounded-full text-xs font-bold transition-transform group-hover:scale-105 shrink-0 ${
+                  className={`inline-flex items-center justify-center min-w-[24px] h-6 px-1.5 rounded-[var(--radius-xs)] text-xs font-bold tabular-nums transition-transform group-hover:scale-105 shrink-0 ${
                     isToday
                       ? 'bg-[var(--accent)] text-[var(--accent-ink)] shadow-2xs'
                       : 'bg-[var(--bg-surface)] text-[var(--text-primary)] border border-[var(--border-subtle)] group-hover:border-[var(--border-strong)]'
@@ -236,7 +236,7 @@ export function CalendarWeekView({
               <div className="flex items-center gap-1 shrink-0">
                 {totalCount > 0 && (
                   <span
-                    className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded-full bg-[var(--bg-surface)] text-[var(--text-secondary)] border border-[var(--border-subtle)]"
+                    className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded-[var(--radius-xs)] bg-[var(--bg-surface)] text-[var(--text-secondary)] border border-[var(--border-subtle)] tabular-nums"
                     title={`${totalCount} scheduled ${totalCount === 1 ? 'item' : 'items'}`}
                   >
                     {totalCount}
@@ -246,7 +246,7 @@ export function CalendarWeekView({
                   <button
                     type="button"
                     onClick={() => onScheduleOnDate(day.dateKey)}
-                    className="w-6 h-6 inline-flex items-center justify-center rounded-full text-[var(--text-secondary)] hover:text-[var(--accent-ink)] hover:bg-[var(--accent)] transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--text-primary)]"
+                    className="w-6 h-6 inline-flex items-center justify-center rounded-[var(--radius-xs)] text-[var(--text-secondary)] hover:text-[var(--accent-ink)] hover:bg-[var(--accent)] transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--text-primary)]"
                     title={`Schedule on ${day.weekdayName}, ${monthShort} ${day.day}`}
                     aria-label={`Schedule on ${day.weekdayName}, ${monthShort} ${day.day}`}
                   >
@@ -259,13 +259,13 @@ export function CalendarWeekView({
             {/* Day Items & Tasks Stack */}
             <div className="flex-1 p-2.5 space-y-2">
               {totalCount === 0 ? (
-                <div className="h-full min-h-[150px] flex flex-col items-center justify-center text-center p-3 rounded-xl border border-dashed border-[var(--border-subtle)]/80 bg-[var(--bg-subtle)]/20">
+                <div className="h-full min-h-[150px] flex flex-col items-center justify-center text-center p-3 rounded-[var(--radius-sm)] border border-dashed border-[var(--border-subtle)]/80 bg-[var(--bg-subtle)]/20">
                   <p className="text-[11px] text-[var(--text-tertiary)] mb-2">Open day</p>
                   {onScheduleOnDate && (
                     <button
                       type="button"
                       onClick={() => onScheduleOnDate(day.dateKey)}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium text-[var(--text-secondary)] hover:text-[var(--accent-ink)] bg-[var(--bg-surface)] hover:bg-[var(--accent)] border border-[var(--border-subtle)] hover:border-transparent transition-colors"
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[var(--radius-sm)] text-[11px] font-medium text-[var(--text-secondary)] hover:text-[var(--accent-ink)] bg-[var(--bg-surface)] hover:bg-[var(--accent)] border border-[var(--border-subtle)] hover:border-transparent transition-colors"
                     >
                       <Plus className="w-3 h-3" />
                       <span>Schedule</span>
@@ -298,7 +298,7 @@ export function CalendarWeekView({
                           data-testid={`week-task-${task.id}`}
                           data-cal-color={colorToken.name}
                           title={task.title}
-                          className={`w-full text-left p-2.5 rounded-xl border border-l-3 transition-all space-y-1.5 group focus:outline-none focus:ring-2 focus:ring-[var(--text-primary)] ${colorToken.colorClass} cal-card-surface`}
+                          className={`w-full text-left p-2.5 rounded-[var(--radius-sm)] border border-l-3 transition-all space-y-1.5 group focus:outline-none focus:ring-2 focus:ring-[var(--text-primary)] ${colorToken.colorClass} cal-card-surface`}
                         >
                           <div className="flex items-center justify-between gap-1.5">
                             <span className="inline-flex items-center gap-1 text-[10px] font-mono font-semibold text-[var(--text-secondary)] truncate">
@@ -310,7 +310,7 @@ export function CalendarWeekView({
                               <span>{timeStr}</span>
                             </span>
                             <span
-                              className={`px-1.5 py-0 rounded-full text-[9px] font-semibold border shrink-0 ${priorityInfo.badgeClass}`}
+                              className={`px-1.5 py-0 rounded-[var(--radius-xs)] text-[9px] font-semibold border shrink-0 ${priorityInfo.badgeClass}`}
                             >
                               {priorityInfo.label}
                             </span>
@@ -374,7 +374,7 @@ export function CalendarWeekView({
                         data-testid={`week-content-${item.id}`}
                         data-cal-color={colorToken.name}
                         title={item.title || item.body || 'Untitled post'}
-                        className={`w-full text-left p-2.5 rounded-xl border border-l-3 transition-all space-y-1.5 group focus:outline-none focus:ring-2 focus:ring-[var(--text-primary)] ${colorToken.colorClass} cal-card-surface`}
+                        className={`w-full text-left p-2.5 rounded-[var(--radius-sm)] border border-l-3 transition-all space-y-1.5 group focus:outline-none focus:ring-2 focus:ring-[var(--text-primary)] ${colorToken.colorClass} cal-card-surface`}
                       >
                         {/* Top row: Time & Platform Badge */}
                         <div className="flex items-center justify-between gap-1.5">
@@ -388,7 +388,7 @@ export function CalendarWeekView({
                           </span>
 
                           <span
-                            className={`inline-flex items-center gap-1 px-1.5 py-0.2 rounded-full text-[9px] font-semibold border shrink-0 ${platformInfo.badgeClass}`}
+                            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[var(--radius-xs)] text-[9px] font-semibold border shrink-0 ${platformInfo.badgeClass}`}
                           >
                             <Share2 className="w-2.5 h-2.5 shrink-0" />
                             {platformInfo.label}
@@ -423,7 +423,7 @@ export function CalendarWeekView({
                       onClick={() => toggleExpandDay(day.dateKey)}
                       data-testid={`week-day-more-${day.dateKey}`}
                       aria-expanded={isExpanded}
-                      className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl text-[11px] font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] bg-[var(--bg-subtle)]/70 hover:bg-[var(--bg-hover)] border border-[var(--border-subtle)] transition-colors"
+                      className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-[var(--radius-sm)] text-[11px] font-semibold text-[var(--text-secondary)] hover:text-[var(--text-primary)] bg-[var(--bg-subtle)]/70 hover:bg-[var(--bg-hover)] border border-[var(--border-subtle)] transition-colors"
                     >
                       <span>
                         {isExpanded

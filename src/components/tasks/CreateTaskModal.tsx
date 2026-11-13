@@ -247,7 +247,7 @@ export function CreateTaskModal({
   };
 
   const inputBaseClass =
-    'w-full px-3.5 py-2 text-xs sm:text-sm rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] hover:border-[var(--border-strong)] transition-colors';
+    'input-control w-full px-3 py-2 text-xs sm:text-[13px]';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/45 dark:bg-black/70 backdrop-blur-xs animate-in fade-in duration-150">
@@ -257,7 +257,7 @@ export function CreateTaskModal({
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className="surface-card bg-[var(--bg-surface-elevated)] max-w-xl w-full max-h-[90vh] flex flex-col overflow-hidden text-[var(--text-primary)] shadow-[var(--shadow-elevated)]"
+        className="surface-elevated rounded-[var(--radius-lg)] max-w-xl w-full max-h-[90vh] flex flex-col overflow-hidden text-[var(--text-primary)] shadow-[var(--shadow-elevated)]"
       >
         {/* Header */}
         <div className="flex items-start justify-between gap-3 border-b border-[var(--border-subtle)] px-5 sm:px-6 py-4 shrink-0">
@@ -282,7 +282,7 @@ export function CreateTaskModal({
             onClick={onClose}
             disabled={isPending}
             aria-label="Close dialog"
-            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-muted)] transition-colors"
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-sm)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-muted)] transition-colors"
           >
             <X className="w-4 h-4" aria-hidden="true" />
           </button>
@@ -302,7 +302,7 @@ export function CreateTaskModal({
               <div
                 role="radiogroup"
                 aria-label="Entry Type"
-                className="grid grid-cols-2 gap-2 p-1 rounded-xl bg-[var(--bg-surface-muted)] border border-[var(--border-subtle)]"
+                className="grid grid-cols-2 gap-1.5 p-1 rounded-[var(--radius-sm)] bg-[var(--bg-surface-muted)] border border-[var(--border-subtle)]"
               >
                 <button
                   type="button"
@@ -310,9 +310,9 @@ export function CreateTaskModal({
                   aria-checked={entryType === 'task'}
                   data-testid="entry-type-task"
                   onClick={() => setEntryType('task')}
-                  className={`flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                  className={`flex items-center justify-center gap-2 px-3 py-2 rounded-[5px] text-xs font-medium transition-all ${
                     entryType === 'task'
-                      ? 'bg-[var(--bg-surface-elevated)] text-[var(--text-primary)] shadow-xs font-semibold'
+                      ? 'bg-[var(--bg-surface-elevated)] text-[var(--text-primary)] shadow-2xs ring-1 ring-[var(--border-subtle)] font-semibold'
                       : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
                   }`}
                 >
@@ -328,9 +328,9 @@ export function CreateTaskModal({
                     setEntryType('calendar_block');
                     setIsScheduled(true);
                   }}
-                  className={`flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                  className={`flex items-center justify-center gap-2 px-3 py-2 rounded-[5px] text-xs font-medium transition-all ${
                     entryType === 'calendar_block'
-                      ? 'bg-[var(--bg-surface-elevated)] text-[var(--text-primary)] shadow-xs font-semibold'
+                      ? 'bg-[var(--bg-surface-elevated)] text-[var(--text-primary)] shadow-2xs ring-1 ring-[var(--border-subtle)] font-semibold'
                       : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
                   }`}
                 >
@@ -349,7 +349,7 @@ export function CreateTaskModal({
           {error && (
             <div
               role="alert"
-              className="flex items-start gap-2.5 p-3.5 rounded-2xl border badge-danger text-xs"
+              className="flex items-start gap-2.5 p-3.5 rounded-[var(--radius-md)] border badge-danger text-xs"
             >
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
               <span className="min-w-0 break-words">{error}</span>
@@ -412,7 +412,7 @@ export function CreateTaskModal({
                 id="task-priority"
                 name="priority"
                 defaultValue="medium"
-                className="w-full h-9.5 px-3 text-xs rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] hover:border-[var(--border-strong)] transition-colors"
+                className="input-control w-full h-9 px-3 text-xs"
               >
                 <option value="low">Low</option>
                 <option value="medium">Medium</option>
@@ -432,7 +432,7 @@ export function CreateTaskModal({
                 id="task-status"
                 name="status"
                 defaultValue="todo"
-                className="w-full h-9.5 px-3 text-xs rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] hover:border-[var(--border-strong)] transition-colors"
+                className="input-control w-full h-9 px-3 text-xs"
               >
                 <option value="todo">To Do</option>
                 <option value="in_progress">In Progress</option>
@@ -452,7 +452,7 @@ export function CreateTaskModal({
                   id="task-project"
                   name="project_id"
                   defaultValue=""
-                  className="w-full h-9.5 px-3 text-xs rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] hover:border-[var(--border-strong)] transition-colors"
+                  className="input-control w-full h-9 px-3 text-xs"
                 >
                   <option value="">No Project</option>
                   {projects.map((p) => (
@@ -466,7 +466,7 @@ export function CreateTaskModal({
           </div>
 
           {/* Timing & Dates Section */}
-          <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface-muted)]/55 p-4 space-y-3.5">
+          <div className="rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-surface-muted)]/55 p-4 space-y-3.5">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <label className="inline-flex items-center gap-2 cursor-pointer text-xs font-semibold text-[var(--text-primary)]">
                 <input
@@ -515,7 +515,7 @@ export function CreateTaskModal({
                     value={scheduledStart}
                     onChange={(e) => setScheduledStart(e.target.value)}
                     required={isScheduled}
-                    className="w-full px-3 py-1.5 text-xs rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] font-mono"
+                    className="input-control w-full px-3 py-1.5 text-xs font-mono"
                   />
                 </div>
 
@@ -532,7 +532,7 @@ export function CreateTaskModal({
                     type={isAllDay ? 'date' : 'datetime-local'}
                     value={scheduledEnd}
                     onChange={(e) => setScheduledEnd(e.target.value)}
-                    className="w-full px-3 py-1.5 text-xs rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] font-mono"
+                    className="input-control w-full px-3 py-1.5 text-xs font-mono"
                   />
                 </div>
               </div>
@@ -554,7 +554,7 @@ export function CreateTaskModal({
                   id="due-date"
                   name="due_date"
                   type={isAllDay ? 'date' : 'datetime-local'}
-                  className="w-full px-3 py-1.5 text-xs rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] font-mono"
+                  className="input-control w-full px-3 py-1.5 text-xs font-mono"
                 />
               </div>
 
@@ -572,7 +572,7 @@ export function CreateTaskModal({
                   min="5"
                   step="5"
                   placeholder="e.g. 60"
-                  className="w-full px-3 py-1.5 text-xs rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] font-mono"
+                  className="input-control w-full px-3 py-1.5 text-xs font-mono"
                 />
               </div>
             </div>
@@ -580,7 +580,7 @@ export function CreateTaskModal({
 
           {/* Recurrence Rule Section (top-level tasks only) */}
           {!parentTaskId && (
-            <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface-muted)]/55 p-4 space-y-4">
+            <div className="rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-surface-muted)]/55 p-4 space-y-4">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-[var(--text-primary)] inline-flex items-center gap-1.5">
                   <Clock className="w-3.5 h-3.5 text-[var(--text-secondary)]" aria-hidden="true" />
@@ -604,7 +604,7 @@ export function CreateTaskModal({
                     name="recurrence_frequency"
                     value={recurrenceFreq}
                     onChange={(e) => setRecurrenceFreq(e.target.value)}
-                    className="w-full h-9 px-3 text-xs rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)]"
+                    className="input-control w-full h-9 px-3 text-xs"
                   >
                     <option value="none">One-time Task</option>
                     <option value="daily">Daily</option>
@@ -639,7 +639,7 @@ export function CreateTaskModal({
                       onChange={(e) =>
                         setRecurrenceInterval(Math.max(1, parseInt(e.target.value, 10) || 1))
                       }
-                      className="w-full h-9 px-3 text-xs rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] font-mono"
+                      className="input-control w-full h-9 px-3 text-xs font-mono"
                     />
                   </div>
                 )}
@@ -672,7 +672,7 @@ export function CreateTaskModal({
                                 : [...prev, day].sort((a, b) => a - b)
                             );
                           }}
-                          className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-colors ${
+                          className={`px-3 py-1.5 text-xs rounded-[var(--radius-sm)] font-medium transition-colors ${
                             isSelected
                               ? 'bg-[var(--text-primary)] text-[var(--bg-canvas)] shadow-2xs font-semibold'
                               : 'bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-surface-elevated)] border border-[var(--border-subtle)]'
@@ -705,7 +705,7 @@ export function CreateTaskModal({
                         Math.min(31, Math.max(1, parseInt(e.target.value, 10) || 1))
                       )
                     }
-                    className="w-28 h-9 px-3 text-xs rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] font-mono"
+                    className="input-control w-28 h-9 px-3 text-xs font-mono"
                   />
                   <p className="text-[11px] text-[var(--text-muted)]">
                     Months with fewer days safely clamp to month-end without drifting.
@@ -727,7 +727,7 @@ export function CreateTaskModal({
                     Termination Condition
                   </label>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                    <label className="flex items-center gap-2 p-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] cursor-pointer text-xs">
+                    <label className="flex items-center gap-2 p-2 rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] cursor-pointer text-xs">
                       <input
                         type="radio"
                         name="recurrence_end_option"
@@ -739,7 +739,7 @@ export function CreateTaskModal({
                       <span>Never ends</span>
                     </label>
 
-                    <label className="flex items-center gap-2 p-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] cursor-pointer text-xs">
+                    <label className="flex items-center gap-2 p-2 rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] cursor-pointer text-xs">
                       <input
                         type="radio"
                         name="recurrence_end_option"
@@ -751,7 +751,7 @@ export function CreateTaskModal({
                       <span>On Date</span>
                     </label>
 
-                    <label className="flex items-center gap-2 p-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] cursor-pointer text-xs">
+                    <label className="flex items-center gap-2 p-2 rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] cursor-pointer text-xs">
                       <input
                         type="radio"
                         name="recurrence_end_option"
@@ -778,7 +778,7 @@ export function CreateTaskModal({
                         value={recurrenceUntilDate}
                         onChange={(e) => setRecurrenceUntilDate(e.target.value)}
                         required
-                        className="w-full sm:w-64 h-9 px-3 text-xs rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] font-mono"
+                        className="input-control w-full sm:w-64 h-9 px-3 text-xs font-mono"
                       />
                     </div>
                   )}
@@ -800,7 +800,7 @@ export function CreateTaskModal({
                           setRecurrenceCount(Math.max(1, parseInt(e.target.value, 10) || 1))
                         }
                         required
-                        className="w-32 h-9 px-3 text-xs rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] font-mono"
+                        className="input-control w-32 h-9 px-3 text-xs font-mono"
                       />
                     </div>
                   )}

@@ -33,6 +33,7 @@ import {
 import { formatRecurrenceSummary } from '@/lib/temporal/recurrence';
 import { toLocalDatetimeString, parseLocalDatetimeString } from '@/lib/temporal/calendar';
 import { DEFAULT_TIMEZONE } from '@/lib/temporal/timezone';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { CreateTaskModal } from './CreateTaskModal';
 
 interface TaskDetailModalProps {
@@ -64,6 +65,7 @@ export function TaskDetailModal({
   const [selectedPrereqId, setSelectedPrereqId] = useState('');
   const [depError, setDepError] = useState<string | null>(null);
   const [isActionPending, setIsActionPending] = useState(false);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
 
   // Edit Task (This Occurrence Only) State
   const [isEditingTask, setIsEditingTask] = useState(false);
@@ -120,6 +122,7 @@ export function TaskDetailModal({
     setIsEditingTask(false);
     setIsEditingRecurrence(false);
     setIsStopConfirmOpen(false);
+    setIsDeleteConfirmOpen(false);
 
     setEditTitle(task.title);
     setEditEntryType(task.entry_type || 'task');
@@ -152,7 +155,11 @@ export function TaskDetailModal({
   }
 
   const isVirtual = Boolean(currentTask.is_virtual);
-  const dialogRef = useDialog(isOpen && !isSubtaskModalOpen, onClose, isActionPending);
+  const dialogRef = useDialog(
+    isOpen && !isSubtaskModalOpen && !isDeleteConfirmOpen,
+    onClose,
+    isActionPending
+  );
   const titleId = useId();
 
   if (!isOpen) return null;
@@ -289,13 +296,20 @@ export function TaskDetailModal({
     }
   };
 
-  const handleDelete = async () => {
-    if (!confirm(`Are you sure you want to delete task "${currentTask.title}"?`)) return;
+  const handleConfirmDelete = async () => {
     try {
       setIsActionPending(true);
       await deleteTaskAction(workspaceId, currentTask.id);
+      setIsDeleteConfirmOpen(false);
       onTaskUpdated?.();
       onClose();
+    } catch (err) {
+      setIsDeleteConfirmOpen(false);
+      setStatusError(
+        err instanceof Error
+          ? err.message
+          : 'An unexpected error occurred while deleting this task.'
+      );
     } finally {
       setIsActionPending(false);
     }
@@ -541,7 +555,7 @@ export function TaskDetailModal({
   };
 
   const inputBaseClass =
-    'w-full px-3 py-1.5 text-xs rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] hover:border-[var(--border-strong)] transition-colors font-mono';
+    'input-control w-full px-3 py-1.5 text-xs font-mono';
 
   return (
     <>
@@ -552,7 +566,7 @@ export function TaskDetailModal({
           aria-modal="true"
           aria-labelledby={titleId}
           tabIndex={-1}
-          className="surface-card bg-[var(--bg-surface-elevated)] max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden text-[var(--text-primary)] shadow-[var(--shadow-elevated)]"
+          className="surface-elevated rounded-[var(--radius-lg)] max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden text-[var(--text-primary)] shadow-[var(--shadow-elevated)]"
         >
           {/* Header */}
           <div className="flex items-start justify-between gap-4 border-b border-[var(--border-subtle)] px-5 sm:px-6 py-4 shrink-0 min-w-0">
@@ -560,7 +574,7 @@ export function TaskDetailModal({
               <div className="flex flex-wrap items-center gap-2">
                 <span
                   className={clsx(
-                    'px-2.5 py-0.5 rounded-full text-[11px] font-medium capitalize',
+                    'px-2 py-0.5 rounded-[var(--radius-xs)] text-[11px] font-medium capitalize',
                     priorityBadgeClass(currentTask.priority)
                   )}
                 >
@@ -569,7 +583,7 @@ export function TaskDetailModal({
 
                 <span
                   className={clsx(
-                    'px-2.5 py-0.5 rounded-full text-[11px] font-medium border',
+                    'px-2 py-0.5 rounded-[var(--radius-xs)] text-[11px] font-medium border',
                     currentTask.entry_type === 'calendar_block'
                       ? 'badge-editorial'
                       : 'bg-[var(--bg-surface-muted)] text-[var(--text-secondary)] border-[var(--border-subtle)]'
@@ -579,7 +593,7 @@ export function TaskDetailModal({
                 </span>
 
                 {currentTask.project && (
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-[var(--bg-surface-muted)] text-[var(--text-secondary)] border border-[var(--border-subtle)] max-w-[200px]">
+                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-[var(--radius-xs)] text-[11px] font-medium bg-[var(--bg-surface-muted)] text-[var(--text-secondary)] border border-[var(--border-subtle)] max-w-[200px]">
                     <span
                       className="w-1.5 h-1.5 rounded-full shrink-0"
                       style={{ backgroundColor: currentTask.project.color || '#575651' }}
@@ -589,7 +603,7 @@ export function TaskDetailModal({
                 )}
 
                 {currentTask.recurrence_rule_id && (
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium badge-editorial border">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[var(--radius-xs)] text-[11px] font-medium badge-editorial border">
                     <Clock className="w-3 h-3" aria-hidden="true" />
                     <span>
                       {isVirtual
@@ -600,7 +614,7 @@ export function TaskDetailModal({
                 )}
 
                 {isEditingTask && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-[var(--status-info-bg)] text-[var(--status-info-text)] border border-[var(--border-subtle)]">
+                  <span className="px-2 py-0.5 rounded-[var(--radius-xs)] text-[10px] font-medium bg-[var(--status-info-bg)] text-[var(--status-info-text)] border border-[var(--border-subtle)]">
                     {currentTask.recurrence_rule_id
                       ? 'Scope: This occurrence only'
                       : 'Edit Task'}
@@ -628,7 +642,7 @@ export function TaskDetailModal({
                   type="button"
                   onClick={() => setIsEditingTask(true)}
                   aria-label="Edit task properties"
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-muted)] transition-colors"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-muted)] transition-colors"
                   title="Edit occurrence properties"
                 >
                   <Edit3 className="w-3.5 h-3.5" aria-hidden="true" />
@@ -639,7 +653,7 @@ export function TaskDetailModal({
                 type="button"
                 onClick={onClose}
                 aria-label="Close task details"
-                className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-muted)] transition-colors"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-muted)] transition-colors"
               >
                 <X className="w-4 h-4" aria-hidden="true" />
               </button>
@@ -647,13 +661,13 @@ export function TaskDetailModal({
           </div>
 
           {/* Status Strip */}
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border-subtle)] bg-[var(--bg-surface-muted)]/45 px-5 sm:px-6 py-3 shrink-0">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-xs font-medium text-[var(--text-muted)] mr-1">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border-subtle)] bg-[var(--bg-surface-muted)]/45 px-5 sm:px-6 py-2.5 shrink-0">
+            <div className="flex flex-wrap items-center gap-1">
+              <span className="text-xs font-medium text-[var(--text-muted)] mr-1.5">
                 Status:
               </span>
               {isVirtual ? (
-                <span className="px-3 py-1 text-xs rounded-full font-semibold bg-[var(--bg-surface)] text-[var(--text-secondary)] border border-[var(--border-subtle)] shadow-2xs">
+                <span className="px-2.5 py-1 text-xs rounded-[var(--radius-sm)] font-semibold bg-[var(--bg-surface)] text-[var(--text-secondary)] border border-[var(--border-subtle)] shadow-2xs">
                   Planned Future Occurrence (Read-Only Preview)
                 </span>
               ) : (
@@ -667,7 +681,7 @@ export function TaskDetailModal({
                         disabled={isActionPending}
                         onClick={() => handleStatusChange(st)}
                         className={clsx(
-                          'px-3 py-1 text-xs rounded-full font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap',
+                          'px-2.5 py-1 text-xs rounded-[var(--radius-sm)] font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap',
                           isCurrent
                             ? 'bg-[var(--text-primary)] text-[var(--bg-canvas)] font-semibold shadow-2xs'
                             : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface)]'
@@ -757,7 +771,7 @@ export function TaskDetailModal({
 
             {/* EDIT TASK FORM (This Occurrence Only) */}
             {isEditingTask ? (
-              <form onSubmit={handleSaveTaskEdit} className="p-4 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface-muted)]/40 space-y-4">
+              <form onSubmit={handleSaveTaskEdit} className="p-4 rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-surface-muted)]/40 space-y-4">
                 <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-2.5">
                   <span className="text-xs font-semibold text-[var(--text-primary)]">
                     {currentTask.recurrence_rule_id
@@ -805,7 +819,7 @@ export function TaskDetailModal({
                       id="edit-task-entry-type"
                       value={editEntryType}
                       onChange={(e) => setEditEntryType(e.target.value as 'task' | 'calendar_block')}
-                      className="w-full h-8 px-3 text-xs rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)]"
+                      className="input-control w-full h-8 px-2.5 text-xs"
                     >
                       <option value="task">Actionable Task</option>
                       <option value="calendar_block">Calendar Block</option>
@@ -820,7 +834,7 @@ export function TaskDetailModal({
                       id="edit-task-priority"
                       value={editPriority}
                       onChange={(e) => setEditPriority(e.target.value as TaskPriority)}
-                      className="w-full h-8 px-3 text-xs rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)]"
+                      className="input-control w-full h-8 px-2.5 text-xs"
                     >
                       <option value="low">Low</option>
                       <option value="medium">Medium</option>
@@ -951,7 +965,7 @@ export function TaskDetailModal({
             )}
 
             {/* RECURRENCE SCHEDULE SECTION */}
-            <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface-muted)]/50 p-4 space-y-3.5">
+            <div className="rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-surface-muted)]/50 p-4 space-y-3.5">
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border-subtle)] pb-2.5">
                 <div className="flex items-center gap-2">
                   <Repeat className="w-4 h-4 text-[var(--text-secondary)]" aria-hidden="true" />
@@ -959,7 +973,7 @@ export function TaskDetailModal({
                     Recurring Series Schedule
                   </span>
                 </div>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-[var(--bg-surface)] text-[var(--text-secondary)] border border-[var(--border-subtle)]">
+                <span className="px-2 py-0.5 rounded-[var(--radius-xs)] text-[10px] font-medium bg-[var(--bg-surface)] text-[var(--text-secondary)] border border-[var(--border-subtle)]">
                   Scope: Entire Series
                 </span>
               </div>
@@ -993,7 +1007,7 @@ export function TaskDetailModal({
                           type="button"
                           disabled={isActionPending}
                           onClick={() => setIsStopConfirmOpen(true)}
-                          className="px-3 py-1.5 text-xs rounded-full font-medium text-[var(--status-danger-text)] hover:bg-[var(--status-danger-bg)] transition-colors"
+                          className="px-3 py-1.5 text-xs rounded-[var(--radius-sm)] font-medium text-[var(--status-danger-text)] hover:bg-[var(--status-danger-bg)] transition-colors"
                         >
                           Stop Recurrence
                         </button>
@@ -1012,7 +1026,7 @@ export function TaskDetailModal({
                             onChange={(e) =>
                               setRuleFreq(e.target.value as 'daily' | 'weekly' | 'monthly' | 'yearly')
                             }
-                            className="w-full h-8 px-3 text-xs rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)]"
+                            className="input-control w-full h-8 px-2.5 text-xs"
                           >
                             <option value="daily">Daily</option>
                             <option value="weekly">Weekly</option>
@@ -1100,7 +1114,7 @@ export function TaskDetailModal({
                           Termination Condition
                         </label>
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                          <label className="flex items-center gap-2 p-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] cursor-pointer text-xs">
+                          <label className="flex items-center gap-2 p-2 rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] cursor-pointer text-xs">
                             <input
                               type="radio"
                               name="detail_recurrence_end"
@@ -1111,7 +1125,7 @@ export function TaskDetailModal({
                             <span>Never ends</span>
                           </label>
 
-                          <label className="flex items-center gap-2 p-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] cursor-pointer text-xs">
+                          <label className="flex items-center gap-2 p-2 rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] cursor-pointer text-xs">
                             <input
                               type="radio"
                               name="detail_recurrence_end"
@@ -1122,7 +1136,7 @@ export function TaskDetailModal({
                             <span>On Date</span>
                           </label>
 
-                          <label className="flex items-center gap-2 p-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] cursor-pointer text-xs">
+                          <label className="flex items-center gap-2 p-2 rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] cursor-pointer text-xs">
                             <input
                               type="radio"
                               name="detail_recurrence_end"
@@ -1144,7 +1158,7 @@ export function TaskDetailModal({
                               required
                               value={ruleUntilDate}
                               onChange={(e) => setRuleUntilDate(e.target.value)}
-                              className="w-full sm:w-60 h-8 px-3 text-xs rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] font-mono"
+                              className="input-control w-full sm:w-60 h-8 px-3 text-xs font-mono"
                             />
                           </div>
                         )}
@@ -1160,7 +1174,7 @@ export function TaskDetailModal({
                               required
                               value={ruleCount}
                               onChange={(e) => setRuleCount(Math.max(1, parseInt(e.target.value, 10) || 1))}
-                              className="w-32 h-8 px-3 text-xs rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] font-mono"
+                              className="input-control w-32 h-8 px-3 text-xs font-mono"
                             />
                             {currentTask.recurrence_rule?.total_occurrences_generated && (
                               <p className="text-[11px] text-[var(--text-muted)] font-mono">
@@ -1392,7 +1406,7 @@ export function TaskDetailModal({
                     aria-label="Select prerequisite task"
                     value={selectedPrereqId}
                     onChange={(e) => setSelectedPrereqId(e.target.value)}
-                    className="flex-1 min-w-0 h-9 px-3 text-xs rounded-full border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-primary)] hover:border-[var(--border-strong)] transition-colors"
+                    className="input-control flex-1 min-w-0 h-9 px-3 text-xs"
                   >
                     <option value="">Select prerequisite task...</option>
                     {candidatePrereqs.map((cp) => (
@@ -1420,8 +1434,8 @@ export function TaskDetailModal({
               <button
                 type="button"
                 disabled={isActionPending}
-                onClick={handleDelete}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-[var(--status-danger-text)] hover:bg-[var(--status-danger-bg)] rounded-full transition-colors disabled:opacity-50"
+                onClick={() => setIsDeleteConfirmOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[var(--status-danger-text)] hover:bg-[var(--status-danger-bg)] rounded-[var(--radius-sm)] transition-colors disabled:opacity-50"
               >
                 <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
                 <span>Delete Task</span>
@@ -1449,6 +1463,7 @@ export function TaskDetailModal({
           workspaceId={workspaceId}
           projects={currentTask.project ? [currentTask.project] : []}
           parentTaskId={currentTask.id}
+          userTimeZone={userTimeZone}
           isOpen={isSubtaskModalOpen}
           onClose={() => {
             setIsSubtaskModalOpen(false);
@@ -1458,6 +1473,18 @@ export function TaskDetailModal({
           }}
         />
       )}
+
+      {/* Accessible Non-Native Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={isDeleteConfirmOpen}
+        onCancel={() => setIsDeleteConfirmOpen(false)}
+        onConfirm={handleConfirmDelete}
+        title="Delete Task"
+        description={`Are you sure you want to delete "${currentTask.title}"? Any dependent blockers referencing it will be cleared.`}
+        confirmLabel="Delete Task"
+        tone="danger"
+        isPending={isActionPending}
+      />
     </>
   );
 }
