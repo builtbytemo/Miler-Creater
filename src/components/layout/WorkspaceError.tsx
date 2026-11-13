@@ -4,9 +4,6 @@ import Link from 'next/link';
 import { AlertCircle, RotateCcw, ArrowUpRight } from 'lucide-react';
 import { AppNavigation } from '@/components/layout/AppNavigation';
 
-/**
- * Standardized workspace error boundary view preserving sidebar navigation and recovery actions.
- */
 export function WorkspaceError({
   reset,
 }: {
@@ -26,31 +23,31 @@ export function WorkspaceError({
       >
         <div
           role="alert"
-          className="surface-card w-full max-w-md p-8 sm:p-10 text-center space-y-4"
+          className="surface-card w-full max-w-md p-6 sm:p-8 text-center space-y-4"
         >
-          <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-[var(--radius-md)] badge-warning border">
+          <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-[var(--radius-sm)] badge-warning border">
             <AlertCircle aria-hidden="true" className="h-5 w-5" />
           </div>
-          <div className="space-y-2">
-            <h1 className="heading-section text-xl">
+          <div className="space-y-1.5">
+            <h1 className="heading-section text-base">
               This page couldn’t load
             </h1>
-            <p className="text-sm leading-relaxed text-[var(--text-secondary)]">
+            <p className="text-xs leading-relaxed text-[var(--text-secondary)]">
               Try loading it again. If the problem continues, return to your overview and try another page.
             </p>
           </div>
-          <div className="pt-2 flex flex-wrap justify-center gap-2.5">
+          <div className="pt-1 flex flex-wrap justify-center gap-2">
             <button
               type="button"
               onClick={reset}
-              className="btn-accent min-h-9 px-4 py-2 text-xs"
+              className="btn-accent h-8 px-3.5 text-xs"
             >
               <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
               <span>Try again</span>
             </button>
             <Link
               href="/dashboard"
-              className="btn-secondary min-h-9 px-4 py-2 text-xs"
+              className="btn-secondary h-8 px-3.5 text-xs"
             >
               <span>Go to overview</span>
               <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />

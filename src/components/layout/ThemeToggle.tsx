@@ -160,7 +160,7 @@ export function ThemeToggle({ variant = 'segmented', className }: ThemeTogglePro
         title={nextLabel}
         data-testid="theme-toggle-compact"
         className={clsx(
-          'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border transition-colors',
+          'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-sm)] border transition-colors',
           'border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-secondary)]',
           'hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]',
           className
@@ -187,7 +187,7 @@ export function ThemeToggle({ variant = 'segmented', className }: ThemeTogglePro
       aria-label="Color theme"
       data-testid="theme-toggle-group"
       className={clsx(
-        'grid w-full min-w-0 grid-cols-3 items-center gap-0.5 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-surface-muted)] p-1',
+        'grid w-full min-w-0 grid-cols-3 items-center gap-0.5 rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-surface-muted)] p-0.5',
         className
       )}
     >
@@ -203,7 +203,7 @@ export function ThemeToggle({ variant = 'segmented', className }: ThemeTogglePro
             aria-label={`${opt.label} theme`}
             data-testid={`theme-option-${opt.value}`}
             className={clsx(
-              'inline-flex min-h-7 min-w-0 items-center justify-center gap-1 rounded-full px-1.5 py-1 text-[11.5px] leading-none font-medium transition-all',
+              'inline-flex min-h-7 min-w-0 items-center justify-center gap-1 rounded-[var(--radius-sm)] px-1.5 py-1 text-[11.5px] leading-none font-medium transition-all',
               isSelected
                 ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-2xs ring-1 ring-[var(--border-subtle)] font-semibold'
                 : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'

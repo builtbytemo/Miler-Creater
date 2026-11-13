@@ -211,7 +211,7 @@ function CommandPaletteDialog({ onClose }: { onClose: () => void }) {
         className="w-full max-w-lg surface-elevated overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center gap-2.5 border-b border-[var(--border-subtle)] px-4 py-3">
+        <div className="flex items-center gap-2.5 border-b border-[var(--border-subtle)] focus-within:border-[var(--border-strong)] px-4 py-3 transition-colors">
           <Search
             className="h-4 w-4 shrink-0 text-[var(--text-muted)]"
             aria-hidden="true"
@@ -227,7 +227,7 @@ function CommandPaletteDialog({ onClose }: { onClose: () => void }) {
             onKeyDown={handleInputKeyDown}
             placeholder="Jump to workspace, settings, or theme..."
             aria-label="Search Zahi commands and routes"
-            className="w-full bg-transparent text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none"
+            className="w-full bg-transparent text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus-visible:outline-none"
           />
           <button
             type="button"

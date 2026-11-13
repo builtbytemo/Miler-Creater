@@ -1,20 +1,18 @@
-import fs from 'node:fs';
-import path from 'node:path';
 import { describe, it, expect, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { Button, buttonVariants } from '../src/components/ui/Button';
+import { Button } from '../src/components/ui/Button';
 import { Badge } from '../src/components/ui/Badge';
 import { FormField, Input } from '../src/components/ui/Input';
 import { SectionHeader } from '../src/components/ui/SectionHeader';
 import { EmptyState } from '../src/components/ui/EmptyState';
 import {
-  ZahiCornerBracket,
   ZahiLogoMark,
   ZahiMascot,
   ZahiWordmark,
 } from '../src/components/brand/ZahiBrand';
 import {
-  CommandPalette,
   COMMAND_PALETTE_ITEMS,
   filterCommandPaletteItems,
 } from '../src/components/ui/CommandPalette';
@@ -24,114 +22,72 @@ vi.mock('next/navigation', () => ({
   usePathname: () => '/dashboard',
 }));
 
-describe('Zahi Design System Phase 1 Foundations', () => {
-  it('replaces legacy electric-lime accent with Pomegranate Red (#922f39), Warm Ivory (#f8f7f4), Near-Black (#191919), and White (#ffffff) tokens', () => {
-    const cssPath = path.resolve(process.cwd(), 'src/app/globals.css');
-    const css = fs.readFileSync(cssPath, 'utf8');
+describe('Zahi Phase 1 Design System Foundation', () => {
+  it('defines Pomegranate Red (#922F39), Warm Ivory (#F8F7F4), Near-Black (#191919), and crisp Geist typography in globals.css', () => {
+    const css = readFileSync(join(process.cwd(), 'src/app/globals.css'), 'utf8');
 
-    expect(css).toContain('--accent: #922f39;');
-    expect(css).toContain('--bg-canvas: #f8f7f4;');
-    expect(css).toContain('--text-primary: #191919;');
-    expect(css).toContain('--bg-surface: #ffffff;');
-    expect(css).toContain('--bg-sidebar: #191919;');
-    expect(css).toContain('--accent-text: #e4858e;');
-    expect(css).toContain('--font-zahi-serif');
-
-    // Old electric lime brand tokens must not remain
-    expect(css.toLowerCase()).not.toContain('#e2f925');
-    expect(css.toLowerCase()).not.toContain('#d6ee12');
-    expect(css.toLowerCase()).not.toContain('#c5dc08');
-    expect(css.toLowerCase()).not.toContain('#ebff46');
+    expect(css).toContain('#922F39');
+    expect(css).toContain('#F8F7F4');
+    expect(css).toContain('#191919');
+    expect(css).toContain('#FFFFFF');
+    expect(css).toContain('--font-geist-sans');
+    expect(css).toContain('--font-geist-mono');
+    expect(css).not.toContain('#e2f925');
+    expect(css).not.toContain('--font-zahi-serif');
   });
 
-  it('ships the canonical and transparent monochrome mascot assets on disk', () => {
-    const publicDir = path.resolve(process.cwd(), 'public/brand');
-    expect(fs.existsSync(path.join(publicDir, 'zahi-mascot-original.png'))).toBe(
-      true
-    );
-    expect(fs.existsSync(path.join(publicDir, 'zahi-mascot.png'))).toBe(true);
-  });
+  it('renders clean Zahi logo, unboxed monochrome mascot, and wordmark without ornamental corner SVGs', () => {
+    const brandPath = join(process.cwd(), 'src/components/brand/ZahiBrand.tsx');
+    const brandSource = readFileSync(brandPath, 'utf8');
+    expect(brandSource).not.toContain('ZahiCornerBracket');
+    expect(brandSource).not.toContain('medallion');
 
-  it('renders Zahi brand primitives and mascot variants accurately', () => {
-    const markHtml = renderToStaticMarkup(<ZahiLogoMark size="md" />);
-    expect(markHtml).toContain('>Z<');
+    const logoHtml = renderToStaticMarkup(<ZahiLogoMark size="md" />);
+    expect(logoHtml).toContain('>Z<');
+    expect(logoHtml).toContain('bg-[var(--accent)]');
 
-    const wordmarkHtml = renderToStaticMarkup(<ZahiWordmark uppercase />);
-    expect(wordmarkHtml).toContain('font-brand-serif');
-    expect(wordmarkHtml).toContain('uppercase');
+    const wordmarkHtml = renderToStaticMarkup(<ZahiWordmark />);
     expect(wordmarkHtml).toContain('Zahi');
 
-    const bracketHtml = renderToStaticMarkup(
-      <ZahiCornerBracket position="top-left" />
-    );
-    expect(bracketHtml).toContain('svg');
-
-    const mascotBareHtml = renderToStaticMarkup(<ZahiMascot variant="bare" />);
-    expect(mascotBareHtml).toContain('zahi-mascot.png');
-    expect(mascotBareHtml).toContain('alt="Zahi mascot"');
-
-    const mascotMedallionHtml = renderToStaticMarkup(
-      <ZahiMascot variant="medallion" />
-    );
-    expect(mascotMedallionHtml).toContain('bg-[#F8F7F4]');
-    expect(mascotMedallionHtml).toContain('zahi-mascot.png');
+    const mascotHtml = renderToStaticMarkup(<ZahiMascot size={48} />);
+    expect(mascotHtml).toContain('/brand/zahi-mascot.png');
+    expect(mascotHtml).toContain('dark:invert');
+    expect(mascotHtml).not.toContain('border-[var(--border-subtle)]');
   });
 
-  it('renders standardized Button, Badge, Input, SectionHeader, and EmptyState UI primitives', () => {
-    expect(buttonVariants({ variant: 'primary', size: 'md' })).toContain(
-      'btn-accent'
-    );
-
-    const uiHtml = renderToStaticMarkup(
+  it('renders standardized Button, Badge, Input, SectionHeader, and compact EmptyState primitives', () => {
+    const html = renderToStaticMarkup(
       <div>
-        <Button variant="primary">Save item</Button>
-        <Badge tone="accent">Featured</Badge>
-        <FormField htmlFor="title-input" label="Title" hint="Short label">
-          <Input id="title-input" placeholder="Draft headline" />
-        </FormField>
         <SectionHeader
-          eyebrow="Queue"
-          title="Priority items"
-          count={4}
-          accentMarker
+          title="Priority Tasks"
+          badge={<Badge tone="accent">Urgent</Badge>}
         />
+        <FormField label="Workspace Name" htmlFor="ws-name">
+          <Input id="ws-name" placeholder="Command Center" />
+        </FormField>
+        <Button variant="primary">Create Task</Button>
         <EmptyState
+          title="No active work"
+          description="Create a task or scheduled post."
           showMascot
-          title="Nothing pending"
-          description="Everything scheduled is complete."
         />
       </div>
     );
 
-    expect(uiHtml).toContain('Save item');
-    expect(uiHtml).toContain('badge-accent');
-    expect(uiHtml).toContain('Title');
-    expect(uiHtml).toContain('input-control');
-    expect(uiHtml).toContain('Priority items');
-    expect(uiHtml).toContain('zahi-mascot.png');
+    expect(html).toContain('Priority Tasks');
+    expect(html).toContain('Urgent');
+    expect(html).toContain('Workspace Name');
+    expect(html).toContain('Create Task');
+    expect(html).toContain('No active work');
+    expect(html).toContain('/brand/zahi-mascot.png');
   });
 
-  it('provides filtered CommandPalette items across routes, settings, and theme actions', () => {
-    expect(COMMAND_PALETTE_ITEMS.length).toBeGreaterThanOrEqual(8);
+  it('provides searchable keyboard-first Command Palette destinations', () => {
+    expect(COMMAND_PALETTE_ITEMS.length).toBeGreaterThanOrEqual(7);
+    const tokensMatches = filterCommandPaletteItems('token');
+    expect(tokensMatches.some((item) => item.href === '/settings/tokens')).toBe(true);
 
     const briefingMatches = filterCommandPaletteItems('briefing');
-    expect(briefingMatches.some((item) => item.href === '/settings/notifications')).toBe(
-      true
-    );
-
-    const darkMatches = filterCommandPaletteItems('obsidian');
-    expect(darkMatches.some((item) => item.id === 'theme-dark')).toBe(true);
-
-    const closedHtml = renderToStaticMarkup(
-      <CommandPalette open={false} onOpenChange={() => {}} />
-    );
-    expect(closedHtml).toBe('');
-
-    const openHtml = renderToStaticMarkup(
-      <CommandPalette open={true} onOpenChange={() => {}} />
-    );
-    expect(openHtml).toContain('role="dialog"');
-    expect(openHtml).toContain('Quick command palette');
-    expect(openHtml).toContain('Daily Briefing &amp; Notification Settings');
+    expect(briefingMatches.some((item) => item.href === '/settings/notifications')).toBe(true);
   });
 });

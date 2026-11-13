@@ -5,10 +5,7 @@ import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { signInWithEmail, type AuthActionResult } from '@/lib/auth/actions';
 import { GoogleOAuthButton } from '@/components/auth/GoogleOAuthButton';
-import { AuthAlert } from '@/components/auth/AuthAlert';
 import { getSafeRedirectPath } from '@/lib/auth/redirects';
-import { Button } from '@/components/ui/Button';
-import { FormField, Input } from '@/components/ui/Input';
 
 function SignInContent() {
   const searchParams = useSearchParams();
@@ -17,10 +14,10 @@ function SignInContent() {
   const redirectTo = getSafeRedirectPath(rawRedirect, '/dashboard');
   const callbackError = searchParams.get('error');
 
-  const [state, formAction, isPending] = useActionState<
-    AuthActionResult | null,
-    FormData
-  >(signInWithEmail, null);
+  const [state, formAction, isPending] = useActionState<AuthActionResult | null, FormData>(
+    signInWithEmail,
+    null
+  );
 
   useEffect(() => {
     if (state?.success && state.redirectTo) {
@@ -33,37 +30,49 @@ function SignInContent() {
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="heading-section text-lg">Sign in to your workspace</h2>
+        <h2 className="heading-section text-base">
+          Sign in to your workspace
+        </h2>
         <p className="text-xs text-[var(--text-secondary)] mt-1">
           Access your unified content calendar and tasks
         </p>
       </div>
 
       {callbackError && (
-        <AuthAlert
-          tone="danger"
-          message={`Authentication session error: ${callbackError}. Please sign in again.`}
-        />
+        <div className="p-3 text-xs rounded-[var(--radius-sm)] border badge-danger">
+          Authentication session error: {callbackError}. Please sign in again.
+        </div>
       )}
 
-      {state?.error && <AuthAlert tone="danger" message={state.error} />}
+      {state?.error && (
+        <div className="p-3 text-xs rounded-[var(--radius-sm)] border badge-danger">
+          {state.error}
+        </div>
+      )}
 
       <form action={formAction} className="space-y-4">
         <input type="hidden" name="redirectTo" value={redirectTo} />
 
-        <FormField htmlFor="email" label="Email address">
-          <Input
+        <div>
+          <label
+            htmlFor="email"
+            className="block text-xs font-medium text-[var(--text-secondary)] mb-1"
+          >
+            Email address
+          </label>
+          <input
             id="email"
             name="email"
             type="email"
             autoComplete="email"
             required
+            className="input-control px-3 py-2 text-sm"
             placeholder="you@example.com"
           />
-        </FormField>
+        </div>
 
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
+        <div>
+          <div className="flex items-center justify-between mb-1">
             <label
               htmlFor="password"
               className="block text-xs font-medium text-[var(--text-secondary)]"
@@ -72,52 +81,49 @@ function SignInContent() {
             </label>
             <Link
               href="/auth/forgot-password"
-              className="text-xs font-medium text-[var(--accent-text)] hover:underline"
+              className="text-xs text-[var(--accent-text)] hover:underline"
             >
               Forgot password?
             </Link>
           </div>
-          <Input
+          <input
             id="password"
             name="password"
             type="password"
             autoComplete="current-password"
             required
+            className="input-control px-3 py-2 text-sm"
             placeholder="••••••••"
           />
         </div>
 
-        <Button
+        <button
           type="submit"
-          variant="primary"
-          size="lg"
           disabled={isPending}
-          className="w-full"
+          className="btn-accent w-full py-2 px-4 text-sm disabled:opacity-50"
         >
           {isPending ? 'Signing in...' : 'Sign in with Email'}
-        </Button>
+        </button>
       </form>
 
-      <div className="relative my-4">
+      <div className="relative my-3">
         <div className="absolute inset-0 flex items-center">
           <div className="w-full border-t border-[var(--border-subtle)]" />
         </div>
-        <div className="relative flex justify-center text-[11px] font-mono uppercase tracking-wider">
-          <span className="bg-[var(--bg-surface)] px-2.5 text-[var(--text-muted)]">
-            or
-          </span>
+        <div className="relative flex justify-center text-[11px] uppercase tracking-wider">
+          <span className="bg-[var(--bg-surface)] px-2 text-[var(--text-muted)]">or</span>
         </div>
       </div>
 
       <GoogleOAuthButton text="Sign in with Google" redirectTo={redirectTo} />
 
-      <div className="pt-2 text-center text-xs text-[var(--text-secondary)]">
+      <div className="pt-1 text-center text-xs text-[var(--text-secondary)]">
         Don&apos;t have an account?{' '}
         <Link
           href="/auth/sign-up"
           className="font-medium text-[var(--accent-text)] hover:underline"
         >
-          Create account
+          Create one
         </Link>
       </div>
     </div>
@@ -128,8 +134,8 @@ export default function SignInPage() {
   return (
     <Suspense
       fallback={
-        <div className="text-center py-6 text-xs text-[var(--text-muted)]">
-          Loading sign in...
+        <div className="text-center text-xs text-[var(--text-muted)] py-8">
+          Loading sign-in form...
         </div>
       }
     >

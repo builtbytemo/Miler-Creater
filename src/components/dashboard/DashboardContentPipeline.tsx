@@ -2,175 +2,187 @@ import Link from 'next/link';
 import { ArrowUpRight } from 'lucide-react';
 import type { DashboardContentMetrics } from '@/lib/services/dashboard-service';
 import { formatInTimeZone } from '@/lib/temporal/timezone';
-import type { SocialPlatform } from '@/types/database';
 
 interface DashboardContentPipelineProps {
   content: DashboardContentMetrics;
   timeZone: string;
 }
 
-/**
- * Editorial content schedule timeline, pipeline status rollup, and channel distribution ledger.
- */
+const platformNames: Record<keyof DashboardContentMetrics['byPlatform'], string> = {
+  linkedin: 'LinkedIn',
+  reddit: 'Reddit',
+  threads: 'Threads',
+  x: 'X (Twitter)',
+};
+
+const platformCode: Record<keyof DashboardContentMetrics['byPlatform'], string> = {
+  linkedin: 'LI',
+  reddit: 'RD',
+  threads: 'TH',
+  x: 'X',
+};
+
 export function DashboardContentPipeline({
   content,
   timeZone,
 }: DashboardContentPipelineProps) {
-  const platformNames: Record<SocialPlatform, string> = {
-    linkedin: 'LinkedIn',
-    reddit: 'Reddit',
-    threads: 'Threads',
-    x: 'X (Twitter)',
-  };
-
-  const platforms: SocialPlatform[] = ['linkedin', 'reddit', 'threads', 'x'];
-  const maxPlatformCount = Math.max(
-    1,
-    ...platforms.map((platform) => content.byPlatform[platform] ?? 0)
+  const platforms = Object.keys(platformNames) as Array<keyof DashboardContentMetrics['byPlatform']>;
+  const totalPlatformScheduled = platforms.reduce(
+    (sum, platform) => sum + content.byPlatform[platform],
+    0
   );
 
   return (
-    <section className="space-y-5 min-w-0" aria-labelledby="content-pipeline-heading">
-      <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-[var(--border-subtle)] pb-2.5">
-        <h3 id="content-pipeline-heading" className="heading-section text-base sm:text-lg">
+    <section
+      className="surface-card overflow-hidden min-w-0"
+      aria-labelledby="content-pipeline-heading"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2.5 border-b border-[var(--border-subtle)] bg-[var(--bg-surface-muted)]/45">
+        <h2 id="content-pipeline-heading" className="heading-section text-[13px]">
           Content Pipeline &amp; Scheduling
-        </h3>
+        </h2>
         <Link
           href="/content"
-          className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--accent-text)] transition-colors whitespace-nowrap"
+          className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors whitespace-nowrap"
         >
-          <span>View all content</span>
-          <ArrowUpRight className="w-3.5 h-3.5" aria-hidden="true" />
+          <span>Open content</span>
+          <ArrowUpRight className="w-3 h-3" aria-hidden="true" />
         </Link>
       </div>
 
-      {/* Upcoming Scheduled Posts */}
-      <div className="space-y-3 min-w-0">
-        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--text-muted)]">
-          <span className="font-medium text-[var(--text-secondary)]">
-            Upcoming Scheduled Posts
-          </span>
-          <span className="font-mono tabular-nums shrink-0">
-            Next {content.upcomingItems.length} items
-          </span>
+      {/* Compact Stage Summary (No redundant 7-day duplication) */}
+      <div className="grid grid-cols-3 divide-x divide-[var(--border-subtle)] border-b border-[var(--border-subtle)]">
+        <Link
+          href="/content"
+          className="px-3.5 py-2.5 hover:bg-[var(--bg-surface-hover)] transition-colors min-w-0"
+        >
+          <p className="text-[11px] font-medium text-[var(--text-muted)] truncate">
+            Drafts
+          </p>
+          <p className="mt-1 text-base font-semibold font-mono tabular-nums text-[var(--text-primary)] leading-none">
+            {content.draftCount}
+          </p>
+        </Link>
+        <Link
+          href="/content"
+          className="px-3.5 py-2.5 hover:bg-[var(--bg-surface-hover)] transition-colors min-w-0"
+        >
+          <p className="text-[11px] font-medium text-[var(--text-muted)] truncate">
+            Ideas
+          </p>
+          <p className="mt-1 text-base font-semibold font-mono tabular-nums text-[var(--text-primary)] leading-none">
+            {content.ideaCount}
+          </p>
+        </Link>
+        <Link
+          href="/calendar"
+          className="px-3.5 py-2.5 hover:bg-[var(--bg-surface-hover)] transition-colors min-w-0"
+        >
+          <p className="text-[11px] font-medium text-[var(--text-muted)] truncate">
+            Next 24h
+          </p>
+          <p className="mt-1 text-base font-semibold font-mono tabular-nums text-[var(--text-primary)] leading-none">
+            {content.scheduledNext24HoursCount}
+          </p>
+        </Link>
+      </div>
+
+      {/* Channel Distribution */}
+      <div className="px-3.5 py-3 border-b border-[var(--border-subtle)] space-y-2 min-w-0">
+        <div className="flex items-center justify-between text-[11px] font-mono uppercase tracking-wider text-[var(--text-muted)]">
+          <span>Scheduled by Platform</span>
+          <span>Count</span>
+        </div>
+        <div className="space-y-1.5">
+          {platforms.map((platform) => {
+            const count = content.byPlatform[platform];
+            const barWidthPercent =
+              count > 0 && totalPlatformScheduled > 0
+                ? Math.max(12, Math.round((count / totalPlatformScheduled) * 100))
+                : 0;
+
+            return (
+              <div
+                key={platform}
+                className="flex items-center justify-between gap-3 py-0.5 text-xs min-w-0"
+              >
+                <span className="text-[var(--text-secondary)] truncate min-w-[90px]">
+                  {platformNames[platform]}
+                </span>
+                <div className="flex items-center gap-2.5 flex-1 justify-end min-w-0">
+                  <div
+                    aria-hidden="true"
+                    className="h-1 w-16 sm:w-20 rounded-full bg-[var(--bg-surface-muted)] overflow-hidden shrink-0"
+                  >
+                    {barWidthPercent > 0 && (
+                      <div
+                        className="h-full rounded-full bg-[var(--accent)]"
+                        style={{ width: `${barWidthPercent}%` }}
+                      />
+                    )}
+                  </div>
+                  <span className="w-5 text-right font-semibold tabular-nums font-mono text-[var(--text-primary)] shrink-0">
+                    {count}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Upcoming Chronological Schedule */}
+      <div className="min-w-0">
+        <div className="bg-[var(--bg-surface-muted)]/30 px-3.5 py-1.5 border-b border-[var(--border-subtle)] flex items-center justify-between text-[10.5px] font-mono uppercase tracking-wider text-[var(--text-muted)]">
+          <span>Upcoming Posts</span>
+          <Link
+            href="/calendar"
+            className="hover:text-[var(--text-primary)] transition-colors"
+          >
+            Calendar →
+          </Link>
         </div>
 
         {content.upcomingItems.length === 0 ? (
-          <div className="py-7 px-5 text-center space-y-2 surface-card border-dashed">
-            <p className="text-sm font-semibold text-[var(--text-primary)]">
+          <div className="px-3.5 py-5 text-center space-y-1.5">
+            <p className="text-xs font-medium text-[var(--text-primary)]">
               No content currently scheduled
             </p>
-            <p className="text-xs text-[var(--text-muted)] max-w-xs mx-auto leading-relaxed">
-              Create new drafts or schedule posts for publishing across social platforms.
+            <p className="text-[11.5px] text-[var(--text-muted)]">
+              Queue a draft on X, LinkedIn, Threads, or Reddit to populate your publishing timeline.
             </p>
-            <div className="pt-1">
-              <Link href="/content" className="btn-accent px-4 py-1.5 text-xs">
-                <span>Go to Content Studio</span>
-                <ArrowUpRight className="w-3.5 h-3.5" aria-hidden="true" />
-              </Link>
-            </div>
           </div>
         ) : (
-          <div className="surface-card divide-y divide-[var(--border-subtle)] overflow-hidden">
-            {content.upcomingItems.map((item) => (
+          <div className="divide-y divide-[var(--border-subtle)]">
+            {content.upcomingItems.slice(0, 4).map((item) => (
               <Link
                 key={item.id}
-                href="/calendar"
-                className="group block px-4 py-3 transition-colors hover:bg-[var(--bg-surface-hover)] space-y-1.5"
+                href="/content"
+                className="group flex items-center justify-between gap-2.5 px-3.5 py-2 transition-colors hover:bg-[var(--bg-surface-hover)] min-w-0"
               >
-                <div className="flex items-start justify-between gap-2.5 min-w-0">
-                  <p className="text-sm font-medium text-[var(--text-primary)] group-hover:text-[var(--accent-text)] line-clamp-2 break-words min-w-0 flex-1 transition-colors">
-                    {item.title || 'Untitled Post'}
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <span className="inline-flex shrink-0 items-center justify-center min-w-[24px] rounded-[4px] border badge-neutral px-1 py-0.5 text-[10px] font-mono font-semibold leading-none">
+                    {platformCode[item.platform]}
+                  </span>
+                  <p className="text-xs font-medium text-[var(--text-primary)] truncate min-w-0">
+                    {item.title}
                   </p>
-                  <ArrowUpRight
-                    aria-hidden="true"
-                    className="h-3.5 w-3.5 shrink-0 mt-0.5 text-[var(--text-muted)] opacity-45 transition-all group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-[var(--accent-text)] group-hover:opacity-100"
-                  />
                 </div>
-                <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                  <span className="px-2 py-0.5 rounded-[var(--radius-sm)] border border-[var(--border-subtle)] text-[11px] font-medium bg-[var(--bg-surface-muted)] text-[var(--text-secondary)] capitalize shrink-0">
-                    {item.platform}
-                  </span>
-                  <span className="text-[11px] text-[var(--text-muted)] font-mono tabular-nums shrink-0">
-                    {item.scheduled_at
-                      ? formatInTimeZone(item.scheduled_at, timeZone, {
-                          month: 'short',
-                          day: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })
-                      : 'Unscheduled'}
-                  </span>
-                </div>
+                <span className="text-[11px] font-mono tabular-nums text-[var(--text-muted)] shrink-0 whitespace-nowrap">
+                  {item.scheduled_at
+                    ? formatInTimeZone(item.scheduled_at, timeZone, {
+                        year: undefined,
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })
+                    : 'Scheduled'}
+                </span>
               </Link>
             ))}
           </div>
         )}
-      </div>
-
-      {/* Editorial Pipeline Breakdown & Platform Ledger */}
-      <div className="surface-card p-4 sm:p-5 space-y-4 min-w-0">
-        <div className="grid grid-cols-3 gap-3 pb-3.5 border-b border-[var(--border-subtle)]">
-          <div className="min-w-0">
-            <p className="text-[11px] font-mono text-[var(--text-muted)] truncate">
-              Drafts
-            </p>
-            <p className="mt-1 text-xl font-semibold tracking-tight tabular-nums text-[var(--text-primary)]">
-              {content.draftCount}
-            </p>
-          </div>
-          <div className="min-w-0">
-            <p className="text-[11px] font-mono text-[var(--text-muted)] truncate">
-              Ideas
-            </p>
-            <p className="mt-1 text-xl font-semibold tracking-tight tabular-nums text-[var(--text-primary)]">
-              {content.ideaCount}
-            </p>
-          </div>
-          <div className="min-w-0">
-            <p
-              className="text-[11px] font-mono text-[var(--text-muted)] truncate"
-              title="Scheduled in next 7 days"
-            >
-              7-Day Sched
-            </p>
-            <p className="mt-1 text-xl font-semibold tracking-tight tabular-nums text-[var(--text-primary)]">
-              {content.scheduledNext7DaysCount}
-            </p>
-          </div>
-        </div>
-
-        <div className="space-y-2.5 min-w-0">
-          <p className="text-xs font-medium text-[var(--text-secondary)]">
-            Scheduled by Platform
-          </p>
-          <div className="space-y-2">
-            {platforms.map((platform) => {
-              const value = content.byPlatform[platform] ?? 0;
-              const widthPct = value === 0 ? 0 : Math.max(8, Math.round((value / maxPlatformCount) * 100));
-              return (
-                <div key={platform} className="space-y-1 text-xs min-w-0">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[var(--text-secondary)] truncate">
-                      {platformNames[platform]}
-                    </span>
-                    <span className="font-semibold tabular-nums font-mono text-[var(--text-primary)] shrink-0">
-                      {value}
-                    </span>
-                  </div>
-                  <div className="h-1 w-full rounded-full bg-[var(--bg-surface-muted)] overflow-hidden">
-                    {widthPct > 0 && (
-                      <div
-                        className="h-full rounded-full bg-[var(--accent)]"
-                        style={{ width: `${widthPct}%` }}
-                      />
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
       </div>
     </section>
   );

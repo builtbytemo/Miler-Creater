@@ -1,20 +1,18 @@
-import type { ReactNode } from 'react';
+import type { HTMLAttributes, ReactNode } from 'react';
 
-/**
- * Standardized surface card container with subtle hairline border and optional interactive state.
- */
 export function Card({
-  interactive = false,
-  className = '',
   children,
-}: {
-  interactive?: boolean;
-  className?: string;
+  className = '',
+  interactive = false,
+  ...props
+}: HTMLAttributes<HTMLDivElement> & {
   children: ReactNode;
+  interactive?: boolean;
 }) {
   return (
     <div
       className={`${interactive ? 'surface-card-interactive' : 'surface-card'} ${className}`.trim()}
+      {...props}
     >
       {children}
     </div>

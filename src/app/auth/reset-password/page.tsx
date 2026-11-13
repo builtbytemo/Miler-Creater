@@ -4,16 +4,13 @@ import { useActionState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { updatePassword, type AuthActionResult } from '@/lib/auth/actions';
-import { AuthAlert } from '@/components/auth/AuthAlert';
-import { Button } from '@/components/ui/Button';
-import { FormField, Input } from '@/components/ui/Input';
 
 export default function ResetPasswordPage() {
   const router = useRouter();
-  const [state, formAction, isPending] = useActionState<
-    AuthActionResult | null,
-    FormData
-  >(updatePassword, null);
+  const [state, formAction, isPending] = useActionState<AuthActionResult | null, FormData>(
+    updatePassword,
+    null
+  );
 
   useEffect(() => {
     if (state?.success && state.redirectTo) {
@@ -25,51 +22,69 @@ export default function ResetPasswordPage() {
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="heading-section text-lg">Set new password</h2>
+        <h2 className="heading-section text-base">
+          Set new password
+        </h2>
         <p className="text-xs text-[var(--text-secondary)] mt-1">
           Choose a strong password for your account
         </p>
       </div>
 
-      {state?.error && <AuthAlert tone="danger" message={state.error} />}
+      {state?.error && (
+        <div className="p-3 text-xs rounded-[var(--radius-sm)] border badge-danger">
+          {state.error}
+        </div>
+      )}
 
       <form action={formAction} className="space-y-4">
-        <FormField htmlFor="password" label="New Password (min 8 characters)">
-          <Input
+        <div>
+          <label
+            htmlFor="password"
+            className="block text-xs font-medium text-[var(--text-secondary)] mb-1"
+          >
+            New Password (min 8 characters)
+          </label>
+          <input
             id="password"
             name="password"
             type="password"
             autoComplete="new-password"
             required
             minLength={8}
+            className="input-control px-3 py-2 text-sm"
             placeholder="••••••••"
           />
-        </FormField>
+        </div>
 
-        <FormField htmlFor="confirmPassword" label="Confirm New Password">
-          <Input
+        <div>
+          <label
+            htmlFor="confirmPassword"
+            className="block text-xs font-medium text-[var(--text-secondary)] mb-1"
+          >
+            Confirm New Password
+          </label>
+          <input
             id="confirmPassword"
             name="confirmPassword"
             type="password"
             autoComplete="new-password"
             required
             minLength={8}
+            className="input-control px-3 py-2 text-sm"
             placeholder="••••••••"
           />
-        </FormField>
+        </div>
 
-        <Button
+        <button
           type="submit"
-          variant="primary"
-          size="lg"
           disabled={isPending}
-          className="w-full"
+          className="btn-accent w-full py-2 px-4 text-sm disabled:opacity-50"
         >
           {isPending ? 'Updating password...' : 'Update Password & Sign In'}
-        </Button>
+        </button>
       </form>
 
-      <div className="pt-2 text-center text-xs text-[var(--text-secondary)]">
+      <div className="pt-1 text-center text-xs text-[var(--text-secondary)]">
         <Link
           href="/auth/sign-in"
           className="font-medium text-[var(--accent-text)] hover:underline"

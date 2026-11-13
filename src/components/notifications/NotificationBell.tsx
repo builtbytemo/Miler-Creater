@@ -90,13 +90,13 @@ export function NotificationBell({
         aria-haspopup="dialog"
         title={ariaLabel}
         className={clsx(
-          'relative inline-flex h-9 w-9 items-center justify-center rounded-full border transition-colors',
+          'relative inline-flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] border transition-colors',
           'border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-secondary)]',
           'hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]',
           isOpen && 'border-[var(--border-strong)] bg-[var(--bg-surface-hover)] text-[var(--text-primary)]'
         )}
       >
-        <Bell className="w-4 h-4" aria-hidden="true" />
+        <Bell className="w-3.5 h-3.5" aria-hidden="true" />
 
         {/* Unread badge: only rendered when count > 0 */}
         {unreadCount > 0 && (

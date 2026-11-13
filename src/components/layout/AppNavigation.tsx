@@ -10,10 +10,10 @@ import {
   Share2,
   KeyRound,
   Bell,
-  MailCheck,
-  Search,
+  SlidersHorizontal,
   Menu,
   X,
+  Search,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { NotificationBell } from '@/components/notifications/NotificationBell';
@@ -33,10 +33,16 @@ export const primaryLinks = [
   { href: '/settings/tokens', label: 'API Tokens', icon: KeyRound },
 ] as const;
 
-const workspaceMainLinks = primaryLinks.slice(0, 5);
+const operationLinks = [
+  { href: '/dashboard', label: 'Overview', icon: LayoutDashboard },
+  { href: '/tasks', label: 'Tasks', icon: CheckSquare },
+  { href: '/calendar', label: 'Calendar', icon: Calendar },
+  { href: '/content', label: 'Content', icon: Share2 },
+  { href: '/notifications', label: 'Notifications', icon: Bell },
+] as const;
 
-const settingsLinks = [
-  { href: '/settings/notifications', label: 'Daily Briefing', icon: MailCheck },
+const workspaceLinks = [
+  { href: '/settings/notifications', label: 'Daily Briefing', icon: SlidersHorizontal },
   { href: '/settings/tokens', label: 'API Tokens', icon: KeyRound },
 ] as const;
 
@@ -45,21 +51,14 @@ const mobileQuickLinks = [
   { href: '/tasks', label: 'Tasks' },
   { href: '/calendar', label: 'Calendar' },
   { href: '/content', label: 'Content' },
-  { href: '/settings/notifications', label: 'Briefing' },
-  { href: '/settings/tokens', label: 'Tokens' },
+  { href: '/settings/tokens', label: 'API Tokens' },
 ] as const;
 
 function isRouteActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-function MobileMenuSheet({
-  pathname,
-  onOpenCommandPalette,
-}: {
-  pathname: string;
-  onOpenCommandPalette: () => void;
-}) {
+function MobileMenuSheet({ pathname }: { pathname: string }) {
   const [openPathname, setOpenPathname] = useState<string | null>(null);
   const open = openPathname === pathname;
 
@@ -76,19 +75,16 @@ function MobileMenuSheet({
     <div className="relative">
       <button
         type="button"
-        onClick={() =>
-          setOpenPathname((prev) => (prev === pathname ? null : pathname))
-        }
+        onClick={() => setOpenPathname((prev) => (prev === pathname ? null : pathname))}
         aria-expanded={open}
         aria-controls="mobile-navigation-drawer"
         aria-label={open ? 'Close navigation menu' : 'Open navigation menu'}
         data-testid="mobile-menu-trigger"
         className={clsx(
-          'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-md)] border transition-colors',
+          'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-sm)] border transition-colors',
           'border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-secondary)]',
           'hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]',
-          open &&
-            'border-[var(--border-strong)] bg-[var(--bg-surface-hover)] text-[var(--text-primary)]'
+          open && 'border-[var(--border-strong)] bg-[var(--bg-surface-hover)] text-[var(--text-primary)]'
         )}
       >
         {open ? (
@@ -103,35 +99,34 @@ function MobileMenuSheet({
           <div
             aria-hidden="true"
             onClick={() => setOpenPathname(null)}
-            className="fixed inset-0 top-13 z-40 bg-black/30 backdrop-blur-xs"
+            className="fixed inset-0 top-12 z-40 bg-black/30 backdrop-blur-[2px]"
           />
           <div
             id="mobile-navigation-drawer"
             role="dialog"
             aria-modal="true"
             aria-label="Mobile workspace navigation"
-            className="fixed inset-x-3 top-14 z-50 rounded-[var(--radius-xl)] border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] p-4 shadow-[var(--shadow-elevated)] space-y-4"
+            className="fixed inset-x-3 top-14 z-50 rounded-[var(--radius-lg)] border border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] p-3 shadow-[var(--shadow-elevated)] space-y-3"
           >
             <button
               type="button"
               onClick={() => {
                 setOpenPathname(null);
-                onOpenCommandPalette();
+                dispatchOpenCommandPalette();
               }}
-              className="w-full flex items-center justify-between rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-surface-subtle)] px-3 py-2 text-xs text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:text-[var(--text-primary)] transition-colors"
+              className="flex w-full items-center justify-between rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 text-xs text-[var(--text-secondary)] hover:border-[var(--border-strong)] hover:text-[var(--text-primary)]"
             >
-              <span className="inline-flex items-center gap-2">
-                <Search className="h-3.5 w-3.5" aria-hidden="true" />
-                <span>Jump to page or theme...</span>
+              <span className="flex items-center gap-2">
+                <Search className="h-3.5 w-3.5 text-[var(--text-muted)]" aria-hidden="true" />
+                <span>Jump to page or action…</span>
               </span>
-              <span className="font-mono text-[10px]">⌘K</span>
+              <kbd className="font-mono text-[10px] px-1.5 py-0.5 rounded-[4px] border border-[var(--border-subtle)] bg-[var(--bg-canvas)] text-[var(--text-muted)]">
+                ⌘K
+              </kbd>
             </button>
 
             <div className="space-y-0.5">
-              <p className="px-2 pb-1 text-[10px] font-mono uppercase tracking-wider text-[var(--text-muted)]">
-                Workspace
-              </p>
-              {workspaceMainLinks.map((link) => {
+              {primaryLinks.map((link) => {
                 const Icon = link.icon;
                 const isActive = isRouteActive(pathname, link.href);
                 return (
@@ -141,25 +136,19 @@ function MobileMenuSheet({
                     onClick={() => setOpenPathname(null)}
                     aria-current={isActive ? 'page' : undefined}
                     className={clsx(
-                      'flex items-center justify-between rounded-[var(--radius-md)] px-3 py-2 text-sm transition-colors',
+                      'relative flex items-center justify-between rounded-[var(--radius-sm)] px-2.5 py-2 text-[13px] transition-colors',
                       isActive
                         ? 'bg-[var(--bg-surface-muted)] text-[var(--text-primary)] font-semibold'
                         : 'text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]'
                     )}
                   >
                     <span className="flex items-center gap-2.5 min-w-0">
-                      <Icon
-                        className={clsx(
-                          'h-4 w-4 shrink-0',
-                          isActive ? 'text-[var(--accent-text)]' : 'opacity-75'
-                        )}
-                        aria-hidden="true"
-                      />
+                      <Icon className="h-4 w-4 shrink-0 opacity-75" aria-hidden="true" />
                       <span className="truncate">{link.label}</span>
                     </span>
                     {isActive && (
                       <span
-                        className="h-1.5 w-1.5 shrink-0 rotate-45 bg-[var(--accent)]"
+                        className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--accent)]"
                         aria-hidden="true"
                       />
                     )}
@@ -168,52 +157,19 @@ function MobileMenuSheet({
               })}
             </div>
 
-            <div className="space-y-0.5 border-t border-[var(--border-subtle)] pt-3">
-              <p className="px-2 pb-1 text-[10px] font-mono uppercase tracking-wider text-[var(--text-muted)]">
-                Settings &amp; CLI
-              </p>
-              {settingsLinks.map((link) => {
-                const Icon = link.icon;
-                const isActive = isRouteActive(pathname, link.href);
-                return (
-                  <Link
-                    key={`drawer-settings-${link.href}`}
-                    href={link.href}
-                    onClick={() => setOpenPathname(null)}
-                    aria-current={isActive ? 'page' : undefined}
-                    className={clsx(
-                      'flex items-center justify-between rounded-[var(--radius-md)] px-3 py-2 text-sm transition-colors',
-                      isActive
-                        ? 'bg-[var(--bg-surface-muted)] text-[var(--text-primary)] font-semibold'
-                        : 'text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]'
-                    )}
-                  >
-                    <span className="flex items-center gap-2.5 min-w-0">
-                      <Icon
-                        className={clsx(
-                          'h-4 w-4 shrink-0',
-                          isActive ? 'text-[var(--accent-text)]' : 'opacity-75'
-                        )}
-                        aria-hidden="true"
-                      />
-                      <span className="truncate">{link.label}</span>
-                    </span>
-                    {isActive && (
-                      <span
-                        className="h-1.5 w-1.5 shrink-0 rotate-45 bg-[var(--accent)]"
-                        aria-hidden="true"
-                      />
-                    )}
-                  </Link>
-                );
-              })}
-            </div>
-
-            <div className="border-t border-[var(--border-subtle)] pt-3 space-y-2">
-              <span className="block px-1 text-[11px] font-mono text-[var(--text-muted)]">
-                Appearance
-              </span>
-              <ThemeToggle className="w-full" />
+            <div className="pt-2.5 border-t border-[var(--border-subtle)] space-y-2.5">
+              <div className="flex items-center justify-between gap-2 px-1 text-xs text-[var(--text-muted)]">
+                <span>Theme</span>
+                <ThemeToggle />
+              </div>
+              <Link
+                href="/settings/notifications"
+                onClick={() => setOpenPathname(null)}
+                className="flex items-center gap-2.5 rounded-[var(--radius-sm)] px-2.5 py-2 text-xs text-[var(--text-secondary)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)] transition-colors"
+              >
+                <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
+                <span>Daily Briefing &amp; Alert Settings</span>
+              </Link>
             </div>
           </div>
         </>
@@ -222,208 +178,121 @@ function MobileMenuSheet({
   );
 }
 
-function SidebarNavItem({
-  href,
-  label,
-  icon: Icon,
-  isActive,
-}: {
-  href: string;
-  label: string;
-  icon: typeof LayoutDashboard;
-  isActive: boolean;
-}) {
-  return (
-    <Link
-      href={href}
-      aria-current={isActive ? 'page' : undefined}
-      className={clsx(
-        'group relative flex min-h-8.5 min-w-0 items-center justify-between gap-2.5 rounded-[var(--radius-md)] px-2.5 py-1.5 text-[13px] transition-all',
-        isActive
-          ? 'bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-[var(--shadow-card)] text-[var(--text-primary)] font-semibold'
-          : 'border border-transparent text-[var(--text-secondary)] font-medium hover:bg-[var(--bg-surface)]/65 hover:text-[var(--text-primary)]'
-      )}
-    >
-      <span className="flex items-center gap-2.5 min-w-0">
-        <Icon
-          aria-hidden="true"
-          className={clsx(
-            'h-[15px] w-[15px] shrink-0 transition-colors',
-            isActive
-              ? 'text-[var(--accent-text)]'
-              : 'text-[var(--text-muted)] group-hover:text-[var(--text-primary)]'
-          )}
-        />
-        <span className="truncate">{label}</span>
-      </span>
-      {isActive && (
-        <span
-          aria-hidden="true"
-          className="h-1.5 w-1.5 shrink-0 rotate-45 bg-[var(--accent)]"
-        />
-      )}
-    </Link>
-  );
-}
-
-/**
- * Primary application shell providing persistent desktop sidebar, responsive mobile drawer,
- * quick command access (`Cmd/Ctrl + K`), theme switching, and workspace notifications.
- */
-export function AppNavigation() {
+function DesktopSidebar() {
   const pathname = usePathname() || '/dashboard';
 
   return (
-    <nav
-      aria-label="Main navigation"
-      data-app-nav="true"
-      className="z-30 md:w-[var(--sidebar-width)] md:shrink-0"
+    <aside
+      aria-label="Workspace sidebar"
+      className="hidden md:flex md:w-[228px] md:shrink-0 md:flex-col md:justify-between md:sticky md:top-0 md:h-screen border-r border-[var(--border-subtle)] bg-[var(--bg-sidebar)] px-3 py-3.5 select-none"
     >
-      <a href="#main-content" className="skip-link">
-        Skip to content
-      </a>
-
-      {/* Desktop Left Sidebar (md and up) */}
-      <aside
-        aria-label="Workspace sidebar"
-        className="hidden md:sticky md:top-0 md:flex md:h-screen md:w-[var(--sidebar-width)] md:flex-col md:justify-between border-r border-[var(--border-subtle)] bg-[var(--bg-sidebar)] px-3.5 py-5 select-none"
-      >
-        <div className="space-y-5 min-w-0">
-          {/* Zahi Brand Header + Notification Bell */}
-          <div className="flex items-center justify-between gap-2 min-w-0 px-1">
-            <Link
-              href="/dashboard"
-              aria-label="Zahi home"
-              className="group inline-flex min-w-0 items-center gap-2.5 text-[var(--text-primary)]"
-            >
-              <ZahiLogoMark size="md" />
-              <span className="flex flex-col min-w-0 leading-none">
-                <ZahiWordmark className="text-[19px] leading-none" />
-              </span>
-            </Link>
-
-            <NotificationBell panelAlign="left" className="shrink-0" />
-          </div>
-
-          {/* Quick Command Trigger */}
-          <button
-            type="button"
-            onClick={dispatchOpenCommandPalette}
-            aria-label="Open quick command palette"
-            className="w-full flex items-center justify-between gap-2 rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2.5 py-1.5 text-xs text-[var(--text-muted)] shadow-2xs hover:border-[var(--border-strong)] hover:text-[var(--text-primary)] transition-colors"
+      <div className="space-y-4 min-w-0">
+        {/* Brand Row + Notification Bell */}
+        <div className="flex items-center justify-between gap-2 px-1 min-w-0">
+          <Link
+            href="/dashboard"
+            aria-label="Zahi home"
+            className="flex min-w-0 items-center gap-2 hover:opacity-85 transition-opacity"
           >
-            <span className="inline-flex items-center gap-2 min-w-0">
-              <Search className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-              <span className="truncate">Quick jump...</span>
-            </span>
-            <kbd className="shrink-0 rounded border border-[var(--border-subtle)] bg-[var(--bg-surface-subtle)] px-1.5 py-0.5 font-mono text-[10px] leading-none text-[var(--text-muted)]">
-              ⌘K
-            </kbd>
-          </button>
-
-          {/* Primary Workspace Navigation */}
-          <div className="space-y-1 min-w-0">
-            <p className="px-2 pb-0.5 text-[10px] font-mono uppercase tracking-[0.08em] text-[var(--text-muted)]">
-              Workspace
-            </p>
-            <div className="space-y-0.5">
-              {workspaceMainLinks.map((link) => (
-                <SidebarNavItem
-                  key={link.href}
-                  href={link.href}
-                  label={link.label}
-                  icon={link.icon}
-                  isActive={isRouteActive(pathname, link.href)}
-                />
-              ))}
-            </div>
-          </div>
-
-          {/* Settings & Briefing Access */}
-          <div className="space-y-1 min-w-0 pt-1">
-            <p className="px-2 pb-0.5 text-[10px] font-mono uppercase tracking-[0.08em] text-[var(--text-muted)]">
-              Automation &amp; Keys
-            </p>
-            <div className="space-y-0.5">
-              {settingsLinks.map((link) => (
-                <SidebarNavItem
-                  key={link.href}
-                  href={link.href}
-                  label={link.label}
-                  icon={link.icon}
-                  isActive={isRouteActive(pathname, link.href)}
-                />
-              ))}
-            </div>
-          </div>
+            <ZahiLogoMark size="sm" />
+            <ZahiWordmark className="text-[15px] leading-none" />
+          </Link>
+          <NotificationBell />
         </div>
 
-        {/* Quiet Sidebar Footer: Theme Switcher */}
-        <div className="space-y-2.5 pt-4 border-t border-[var(--border-subtle)] min-w-0">
-          <ThemeToggle className="w-full" />
-          <div className="flex items-center justify-between gap-2 px-1 text-[11px] font-mono text-[var(--text-muted)] min-w-0">
-            <span className="truncate">Zahi Command</span>
-            <button
-              type="button"
-              onClick={dispatchOpenCommandPalette}
-              className="shrink-0 hover:text-[var(--text-primary)] transition-colors"
-            >
-              ⌘K
-            </button>
-          </div>
-        </div>
-      </aside>
+        {/* Raycast/Linear-style Command Jump Trigger */}
+        <button
+          type="button"
+          onClick={dispatchOpenCommandPalette}
+          aria-label="Open command palette"
+          className="flex h-8 w-full items-center justify-between gap-2 rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2.5 text-xs text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:text-[var(--text-secondary)] transition-colors"
+        >
+          <span className="flex items-center gap-2 min-w-0">
+            <Search className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            <span className="truncate">Search or jump…</span>
+          </span>
+          <kbd className="font-mono text-[10px] shrink-0 rounded-[4px] border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-1.5 py-0.5 text-[var(--text-muted)]">
+            ⌘K
+          </kbd>
+        </button>
 
-      {/* Compact Mobile Navigation Bar (< md) */}
-      <div className="sticky top-0 z-30 border-b border-[var(--border-subtle)] bg-[var(--bg-glass)] backdrop-blur-xl md:hidden">
-        <div className="mx-auto max-w-7xl px-4">
-          <div className="flex h-13 items-center justify-between gap-2 min-w-0">
-            <Link
-              href="/dashboard"
-              aria-label="Zahi home"
-              className="inline-flex min-w-0 items-center gap-2 text-[var(--text-primary)]"
-            >
-              <ZahiLogoMark size="sm" />
-              <ZahiWordmark className="text-[18px] leading-none" />
-            </Link>
-
-            <div className="flex shrink-0 items-center gap-1.5">
-              <button
-                type="button"
-                onClick={dispatchOpenCommandPalette}
-                aria-label="Open quick jump"
-                className="inline-flex h-8 w-8 items-center justify-center rounded-[var(--radius-md)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:border-[var(--border-strong)] hover:text-[var(--text-primary)] transition-colors"
-              >
-                <Search className="h-3.5 w-3.5" aria-hidden="true" />
-              </button>
-              <ThemeToggle variant="compact" />
-              <NotificationBell panelAlign="right" />
-              <MobileMenuSheet
-                pathname={pathname}
-                onOpenCommandPalette={dispatchOpenCommandPalette}
-              />
-            </div>
-          </div>
-
-          <div
-            aria-label="Quick destinations"
-            className="flex flex-wrap items-center gap-1 pb-2.5"
-          >
-            {mobileQuickLinks.map((link) => {
+        {/* Primary Operations Navigation */}
+        <div className="space-y-4 min-w-0">
+          <div className="space-y-0.5 min-w-0">
+            <p className="px-2.5 pb-1 text-[10.5px] font-medium uppercase tracking-[0.06em] text-[var(--text-muted)]">
+              Operations
+            </p>
+            {operationLinks.map((link) => {
+              const Icon = link.icon;
               const isActive = isRouteActive(pathname, link.href);
               return (
                 <Link
-                  key={`mobile-${link.href}`}
+                  key={link.href}
                   href={link.href}
                   aria-current={isActive ? 'page' : undefined}
                   className={clsx(
-                    'inline-flex min-h-7 items-center rounded-[var(--radius-sm)] px-2.5 py-1 text-xs whitespace-nowrap transition-colors',
+                    'group relative flex h-8 min-w-0 items-center gap-2.5 rounded-[var(--radius-sm)] px-2.5 text-[13px] transition-colors',
                     isActive
-                      ? 'bg-[var(--accent)] text-[var(--accent-ink)] font-semibold'
-                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-muted)] font-medium'
+                      ? 'bg-[var(--bg-surface-muted)] text-[var(--text-primary)] font-semibold'
+                      : 'text-[var(--text-secondary)] font-normal hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]'
                   )}
                 >
-                  <span>{link.label}</span>
+                  {isActive && (
+                    <span
+                      aria-hidden="true"
+                      className="absolute left-0 top-1.5 bottom-1.5 w-[2.5px] rounded-r-full bg-[var(--accent)]"
+                    />
+                  )}
+                  <Icon
+                    aria-hidden="true"
+                    className={clsx(
+                      'h-3.5 w-3.5 shrink-0 transition-opacity',
+                      isActive
+                        ? 'text-[var(--accent-text)]'
+                        : 'text-[var(--text-muted)] group-hover:text-[var(--text-primary)]'
+                    )}
+                  />
+                  <span className="truncate">{link.label}</span>
+                </Link>
+              );
+            })}
+          </div>
+
+          <div className="space-y-0.5 pt-3 border-t border-[var(--border-subtle)] min-w-0">
+            <p className="px-2.5 pb-1 text-[10.5px] font-medium uppercase tracking-[0.06em] text-[var(--text-muted)]">
+              Workspace
+            </p>
+            {workspaceLinks.map((link) => {
+              const Icon = link.icon;
+              const isActive = isRouteActive(pathname, link.href);
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  aria-current={isActive ? 'page' : undefined}
+                  className={clsx(
+                    'group relative flex h-8 min-w-0 items-center gap-2.5 rounded-[var(--radius-sm)] px-2.5 text-[13px] transition-colors',
+                    isActive
+                      ? 'bg-[var(--bg-surface-muted)] text-[var(--text-primary)] font-semibold'
+                      : 'text-[var(--text-secondary)] font-normal hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-primary)]'
+                  )}
+                >
+                  {isActive && (
+                    <span
+                      aria-hidden="true"
+                      className="absolute left-0 top-1.5 bottom-1.5 w-[2.5px] rounded-r-full bg-[var(--accent)]"
+                    />
+                  )}
+                  <Icon
+                    aria-hidden="true"
+                    className={clsx(
+                      'h-3.5 w-3.5 shrink-0 transition-opacity',
+                      isActive
+                        ? 'text-[var(--accent-text)]'
+                        : 'text-[var(--text-muted)] group-hover:text-[var(--text-primary)]'
+                    )}
+                  />
+                  <span className="truncate">{link.label}</span>
                 </Link>
               );
             })}
@@ -431,7 +300,103 @@ export function AppNavigation() {
         </div>
       </div>
 
+      {/* Quiet Footer: Theme Control + Quick Shortcut Hint */}
+      <div className="space-y-2.5 pt-3 border-t border-[var(--border-subtle)] min-w-0">
+        <ThemeToggle className="w-full" />
+        <div className="flex items-center justify-between gap-2 px-1 text-[11px] text-[var(--text-muted)]">
+          <span className="truncate font-mono">Zahi Workspace</span>
+          <button
+            type="button"
+            onClick={dispatchOpenCommandPalette}
+            className="font-mono text-[10px] hover:text-[var(--text-primary)] transition-colors"
+            title="Command Palette (⌘K)"
+          >
+            ⌘K
+          </button>
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+function MobileNavigationBar() {
+  const pathname = usePathname() || '/dashboard';
+
+  return (
+    <div className="sticky top-0 z-30 border-b border-[var(--border-subtle)] bg-[var(--bg-glass)] backdrop-blur-md md:hidden">
+      <div className="mx-auto max-w-7xl px-4">
+        <div className="flex h-12 items-center justify-between gap-2 min-w-0">
+          <Link
+            href="/dashboard"
+            aria-label="Zahi home"
+            className="inline-flex min-w-0 items-center gap-2 hover:opacity-85 transition-opacity"
+          >
+            <ZahiLogoMark size="xs" />
+            <ZahiWordmark className="text-sm leading-none" />
+          </Link>
+
+          <div className="flex shrink-0 items-center gap-1.5">
+            <button
+              type="button"
+              onClick={dispatchOpenCommandPalette}
+              aria-label="Open command palette"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:border-[var(--border-strong)] hover:text-[var(--text-primary)] transition-colors"
+            >
+              <Search className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+            <ThemeToggle variant="compact" />
+            <NotificationBell panelAlign="right" />
+            <MobileMenuSheet pathname={pathname} />
+          </div>
+        </div>
+
+        <div
+          aria-label="Quick destinations"
+          className="flex flex-wrap items-center gap-1 pb-2"
+        >
+          {mobileQuickLinks.map((link) => {
+            const isActive = isRouteActive(pathname, link.href);
+            return (
+              <Link
+                key={`mobile-${link.href}`}
+                href={link.href}
+                aria-current={isActive ? 'page' : undefined}
+                className={clsx(
+                  'inline-flex h-7 items-center gap-1 rounded-[var(--radius-sm)] px-2 text-[11.5px] whitespace-nowrap border transition-colors',
+                  isActive
+                    ? 'border-[var(--border-strong)] bg-[var(--bg-surface)] text-[var(--text-primary)] font-semibold'
+                    : 'border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface-hover)] font-medium'
+                )}
+              >
+                {isActive && (
+                  <span
+                    aria-hidden="true"
+                    className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--accent)]"
+                  />
+                )}
+                <span>{link.label}</span>
+              </Link>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Shared Navigation Shell (`AppNavigation`).
+ * Root stays hook-free so server tests and static unit invocations run cleanly without React dispatcher errors.
+ */
+export function AppNavigation() {
+  return (
+    <nav data-app-nav="true" className="contents md:block">
+      <a href="#main-content" className="skip-link">
+        Skip to content
+      </a>
       <CommandPalette />
+      <DesktopSidebar />
+      <MobileNavigationBar />
     </nav>
   );
 }
