@@ -57,11 +57,13 @@ export function computeNotificationPanelLayout({
   viewportWidth,
   viewportHeight,
   align = 'responsive',
+  navRightEdge = null,
 }: {
   triggerRect: Pick<DOMRect, 'top' | 'bottom' | 'left' | 'right'> | null;
   viewportWidth: number;
   viewportHeight: number;
   align?: 'left' | 'right' | 'responsive';
+  navRightEdge?: number | null;
 }): NotificationPanelLayout {
   if (viewportWidth < 640) {
     const top = triggerRect
@@ -84,7 +86,11 @@ export function computeNotificationPanelLayout({
     const isCollapsedRailTrigger =
       triggerRect.left < 96 && viewportWidth >= 768 && align !== 'right';
     if (isCollapsedRailTrigger) {
-      left = Math.min(Math.round(triggerRect.right) + 12, viewportWidth - width - 12);
+      const preferredRailLeft =
+        navRightEdge !== null && navRightEdge !== undefined
+          ? Math.max(Math.round(triggerRect.right) + 12, Math.round(navRightEdge) + 8)
+          : Math.round(triggerRect.right) + 12;
+      left = Math.min(preferredRailLeft, viewportWidth - width - 12);
       preferredTop = Math.max(12, Math.round(triggerRect.top));
     } else if (align === 'right' || triggerRect.right > viewportWidth - 220) {
       left = Math.max(12, Math.round(triggerRect.right) - width);
@@ -152,13 +158,17 @@ export function NotificationPanel({
 
   const updatePosition = useCallback(() => {
     if (typeof window === 'undefined') return;
-    const rect = triggerRef?.current?.getBoundingClientRect() ?? null;
+    const triggerEl = triggerRef?.current ?? null;
+    const rect = triggerEl?.getBoundingClientRect() ?? null;
+    const navRightEdge =
+      triggerEl?.closest('[data-app-nav]')?.getBoundingClientRect().right ?? null;
     setLayout(
       computeNotificationPanelLayout({
         triggerRect: rect,
         viewportWidth: window.innerWidth,
         viewportHeight: window.innerHeight,
         align,
+        navRightEdge,
       })
     );
   }, [align, triggerRef]);
