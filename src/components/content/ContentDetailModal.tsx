@@ -28,6 +28,7 @@ import { toLocalDatetimeString, parseLocalDatetimeString } from '@/lib/temporal/
 import { PLATFORM_CONFIG, STATUS_CONFIG, ACTION_CONFIG } from './ContentCard';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useDialog } from '@/lib/hooks/use-dialog';
+import { ScheduleDateTimePicker } from './ScheduleDateTimePicker';
 
 interface ProjectOption {
   id: string;
@@ -576,12 +577,10 @@ export function ContentDetailModal({
                     <Calendar className="w-3.5 h-3.5 text-[var(--text-muted)]" aria-hidden="true" />
                     <span>Scheduled Date &amp; Time</span>
                   </label>
-                  <input
+                  <ScheduleDateTimePicker
                     id="detail-schedule"
-                    type="datetime-local"
                     value={scheduledAt}
-                    onChange={(e) => setScheduledAt(e.target.value)}
-                    className={`${inputCls} font-mono`}
+                    onChange={setScheduledAt}
                   />
                   <p className="text-[10.5px] text-[var(--text-muted)]">
                     Leave blank for unscheduled idea ({userTimeZone})

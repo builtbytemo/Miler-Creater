@@ -18,6 +18,7 @@ import {
   parseLocalDatetimeString,
 } from '@/lib/temporal/calendar';
 import { DEFAULT_TIMEZONE } from '@/lib/temporal/timezone';
+import { ScheduleDateTimePicker } from './ScheduleDateTimePicker';
 
 interface ProjectOption {
   id: string;
@@ -455,16 +456,14 @@ export function CreateContentModal({
                 Scheduled Date &amp; Time{' '}
                 <span className="text-[var(--text-tertiary)] font-normal">(Optional)</span>
               </label>
-              <input
-                type="datetime-local"
+              <ScheduleDateTimePicker
                 value={scheduledAt}
-                onChange={(e) => {
-                  setScheduledAt(e.target.value);
-                  if (e.target.value && status === 'idea') {
+                onChange={(nextValue) => {
+                  setScheduledAt(nextValue);
+                  if (nextValue && status === 'idea') {
                     setStatus('scheduled');
                   }
                 }}
-                className={`${inputBaseClass} font-mono`}
               />
             </div>
 
