@@ -244,6 +244,53 @@ export const rescheduleTaskInputSchema = z
   );
 export type RescheduleTaskInput = z.infer<typeof rescheduleTaskInputSchema>;
 
+const scheduleDateTimeFields = {
+  scheduled_date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'scheduled_date must be formatted as YYYY-MM-DD')
+    .optional()
+    .nullable()
+    .describe('Local calendar date (YYYY-MM-DD) in the user workspace timezone; alternative to scheduled_at.'),
+  scheduled_hour: z
+    .number()
+    .int()
+    .min(1)
+    .max(12)
+    .optional()
+    .describe('12-hour clock hour (1-12) in the user workspace timezone; requires scheduled_date.'),
+  scheduled_minute: z
+    .number()
+    .int()
+    .min(0)
+    .max(59)
+    .optional()
+    .describe('Minute (0-59); defaults to 0 when scheduled_date is provided.'),
+  scheduled_meridiem: z
+    .enum(['AM', 'PM'])
+    .optional()
+    .describe('AM or PM for 12-hour scheduled_hour; defaults to AM when scheduled_date is provided.'),
+};
+
+interface ScheduleFieldInput {
+  scheduled_at?: string | null;
+  scheduled_date?: string | null;
+  scheduled_hour?: number;
+  scheduled_minute?: number;
+  scheduled_meridiem?: 'AM' | 'PM';
+}
+
+function hasNoScheduleConflict(data: ScheduleFieldInput): boolean {
+  const hasDate = typeof data.scheduled_date === 'string' && data.scheduled_date.length > 0;
+  const hasTimeParts =
+    data.scheduled_hour !== undefined ||
+    data.scheduled_minute !== undefined ||
+    data.scheduled_meridiem !== undefined;
+  const hasAt = typeof data.scheduled_at === 'string' && data.scheduled_at.length > 0;
+  if (hasAt && (hasDate || hasTimeParts)) return false;
+  if (!hasDate && hasTimeParts) return false;
+  return true;
+}
+
 /**
  * 12. create_content_item
  * Creates an idea or scheduled draft for social media.
@@ -263,6 +310,7 @@ export const createContentItemInputSchema = z
     title: z.string().trim().max(255).optional().nullable(),
     body: z.string().default(''),
     scheduled_at: z.string().datetime().optional().nullable(),
+    ...scheduleDateTimeFields,
     duration_minutes: z.number().int().min(1).max(10080).optional().nullable(),
     tags: z.array(z.string().trim().min(1).max(50)).default([]),
     notes: z.string().trim().max(10000).optional().nullable(),
@@ -279,7 +327,11 @@ export const createContentItemInputSchema = z
       message: 'Content item must include either a title or a body',
       path: ['body'],
     }
-  );
+  )
+  .refine(hasNoScheduleConflict, {
+    message: 'Provide either scheduled_at or scheduled_date (with optional scheduled_hour, scheduled_minute, scheduled_meridiem), not both, and include scheduled_date when setting time fields',
+    path: ['scheduled_date'],
+  });
 export type CreateContentItemInput = z.infer<typeof createContentItemInputSchema>;
 
 /**
@@ -300,12 +352,17 @@ export const updateContentItemInputSchema = z
     action_type: contentActionTypeEnum.optional(),
     status: z.enum(['idea', 'draft', 'scheduled', 'archived']).optional(),
     scheduled_at: z.string().datetime().optional().nullable(),
+    ...scheduleDateTimeFields,
     duration_minutes: z.number().int().min(1).max(10080).optional().nullable(),
     tags: z.array(z.string().trim().min(1).max(50)).optional(),
     notes: z.string().trim().max(10000).optional().nullable(),
     project_id: z.string().uuid('project_id must be a valid UUID').optional().nullable(),
   })
-  .strict();
+  .strict()
+  .refine(hasNoScheduleConflict, {
+    message: 'Provide either scheduled_at or scheduled_date (with optional scheduled_hour, scheduled_minute, scheduled_meridiem), not both, and include scheduled_date when setting time fields',
+    path: ['scheduled_date'],
+  });
 export type UpdateContentItemInput = z.infer<typeof updateContentItemInputSchema>;
 
 /**
@@ -315,7 +372,21 @@ export type UpdateContentItemInput = z.infer<typeof updateContentItemInputSchema
 export const rescheduleContentInputSchema = z
   .object({
     content_id: z.string().uuid('content_id must be a valid UUID'),
-    scheduled_at: z.string().datetime({ message: 'scheduled_at must be a valid ISO 8601 datetime' }),
+    scheduled_at: z.string().datetime({ message: 'scheduled_at must be a valid ISO 8601 datetime' }).optional(),
+    ...scheduleDateTimeFields,
   })
-  .strict();
+  .strict()
+  .refine(hasNoScheduleConflict, {
+    message: 'Provide either scheduled_at or scheduled_date (with optional scheduled_hour, scheduled_minute, scheduled_meridiem), not both, and include scheduled_date when setting time fields',
+    path: ['scheduled_date'],
+  })
+  .refine(
+    (data) =>
+      Boolean(data.scheduled_at) ||
+      (typeof data.scheduled_date === 'string' && data.scheduled_date.length > 0),
+    {
+      message: 'Either scheduled_at or scheduled_date is required',
+      path: ['scheduled_at'],
+    }
+  );
 export type RescheduleContentInput = z.infer<typeof rescheduleContentInputSchema>;

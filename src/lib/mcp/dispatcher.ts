@@ -85,6 +85,8 @@ import {
   createContentItem,
   updateContentItem,
 } from '@/lib/services/content-service';
+import { parseLocalDatetimeString } from '@/lib/temporal/calendar';
+import { DEFAULT_TIMEZONE } from '@/lib/temporal/timezone';
 
 // -----------------------------------------------------------------------------
 // AUTHORITATIVE TOOL DEFINITIONS
@@ -314,12 +316,17 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
   create_content_item: {
     name: 'create_content_item',
     description:
-      'Create a social content idea or scheduled draft for LinkedIn, Reddit, Threads, or X.',
+      'Create a social content idea or scheduled draft for LinkedIn, Reddit, Threads, or X. Supports either scheduled_at (ISO 8601) or scheduled_date (YYYY-MM-DD) with scheduled_hour (1-12), scheduled_minute (0-59), and scheduled_meridiem (AM/PM) in the workspace timezone.',
     category: 'write',
     requiredScopes: ['content:write'],
     schema: createContentItemInputSchema,
     execute: async (context: AIExecutionContext, input: CreateContentItemInput) => {
-      return await createContentItem(context.supabase, context.workspaceId, input, context.userId);
+      const resolved = resolveMcpContentSchedule(input, context.timeZone);
+      const payload =
+        resolved.scheduled_at && resolved.status === 'idea'
+          ? { ...resolved, status: 'scheduled' as const }
+          : resolved;
+      return await createContentItem(context.supabase, context.workspaceId, payload, context.userId);
     },
   },
 
@@ -327,12 +334,12 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
   update_content_item: {
     name: 'update_content_item',
     description:
-      'Update an existing content item (title, body, platform, status, scheduled date, tags, notes).',
+      'Update an existing content item (title, body, platform, status, scheduled date/time with AM/PM, tags, notes).',
     category: 'write',
     requiredScopes: ['content:write'],
     schema: updateContentItemInputSchema,
     execute: async (context: AIExecutionContext, input: UpdateContentItemInput) => {
-      const { content_id, ...updates } = input;
+      const { content_id, ...updates } = resolveMcpContentSchedule(input, context.timeZone);
       return await updateContentItem(context.supabase, context.workspaceId, content_id, updates);
     },
   },
@@ -341,7 +348,7 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
   reschedule_content: {
     name: 'reschedule_content',
     description:
-      'Move a scheduled content item to a new publication datetime (scheduled_at).',
+      'Move a scheduled content item to a new publication datetime using scheduled_at (ISO 8601) or scheduled_date + scheduled_hour (1-12) + scheduled_minute + scheduled_meridiem (AM/PM) in the workspace timezone.',
     category: 'write',
     requiredScopes: ['content:write'],
     schema: rescheduleContentInputSchema,
@@ -363,13 +370,47 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
         );
       }
 
+      const resolved = resolveMcpContentSchedule(input, context.timeZone);
       return await updateContentItem(context.supabase, context.workspaceId, input.content_id, {
-        scheduled_at: input.scheduled_at,
+        scheduled_at: resolved.scheduled_at,
         status: 'scheduled',
       });
     },
   },
 };
+
+function resolveMcpContentSchedule<
+  T extends {
+    scheduled_at?: string | null;
+    scheduled_date?: string | null;
+    scheduled_hour?: number;
+    scheduled_minute?: number;
+    scheduled_meridiem?: 'AM' | 'PM';
+  },
+>(
+  input: T,
+  timeZone?: string
+): Omit<T, 'scheduled_date' | 'scheduled_hour' | 'scheduled_minute' | 'scheduled_meridiem'> {
+  const { scheduled_date, scheduled_hour, scheduled_minute, scheduled_meridiem, ...rest } = input;
+  if (!scheduled_date) {
+    return rest;
+  }
+
+  const hour12 = scheduled_hour ?? 9;
+  const minute = scheduled_minute ?? 0;
+  const meridiem = scheduled_meridiem ?? 'AM';
+  const hour24 = (hour12 % 12) + (meridiem === 'PM' ? 12 : 0);
+  const localStr = `${scheduled_date}T${String(hour24).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+  const parsed = parseLocalDatetimeString(localStr, timeZone || DEFAULT_TIMEZONE);
+  if (!parsed) {
+    throw new Error(`Invalid scheduled date/time: ${localStr}`);
+  }
+
+  return {
+    ...rest,
+    scheduled_at: parsed.toISOString(),
+  };
+}
 
 // -----------------------------------------------------------------------------
 // HELPER FUNCTIONS & REGISTRY ACCESSORS
