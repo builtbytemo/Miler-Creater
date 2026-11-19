@@ -35,4 +35,25 @@ describe('Task date filters and sorting', () => {
   it('orders urgent tasks before low priority tasks', () => {
     expect(sortTaskView([task({ priority: 'low' }), task({ id: 'urgent', priority: 'urgent' })], 'priority')[0].id).toBe('urgent');
   });
+  it('sorts default order chronologically earliest-first using scheduled_start or due_date, with undated last', () => {
+    const input = [
+      task({ id: 'undated' }),
+      task({ id: 'late-due', due_date: '2026-11-05T17:00:00Z' }),
+      task({ id: 'early-sched', scheduled_start: '2026-11-05T08:00:00Z', due_date: '2026-11-05T18:00:00Z' }),
+      task({ id: 'mid-sched', scheduled_start: '2026-11-05T11:00:00Z' }),
+    ];
+    expect(sortTaskView(input, 'default').map((item) => item.id)).toEqual([
+      'early-sched',
+      'mid-sched',
+      'late-due',
+      'undated',
+    ]);
+  });
+  it('handles invalid date strings without throwing or breaking chronological order', () => {
+    const input = [
+      task({ id: 'bad', scheduled_start: 'not-a-date' }),
+      task({ id: 'valid', scheduled_start: '2026-11-05T09:00:00Z' }),
+    ];
+    expect(sortTaskView(input, 'default').map((item) => item.id)).toEqual(['valid', 'bad']);
+  });
 });

@@ -24,15 +24,27 @@ export function matchesTaskDate(
   }
   return [task.scheduled_start, task.due_date].some((date) => date && getCalendarDateKey(date, timeZone) === today);
 }
+function getTaskAssignedTimestamp(task: TaskWithMeta): number | null {
+  const raw = task.scheduled_start ?? task.due_date;
+  if (!raw) return null;
+  const ms = Date.parse(raw);
+  return Number.isNaN(ms) ? null : ms;
+}
+
 export function sortTaskView(tasks: TaskWithMeta[], sort: TaskSort) {
   const result = [...tasks];
   const rank = { urgent: 0, high: 1, medium: 2, low: 3 };
   if (sort === 'priority') result.sort((a, b) => rank[a.priority] - rank[b.priority]);
   if (sort === 'newest') result.sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
-  if (sort === 'due') result.sort((a, b) => {
-    if (!a.due_date) return b.due_date ? 1 : 0;
-    if (!b.due_date) return -1;
-    return Date.parse(a.due_date) - Date.parse(b.due_date);
-  });
+  if (sort === 'default' || sort === 'due') {
+    result.sort((a, b) => {
+      const aMs = getTaskAssignedTimestamp(a);
+      const bMs = getTaskAssignedTimestamp(b);
+      if (aMs === null && bMs === null) return 0;
+      if (aMs === null) return 1;
+      if (bMs === null) return -1;
+      return aMs - bMs;
+    });
+  }
   return result;
 }
