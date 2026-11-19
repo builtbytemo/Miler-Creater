@@ -197,6 +197,7 @@ describe('Stage D: Content & Notifications UI Transformation', () => {
         socialAccounts: [sampleAccount],
         projects: [],
         userTimeZone: 'Africa/Cairo',
+        initialContentId: sampleContentItem.id,
       })
     );
 

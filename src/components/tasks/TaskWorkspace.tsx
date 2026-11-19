@@ -327,14 +327,14 @@ export function TaskWorkspace({
     statusFilter !== 'all' ||
     priorityFilter !== 'all' ||
     projectFilter !== 'all' ||
-    dateFilter !== 'all';
+    dateFilter !== 'today';
 
   const clearAllFilters = () => {
     setSearch('');
     setStatusFilter('all');
     setPriorityFilter('all');
     setProjectFilter('all');
-    setDateFilter('all');
+    setDateFilter('today');
   };
 
   const handleQuickToggleDone = async (taskId: string, e: React.MouseEvent) => {

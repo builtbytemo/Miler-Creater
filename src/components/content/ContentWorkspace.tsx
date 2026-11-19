@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import {
   Search,
   Plus,
@@ -144,21 +144,24 @@ export function ContentWorkspace({
     return () => clearTimeout(timer);
   }, [successMessage]);
 
-  const resetFilters = () => {
+  const resetFilters = useCallback(() => {
     setSearch('');
     setPlatformFilter('all');
     setStatusFilter('all');
     setActionTypeFilter('all');
     setAccountFilter('all');
-  };
+  }, []);
 
-  const selectTab = (tab: TabKey) => {
-    resetFilters();
-    setActiveTab(tab);
-    if (tab === 'ideas' || tab === 'drafts' || tab === 'archived') {
-      setDateFilter('all');
-    }
-  };
+  const selectTab = useCallback(
+    (tab: TabKey) => {
+      resetFilters();
+      setActiveTab(tab);
+      if (tab === 'ideas' || tab === 'drafts' || tab === 'archived') {
+        setDateFilter('all');
+      }
+    },
+    [resetFilters]
+  );
 
   // Global keyboard shortcuts ('/' search, 'c' create content, 'i' capture idea, '1'-'5' tabs)
   useEffect(() => {
@@ -204,7 +207,7 @@ export function ContentWorkspace({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isCreateOpen, isCreateAccountOpen, selectedContentDetail]);
+  }, [isCreateOpen, isCreateAccountOpen, selectedContentDetail, selectTab]);
 
   const stats = useMemo(() => {
     const ideaInboxCount = items.filter((i) => i.status === 'idea' && !i.scheduled_at).length;

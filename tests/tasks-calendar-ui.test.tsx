@@ -188,6 +188,7 @@ describe('Stage C: Tasks & Calendar UX Overhaul', () => {
         workspaceId="ws-1"
         projects={[]}
         userTimeZone="Asia/Riyadh"
+        initialDateFilter="all"
       />
     );
 
