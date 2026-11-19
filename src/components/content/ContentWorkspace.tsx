@@ -14,6 +14,12 @@ import {
 } from 'lucide-react';
 import type { ContentStatus } from '@/types/database';
 import type { ContentItemWithMeta, SocialAccountRow } from '@/lib/services/content-service';
+import { getCalendarDateKey } from '@/lib/temporal/calendar';
+import {
+  matchesContentDate,
+  sortContentChronologically,
+  type ContentDateFilter,
+} from '@/lib/content/content-view';
 import { deleteContentItemAction, updateContentItemAction } from '@/lib/actions/content-actions';
 import { ContentCard } from './ContentCard';
 import { CreateContentModal } from './CreateContentModal';
@@ -84,6 +90,19 @@ export function ContentWorkspace({
   const [activeTab, setActiveTab] = useState<TabKey>(() =>
     initialTab && VALID_TABS.includes(initialTab as TabKey) ? (initialTab as TabKey) : 'all'
   );
+  const [dateFilter, setDateFilter] = useState<ContentDateFilter>(() => {
+    if (initialContentId) return 'all';
+    if (initialTab === 'ideas' || initialTab === 'drafts' || initialTab === 'archived') {
+      return 'all';
+    }
+    return 'today';
+  });
+  const [clock, setClock] = useState(() => new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setClock(new Date()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
+  const todayKey = getCalendarDateKey(clock, userTimeZone);
   const [search, setSearch] = useState('');
   const [platformFilter, setPlatformFilter] = useState<string>(() =>
     initialPlatform && VALID_PLATFORMS.has(initialPlatform) ? initialPlatform : 'all'
@@ -133,6 +152,14 @@ export function ContentWorkspace({
     setAccountFilter('all');
   };
 
+  const selectTab = (tab: TabKey) => {
+    resetFilters();
+    setActiveTab(tab);
+    if (tab === 'ideas' || tab === 'drafts' || tab === 'archived') {
+      setDateFilter('all');
+    }
+  };
+
   // Global keyboard shortcuts ('/' search, 'c' create content, 'i' capture idea, '1'-'5' tabs)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -163,20 +190,15 @@ export function ContentWorkspace({
         setCreateDefaultStatus('idea');
         setIsCreateOpen(true);
       } else if (e.key === '1') {
-        resetFilters();
-        setActiveTab('all');
+        selectTab('all');
       } else if (e.key === '2') {
-        resetFilters();
-        setActiveTab('ideas');
+        selectTab('ideas');
       } else if (e.key === '3') {
-        resetFilters();
-        setActiveTab('drafts');
+        selectTab('drafts');
       } else if (e.key === '4') {
-        resetFilters();
-        setActiveTab('scheduled');
+        selectTab('scheduled');
       } else if (e.key === '5') {
-        resetFilters();
-        setActiveTab('archived');
+        selectTab('archived');
       }
     };
 
@@ -204,7 +226,7 @@ export function ContentWorkspace({
     accountFilter !== 'all';
 
   const displayedItems = useMemo(() => {
-    return items.filter((item) => {
+    const filtered = items.filter((item) => {
       if (activeTab === 'drafts') {
         if (item.status !== 'draft') return false;
       } else if (activeTab === 'scheduled') {
@@ -219,6 +241,8 @@ export function ContentWorkspace({
           return false;
         }
       }
+
+      if (!matchesContentDate(item, dateFilter, todayKey, userTimeZone)) return false;
 
       if (statusFilter !== 'all' && item.status !== statusFilter) return false;
       if (platformFilter !== 'all' && item.platform !== platformFilter) return false;
@@ -238,11 +262,27 @@ export function ContentWorkspace({
 
       return true;
     });
-  }, [items, activeTab, platformFilter, statusFilter, actionTypeFilter, accountFilter, search]);
+
+    return sortContentChronologically(filtered);
+  }, [
+    items,
+    activeTab,
+    dateFilter,
+    todayKey,
+    userTimeZone,
+    platformFilter,
+    statusFilter,
+    actionTypeFilter,
+    accountFilter,
+    search,
+  ]);
 
   const handleContentCreated = (newItem: ContentItemWithMeta) => {
     setItems((prev) => [newItem, ...prev.filter((i) => i.id !== newItem.id)]);
     resetFilters();
+    if (!newItem.scheduled_at) {
+      setDateFilter('all');
+    }
     setActiveTab(
       newItem.scheduled_at
         ? 'scheduled'
@@ -445,10 +485,7 @@ export function ContentWorkspace({
             <button
               key={metric.tab}
               type="button"
-              onClick={() => {
-                resetFilters();
-                setActiveTab(isSelected ? 'all' : metric.tab);
-              }}
+              onClick={() => selectTab(isSelected ? 'all' : metric.tab)}
               aria-pressed={isSelected}
               className={`text-left p-3.5 rounded-[var(--radius-md)] border transition-all ${
                 isSelected
@@ -486,10 +523,7 @@ export function ContentWorkspace({
               key={tab.id}
               type="button"
               aria-pressed={isSelected}
-              onClick={() => {
-                resetFilters();
-                setActiveTab(tab.id);
-              }}
+              onClick={() => selectTab(tab.id)}
               className={`flex items-center gap-2 border-b-2 px-3.5 py-2.5 text-xs transition-colors ${
                 isSelected
                   ? 'border-[var(--accent)] text-[var(--text-primary)] font-semibold'
@@ -513,6 +547,40 @@ export function ContentWorkspace({
 
       {/* Filter Toolbar (@container responsive) */}
       <div className="surface-card p-3.5 space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2.5">
+          <div
+            className="inline-flex items-center gap-0.5 rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--bg-surface-muted)] p-0.5"
+            aria-label="Filter content by date"
+          >
+            {(
+              [
+                { id: 'today', label: 'Today' },
+                { id: 'all', label: 'All' },
+              ] as const
+            ).map((option) => {
+              const isSelected = dateFilter === option.id;
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  aria-pressed={isSelected}
+                  onClick={() => setDateFilter(option.id)}
+                  className={`min-h-7 rounded-[5px] px-2.5 py-1 text-xs whitespace-nowrap transition-all ${
+                    isSelected
+                      ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] font-semibold shadow-2xs ring-1 ring-[var(--border-subtle)]'
+                      : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] font-medium'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+          <span className="text-[11px] font-mono text-[var(--text-muted)] tabular-nums">
+            {displayedItems.length} {displayedItems.length === 1 ? 'item' : 'items'}
+          </span>
+        </div>
+
         <div className="grid grid-cols-1 @md:grid-cols-2 @4xl:grid-cols-5 gap-2.5">
           {/* Search Input */}
           <div className="relative @md:col-span-2 @4xl:col-span-1">
