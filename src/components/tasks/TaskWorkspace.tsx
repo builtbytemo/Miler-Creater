@@ -100,11 +100,13 @@ export function TaskWorkspace({
     initialTasks.filter((task) => task.entry_type !== 'calendar_block' && task.created_from !== 'calendar')
   );
   const [search, setSearch] = useState(initialSearch ?? '');
-  const [dateFilter, setDateFilter] = useState<TaskDateFilter>(() =>
-    initialDateFilter && VALID_DATE_FILTERS.includes(initialDateFilter as TaskDateFilter)
-      ? (initialDateFilter as TaskDateFilter)
-      : 'all'
-  );
+  const [dateFilter, setDateFilter] = useState<TaskDateFilter>(() => {
+    if (initialDateFilter && VALID_DATE_FILTERS.includes(initialDateFilter as TaskDateFilter)) {
+      return initialDateFilter as TaskDateFilter;
+    }
+    if (initialTaskId) return 'all';
+    return 'today';
+  });
   const [sort, setSort] = useState<TaskSort>('default');
   const [clock, setClock] = useState(() => new Date());
   useEffect(() => {
@@ -572,8 +574,8 @@ export function TaskWorkspace({
           >
             {(
               [
-                { id: 'all', label: 'Any date' },
                 { id: 'today', label: 'Today' },
+                { id: 'all', label: 'Any date' },
                 { id: 'overdue', label: 'Overdue' },
                 { id: 'unscheduled', label: 'No date' },
               ] as const
@@ -637,7 +639,7 @@ export function TaskWorkspace({
               onChange={(e) => setSort(e.target.value as TaskSort)}
               className="input-control w-auto min-h-8 px-2.5 py-1.5 text-xs leading-tight text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
             >
-              <option value="default">Original order</option>
+              <option value="default">Time: earliest first</option>
               <option value="due">Due date: soonest</option>
               <option value="priority">Priority: highest</option>
               <option value="newest">Newest first</option>

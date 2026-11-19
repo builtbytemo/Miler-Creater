@@ -256,6 +256,7 @@ describe('TasksPage Server Component (Next.js Cache Components & Prerendering)',
         workspaceId: 'ws-1',
         projects: [{ id: 'proj-1', name: 'Core Platform Launch', color: '#121210' }],
         userTimeZone: 'Africa/Cairo',
+        initialDateFilter: 'all',
       })
     );
 
