@@ -655,6 +655,35 @@ export function formatDayLabel(
 }
 
 /**
+ * Formats a compact relative label ('Today', 'Yesterday', 'Tomorrow', or 'Nov 21')
+ * for a selected day compared against a reference Today date in the target timezone.
+ */
+export function formatRelativeDayLabel(
+  selectedDate: Date | string,
+  referenceToday: Date | string,
+  timeZone = DEFAULT_TIMEZONE
+): string {
+  const tz = resolveTimeZone(timeZone);
+  const selectedKey = getCalendarDateKey(selectedDate, tz);
+  const todayKey = getCalendarDateKey(referenceToday, tz);
+  if (selectedKey === todayKey) return 'Today';
+
+  const yesterdayKey = getCalendarDateKey(getPrevDayDate(referenceToday, tz), tz);
+  if (selectedKey === yesterdayKey) return 'Yesterday';
+
+  const tomorrowKey = getCalendarDateKey(getNextDayDate(referenceToday, tz), tz);
+  if (selectedKey === tomorrowKey) return 'Tomorrow';
+
+  const d = resolveDate(selectedDate, 'formatRelativeDayLabel');
+  const local = getLocalParts(d, tz);
+  const refLocal = getLocalParts(resolveDate(referenceToday, 'formatRelativeDayLabel'), tz);
+  const monthName = SHORT_MONTH_NAMES[local.month - 1];
+  return local.year === refLocal.year
+    ? `${monthName} ${local.day}`
+    : `${monthName} ${local.day}, ${local.year}`;
+}
+
+/**
  * Calculates the exact start and end of a single calendar day in the target timezone.
  */
 export function getDayRange(

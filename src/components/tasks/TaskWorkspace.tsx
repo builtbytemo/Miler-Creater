@@ -2,7 +2,13 @@
 
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { getCalendarDateKey } from '@/lib/temporal/calendar';
+import {
+  formatDayLabel,
+  formatRelativeDayLabel,
+  getCalendarDateKey,
+  getNextDayDate,
+  getPrevDayDate,
+} from '@/lib/temporal/calendar';
 import { matchesTaskDate, sortTaskView, type TaskDateFilter, type TaskSort } from '@/lib/tasks/task-view';
 import {
   Search,
@@ -14,6 +20,8 @@ import {
   Calendar,
   X,
   ArrowUpRight,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import type { TaskWithMeta, TaskDetail } from '@/lib/services/task-service';
@@ -109,11 +117,14 @@ export function TaskWorkspace({
   });
   const [sort, setSort] = useState<TaskSort>('default');
   const [clock, setClock] = useState(() => new Date());
+  const [selectedDay, setSelectedDay] = useState(() => new Date());
   useEffect(() => {
     const timer = setInterval(() => setClock(new Date()), 60_000);
     return () => clearInterval(timer);
   }, []);
   const todayKey = getCalendarDateKey(clock, userTimeZone);
+  const selectedDayKey = getCalendarDateKey(selectedDay, userTimeZone);
+  const dayButtonLabel = formatRelativeDayLabel(selectedDay, clock, userTimeZone);
   const nowMs = clock.getTime();
   const [statusFilter, setStatusFilter] = useState<string>(() =>
     initialStatusFilter &&
@@ -277,7 +288,8 @@ export function TaskWorkspace({
   const filteredTasks = useMemo(() => {
     return sortTaskView(
       tasks.filter((t) => {
-        if (!matchesTaskDate(t, dateFilter, todayKey, userTimeZone, nowMs)) return false;
+        const targetDayKey = dateFilter === 'today' ? selectedDayKey : todayKey;
+        if (!matchesTaskDate(t, dateFilter, targetDayKey, userTimeZone, nowMs)) return false;
         // 1. Search filter
         if (search.trim() !== '') {
           const query = search.trim().toLowerCase();
@@ -318,6 +330,7 @@ export function TaskWorkspace({
     dateFilter,
     sort,
     todayKey,
+    selectedDayKey,
     nowMs,
     userTimeZone,
   ]);
@@ -327,7 +340,8 @@ export function TaskWorkspace({
     statusFilter !== 'all' ||
     priorityFilter !== 'all' ||
     projectFilter !== 'all' ||
-    dateFilter !== 'today';
+    dateFilter !== 'today' ||
+    selectedDayKey !== todayKey;
 
   const clearAllFilters = () => {
     setSearch('');
@@ -335,6 +349,7 @@ export function TaskWorkspace({
     setPriorityFilter('all');
     setProjectFilter('all');
     setDateFilter('today');
+    setSelectedDay(new Date());
   };
 
   const handleQuickToggleDone = async (taskId: string, e: React.MouseEvent) => {
@@ -572,9 +587,49 @@ export function TaskWorkspace({
             className="inline-flex flex-wrap items-center gap-0.5 rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--bg-surface-muted)] p-0.5"
             aria-label="Filter tasks by date"
           >
+            <button
+              type="button"
+              aria-label="Previous day"
+              title="Previous day"
+              onClick={() => {
+                setSelectedDay((prev) => getPrevDayDate(prev, userTimeZone));
+                setDateFilter('today');
+              }}
+              className="min-h-7 rounded-[5px] px-1.5 py-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              aria-pressed={dateFilter === 'today'}
+              title={formatDayLabel(selectedDay, userTimeZone)}
+              onClick={() => {
+                setSelectedDay(new Date());
+                setDateFilter('today');
+              }}
+              className={clsx(
+                'min-h-7 rounded-[5px] px-2.5 py-1 text-xs whitespace-nowrap transition-all',
+                dateFilter === 'today'
+                  ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] font-semibold shadow-2xs ring-1 ring-[var(--border-subtle)]'
+                  : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] font-medium'
+              )}
+            >
+              {dayButtonLabel}
+            </button>
+            <button
+              type="button"
+              aria-label="Next day"
+              title="Next day"
+              onClick={() => {
+                setSelectedDay((prev) => getNextDayDate(prev, userTimeZone));
+                setDateFilter('today');
+              }}
+              className="min-h-7 rounded-[5px] px-1.5 py-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+            >
+              <ChevronRight className="w-3.5 h-3.5" aria-hidden="true" />
+            </button>
             {(
               [
-                { id: 'today', label: 'Today' },
                 { id: 'all', label: 'Any date' },
                 { id: 'overdue', label: 'Overdue' },
                 { id: 'unscheduled', label: 'No date' },

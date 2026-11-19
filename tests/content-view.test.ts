@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { matchesContentDate, sortContentChronologically } from '../src/lib/content/content-view';
+import { formatRelativeDayLabel, getNextDayDate, getPrevDayDate } from '../src/lib/temporal/calendar';
 import type { ContentItemWithMeta } from '../src/lib/services/content-service';
 
 const content = (overrides: Partial<ContentItemWithMeta> = {}) =>
@@ -57,5 +58,14 @@ describe('Content date filters and chronological sorting', () => {
     const sorted = sortContentChronologically(input);
     expect(sorted.map((i) => i.id)).toEqual(['earlier', 'later', 'unsched-new', 'unsched-old']);
     expect(input[0].id).toBe('unsched-old');
+  });
+
+  it('formats relative day labels for Today, Yesterday, Tomorrow, and other dates', () => {
+    const today = new Date('2026-11-05T10:00:00Z');
+    const tz = 'Africa/Cairo';
+    expect(formatRelativeDayLabel(today, today, tz)).toBe('Today');
+    expect(formatRelativeDayLabel(getPrevDayDate(today, tz), today, tz)).toBe('Yesterday');
+    expect(formatRelativeDayLabel(getNextDayDate(today, tz), today, tz)).toBe('Tomorrow');
+    expect(formatRelativeDayLabel(getNextDayDate(getNextDayDate(today, tz), tz), today, tz)).toBe('Nov 7');
   });
 });

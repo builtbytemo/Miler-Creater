@@ -11,10 +11,18 @@ import {
   CheckCircle2,
   AtSign,
   Archive,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import type { ContentStatus } from '@/types/database';
 import type { ContentItemWithMeta, SocialAccountRow } from '@/lib/services/content-service';
-import { getCalendarDateKey } from '@/lib/temporal/calendar';
+import {
+  formatDayLabel,
+  formatRelativeDayLabel,
+  getCalendarDateKey,
+  getNextDayDate,
+  getPrevDayDate,
+} from '@/lib/temporal/calendar';
 import {
   matchesContentDate,
   sortContentChronologically,
@@ -98,11 +106,13 @@ export function ContentWorkspace({
     return 'today';
   });
   const [clock, setClock] = useState(() => new Date());
+  const [selectedDay, setSelectedDay] = useState(() => new Date());
   useEffect(() => {
     const timer = setInterval(() => setClock(new Date()), 60_000);
     return () => clearInterval(timer);
   }, []);
-  const todayKey = getCalendarDateKey(clock, userTimeZone);
+  const selectedDayKey = getCalendarDateKey(selectedDay, userTimeZone);
+  const dayButtonLabel = formatRelativeDayLabel(selectedDay, clock, userTimeZone);
   const [search, setSearch] = useState('');
   const [platformFilter, setPlatformFilter] = useState<string>(() =>
     initialPlatform && VALID_PLATFORMS.has(initialPlatform) ? initialPlatform : 'all'
@@ -245,7 +255,7 @@ export function ContentWorkspace({
         }
       }
 
-      if (!matchesContentDate(item, dateFilter, todayKey, userTimeZone)) return false;
+      if (!matchesContentDate(item, dateFilter, selectedDayKey, userTimeZone)) return false;
 
       if (statusFilter !== 'all' && item.status !== statusFilter) return false;
       if (platformFilter !== 'all' && item.platform !== platformFilter) return false;
@@ -271,7 +281,7 @@ export function ContentWorkspace({
     items,
     activeTab,
     dateFilter,
-    todayKey,
+    selectedDayKey,
     userTimeZone,
     platformFilter,
     statusFilter,
@@ -555,29 +565,58 @@ export function ContentWorkspace({
             className="inline-flex items-center gap-0.5 rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[var(--bg-surface-muted)] p-0.5"
             aria-label="Filter content by date"
           >
-            {(
-              [
-                { id: 'today', label: 'Today' },
-                { id: 'all', label: 'All' },
-              ] as const
-            ).map((option) => {
-              const isSelected = dateFilter === option.id;
-              return (
-                <button
-                  key={option.id}
-                  type="button"
-                  aria-pressed={isSelected}
-                  onClick={() => setDateFilter(option.id)}
-                  className={`min-h-7 rounded-[5px] px-2.5 py-1 text-xs whitespace-nowrap transition-all ${
-                    isSelected
-                      ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] font-semibold shadow-2xs ring-1 ring-[var(--border-subtle)]'
-                      : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] font-medium'
-                  }`}
-                >
-                  {option.label}
-                </button>
-              );
-            })}
+            <button
+              type="button"
+              aria-label="Previous day"
+              title="Previous day"
+              onClick={() => {
+                setSelectedDay((prev) => getPrevDayDate(prev, userTimeZone));
+                setDateFilter('today');
+              }}
+              className="min-h-7 rounded-[5px] px-1.5 py-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              aria-pressed={dateFilter === 'today'}
+              title={formatDayLabel(selectedDay, userTimeZone)}
+              onClick={() => {
+                setSelectedDay(new Date());
+                setDateFilter('today');
+              }}
+              className={`min-h-7 rounded-[5px] px-2.5 py-1 text-xs whitespace-nowrap transition-all ${
+                dateFilter === 'today'
+                  ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] font-semibold shadow-2xs ring-1 ring-[var(--border-subtle)]'
+                  : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] font-medium'
+              }`}
+            >
+              {dayButtonLabel}
+            </button>
+            <button
+              type="button"
+              aria-label="Next day"
+              title="Next day"
+              onClick={() => {
+                setSelectedDay((prev) => getNextDayDate(prev, userTimeZone));
+                setDateFilter('today');
+              }}
+              className="min-h-7 rounded-[5px] px-1.5 py-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+            >
+              <ChevronRight className="w-3.5 h-3.5" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              aria-pressed={dateFilter === 'all'}
+              onClick={() => setDateFilter('all')}
+              className={`min-h-7 rounded-[5px] px-2.5 py-1 text-xs whitespace-nowrap transition-all ${
+                dateFilter === 'all'
+                  ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] font-semibold shadow-2xs ring-1 ring-[var(--border-subtle)]'
+                  : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] font-medium'
+              }`}
+            >
+              All
+            </button>
           </div>
           <span className="text-[11px] font-mono text-[var(--text-muted)] tabular-nums">
             {displayedItems.length} {displayedItems.length === 1 ? 'item' : 'items'}

@@ -90,6 +90,8 @@ describe('TaskWorkspace Today default & chronological order', () => {
     );
 
     expect(html).toContain('Time: earliest first');
+    expect(html).toContain('aria-label="Previous day"');
+    expect(html).toContain('aria-label="Next day"');
     expect(html).toMatch(/aria-pressed="true"[^>]*>Today</);
     expect(html).toContain('Early Today Task');
     expect(html).toContain('Late Today Task');

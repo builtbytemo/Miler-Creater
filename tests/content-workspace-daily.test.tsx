@@ -89,6 +89,8 @@ describe('ContentWorkspace Today vs All toggle & chronological order', () => {
     );
 
     expect(html).toContain('aria-label="Filter content by date"');
+    expect(html).toContain('aria-label="Previous day"');
+    expect(html).toContain('aria-label="Next day"');
     expect(html).toContain('Early Today Post');
     expect(html).toContain('Late Today Post');
     expect(html).not.toContain('Tomorrow Post');
